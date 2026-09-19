@@ -36,7 +36,7 @@ src/
 │   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the stores, recomputed live
 │   │   └── components/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
-│   │       ├── ClusterOverview.tsx       # Every cluster, the troubled ones first
+│   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
 │   │       ├── InstanceOverview.tsx      # One host's instance: details, cluster, counters, history
 │   │       ├── VrrpInstanceView.tsx      # Instances as table or list, with or without a host column
@@ -245,12 +245,19 @@ usable reading (keepalived stopped or unreadable), then every cluster whose heal
 
 ### ClusterOverview & ClusterCard (`features/keepalived`)
 
-`/clusters` lists every cluster as a `ClusterCard`, the ones needing attention first. The card
-title is the virtual addresses and the VRID; its badge is the health (`CLUSTER_HEALTH` in
-`lib/vrrp.ts`, with the explanation as the tooltip). The card is a `VrrpInstanceView` with a
-host column — online dot, link to the client — whose members are ordered by effective
-priority, so the node that should be MASTER is on top. An offline member's row is dimmed. A
-row opens that host's instance; the host name in it opens the host.
+`/clusters` is one `DataMultiView` in tree mode, the clusters needing attention first. The
+first level is the virtual router — VRID, virtual addresses and the health badge
+(`CLUSTER_HEALTH` in `lib/vrrp.ts`, with the explanation as the tooltip); the second level is
+its hosts — online dot, link to the client, instance, VRRP state, priority — ordered by
+effective priority, so the node that should be MASTER is on top. Every row starts expanded. An
+offline member's row is dimmed. A host row opens that host's instance; the host name in it
+opens the host. The search matches VRID, address, host and instance name and keeps a whole
+cluster when one of its hosts matches. The list view, which narrow screens always get, shows
+one entry per cluster with its hosts inside it.
+
+`ClusterCard` is the same cluster as a single card — the virtual addresses and VRID as its
+title, a `VrrpInstanceView` with a host column as its body. The dashboard lists the troubled
+clusters with it, and the instance page shows the instance's own cluster.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
 `@kasm/shared` over the readings in `useKeepalivedStore` and the online clients in
