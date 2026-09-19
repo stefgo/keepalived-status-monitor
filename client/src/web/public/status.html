@@ -89,6 +89,17 @@
                 </div>
             </div>
 
+            <!-- What makes the agent read keepalived -->
+            <div class="status-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="triggers-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content">
+                    <div class="status-label">Change Detection</div>
+                    <div class="status-value" id="triggers-text">Checking...</div>
+                </div>
+            </div>
+
             <button type="button" id="re-register-btn" style="
                 margin-top: 1.5rem;
                 width: 100%;
@@ -289,6 +300,21 @@
                             keepalivedIcon, keepalivedText, true,
                             `${version}${keepalivedData.instances} VRRP instance(s), ${keepalivedData.master} MASTER`,
                         );
+                    }
+
+                    // --- Change detection ---
+                    const triggers = keepalivedData.triggers;
+                    const triggersIcon = document.getElementById("triggers-icon");
+                    const triggersText = document.getElementById("triggers-text");
+                    const parts = [];
+                    if (triggers.poll > 0) parts.push(`Polling every ${triggers.poll} s`);
+                    if (triggers.fifo === "open") parts.push("Notify FIFO");
+                    if (triggers.fifo === "missing") parts.push("Notify FIFO not available");
+                    if (triggers.endpoint) parts.push("Notify endpoint");
+                    if (triggers.fifo === "missing") {
+                        setWarningState(triggersIcon, triggersText, parts.join(" · "));
+                    } else {
+                        setIconState(triggersIcon, triggersText, true, parts.join(" · "));
                     }
 
                     // --- Register button ---

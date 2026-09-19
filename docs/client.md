@@ -36,6 +36,7 @@ client/src/
 ├── services/
 │   ├── ActivityService.ts     # Activity events: queue, at-least-once delivery
 │   ├── KeepalivedService.ts   # Finds keepalived, signals it, reads the dumps, diffs readings
+│   ├── NotifyFifoWatcher.ts   # Turns lines on keepalived's notify FIFO into readings
 │   └── parsers/
 │       ├── common.ts          # The fields taken over, state names, shared helpers
 │       ├── dataDump.ts        # /tmp/keepalived.data (SIGUSR1), text
@@ -67,7 +68,7 @@ Manages the client's YAML configuration file (`config.yaml`). Supports reading, 
 | `logLevel`     | Log verbosity (`debug`, `info`, `warn`, `error`). Default: `info`.          |
 | `serverUrl`    | HTTP(S) URL of the management server (e.g., `https://manager:3010`).        |
 | `authToken`    | Permanent authentication token. Populated automatically after registration. |
-| `keepalived` | How keepalived is read: `pollInterval` (s, default `5`), `dataFile`, `statsFile`, `jsonFile` (as keepalived sees them), `jsonSignal` (unset: text dump), `dumpTimeoutMs` (default `3000`). Validated on start; an invalid value stops the agent with a log line naming it. |
+| `keepalived` | How keepalived is read: `pollInterval` (s, default `5`, `0` switches the timer off), `notifyFifo` and `notifyToken` (see [Triggers](#triggers); `KASM_NOTIFY_FIFO` and `KASM_NOTIFY_TOKEN` win over them), `dataFile`, `statsFile`, `jsonFile` (as keepalived sees them), `jsonSignal` (unset: text dump), `dumpTimeoutMs` (default `3000`). Validated on start; an invalid value — or all three triggers off — stops the agent with a log line naming it. |
 | `registrationSecret` | Outbound mode only: the secret the server presents on `/ws/register`. Must match the value entered in the dashboard's Add Client wizard; removed from the file after a successful registration. |
 | `allowSelfSignedCertificates` | Accept a server certificate that does not validate, for registration and the WebSocket connection. Default `false`. |
 | `allowedNetworks` | IPv4 addresses or CIDR networks the server may dial `/ws/register` and `/ws/agent` from. Empty (default) allows every address. |
@@ -118,7 +119,7 @@ A local Fastify HTTP server, used for initial setup and status monitoring. It li
 | :---------- | :---------------------------------------------------------------------------- |
 | `GET /`     | Redirects to `/status` if registered, otherwise to `/register`.               |
 | `GET /register` | Registration UI — form to enter Server URL and Registration Token.        |
-| `GET /status`   | Status dashboard — shows server reachability, auth token, connection state and a one-line keepalived summary. |
+| `GET /status`   | Status dashboard — shows server reachability, auth token, connection state, a one-line keepalived summary and which triggers are active. |
 
 **API endpoints:**
 
@@ -127,7 +128,8 @@ A local Fastify HTTP server, used for initial setup and status monitoring. It li
 | `/api/status/server?url=...` | GET    | Checks if the server is reachable via `GET {serverUrl}/api/v1/ping`. |
 | `/api/status/auth`           | GET    | Returns `{hasAuthToken: boolean}`.                                   |
 | `/api/status/connection`     | GET    | Returns `{connected: boolean}` (live WebSocket state).               |
-| `/api/status/keepalived`     | GET    | The last reading in summary: `{collected, running, version, error, instances, master, collectedAt}`. No instance details — the page has no login. |
+| `/api/status/keepalived`     | GET    | The last reading in summary: `{collected, running, version, error, instances, master, collectedAt}`, plus `triggers: {poll, fifo, endpoint}` — the poll interval, `off`/`open`/`missing` for the FIFO, and whether the notify endpoint exists. No instance details — the page has no login. |
+| `/api/keepalived/notify`     | POST   | Triggers a reading; called by a keepalived notify script. Exists only with `keepalived.notifyToken` set and requires `Authorization: Bearer <notifyToken>` (`401` otherwise). The body — at most 1 KB, plain text or JSON — is logged at debug level and not otherwise read. Answers `202` before the reading is taken. Not covered by `allowedNetworks`: the caller is keepalived on the same host, not the server. |
 | `/api/health`                | GET    | Liveness for the image's `HEALTHCHECK`: `{status: "ok"}` while the agent process answers. Independent of the server connection. |
 | `/api/connect`               | POST   | Attempts to establish a WebSocket connection.                        |
 | `/api/register`              | POST   | Performs registration: checks the setup PIN, then calls `POST {serverUrl}/api/v1/register`. Body `{url, token, pin}`; `400` names the invalid field (`url` must be http or https), `403` on a wrong PIN. Only available while `enableRegisterPage` is not `false`. |
@@ -137,8 +139,8 @@ A local Fastify HTTP server, used for initial setup and status monitoring. It li
 ### 4. Reading keepalived (`src/services/KeepalivedService.ts`)
 
 keepalived has no status API. It writes its state to a file when it receives a signal, and
-that is what the agent uses — on a timer (`keepalived.pollInterval`, 5 s by default) and on a
-`REQUEST_STATE_UPDATE`. One reading:
+that is what the agent uses — on start, on every connection to the server, on a
+`REQUEST_STATE_UPDATE`, and on whichever [triggers](#triggers) are switched on. One reading:
 
 1. **Find keepalived.** Every `/proc/<pid>/comm` that reads `keepalived` is a candidate; the
    one whose parent is not a keepalived is the parent process. The agent runs with
@@ -162,6 +164,43 @@ A failed reading — no permission to signal, a dump that never came — is `run
 `error` set. The error names the missing capability where it can tell. keepalived's version is
 read once per process out of its binary (`/proc/<pid>/exe`), because `keepalived -v` would
 have to run the host's binary inside the agent's container.
+
+#### Triggers
+
+Three things can start a reading. Each is switched on by its own key in the `keepalived`
+block; any combination works, as long as one is on.
+
+| Trigger | Switched on by | Latency after a failover | Set up on the host |
+| :------ | :------------- | :----------------------- | :----------------- |
+| Timer | `pollInterval` > 0 (default `5`) | up to `pollInterval` | nothing |
+| Notify FIFO | `notifyFifo` (`KASM_NOTIFY_FIFO`) | the time a dump takes | `vrrp_notify_fifo` in keepalived.conf |
+| Notify endpoint | `notifyToken` (`KASM_NOTIFY_TOKEN`) | the time a dump takes | a notify script and a token file — see [Installation](install.md#faster-failover-detection) |
+
+**The FIFO and the endpoint only trigger.** What a FIFO line or a request body says is logged
+at debug level and otherwise ignored; the reading is where the state comes from. A line in a
+format a newer keepalived writes, or one that is lost, costs latency and nothing else — and
+the timer, left on, catches whatever a trigger missed.
+
+**Triggers are coalesced.** A trigger that arrives while a reading is in flight does not join
+it — that reading may have signalled keepalived before the change — but asks for one more
+reading after it. However many arrive meanwhile (a sync group writes a line for itself and one
+per instance), that is one: keepalived is never signalled more than one reading ahead.
+
+**The FIFO** (`services/NotifyFifoWatcher.ts`) is opened through `/proc/<pid>/root`, like the
+dumps, and read-write: on Linux that open neither blocks while keepalived has no writer on it
+nor sees an end of file when keepalived closes it. The agent does not create the FIFO. Every
+five seconds it compares the FIFO's inode and keepalived's PID with the open one and reopens
+on a change — a keepalived restart — followed by one reading for whatever was written while
+nobody listened. A missing FIFO is logged once per streak and shown on the status page. A FIFO
+has **one reader**: point `notifyFifo` only at a FIFO nothing else reads, such as a
+`vrrp_notify_fifo_script`.
+
+**The endpoint** is `POST /api/keepalived/notify` on the agent's web server, which is started
+for it even with both pages off. `client/scripts/kasm-notify.sh` is the script keepalived
+calls; it never fails, so an agent that is down does not show up in keepalived's log.
+
+With `pollInterval: 0` keepalived is read only on start, on connect, on the server's request
+and on a trigger. Keep the timer on unless a trigger is set up and has been seen to work.
 
 **What leaves the host.** Instances and sync groups are built field by field from a fixed list:
 name, state, configured state, interface, VRID, priority, effective priority, advertisement

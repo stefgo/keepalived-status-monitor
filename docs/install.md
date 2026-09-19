@@ -89,7 +89,9 @@ NPM_TOKEN=$(gh auth token) docker compose -f compose.dev.yaml up -d --build
 
 Register both agents through their web UIs with the server URL `http://172.28.0.10:3010`.
 `docker exec kasm-keepalived-a sh -c 'echo 1 > /tmp/kasm-fault'` puts node A into FAULT,
-`echo 0` brings it back — a failover in both directions.
+`echo 0` brings it back — a failover in both directions. Both agents poll; node A also reports
+changes through its notify FIFO and node B through the notify script, so both
+[triggers](#faster-failover-detection) show up in the agents' debug logs.
 
 View logs:
 
@@ -126,6 +128,8 @@ An image is tagged only after CI has started it and it answered its health check
 | `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. |
 | `KASM_CLIENT_CONFIG` | path                       | `/app/client/config.yaml` | _(Client only)_ The agent's `config.yaml`. Lets several agents run from one checkout, as in `compose.dev.yaml`. |
 | `KASM_PROC_DIR` | path                              | `/proc`       | _(Client only)_ Where the agent looks for keepalived's process. Only for tests against a copied process tree. |
+| `KASM_NOTIFY_FIFO` | path                           | _unset_       | _(Client only)_ keepalived's `vrrp_notify_fifo`; wins over `keepalived.notifyFifo`. See [Faster Failover Detection](#faster-failover-detection). |
+| `KASM_NOTIFY_TOKEN` | string, ≥ 16 characters       | _unset_       | _(Client only)_ Token of the notify endpoint; wins over `keepalived.notifyToken`. See [Faster Failover Detection](#faster-failover-detection). |
 
 **Example:**
 
@@ -146,7 +150,9 @@ Created automatically during registration, or can be set up manually using `clie
 | `serverUrl`  | HTTP(S) URL of the management server (e.g., `https://manager.example.com`).   |
 | `authToken`  | Permanent authentication token. Populated automatically after registration.    |
 | `registrationSecret` | Outbound mode: the secret the server presents when it first dials the agent. Enter the same value in the **Add Client** wizard; it is removed from the file after registration. |
-| `keepalived.pollInterval` | Seconds between two readings (default `5`). |
+| `keepalived.pollInterval` | Seconds between two readings (default `5`); `0` switches the timer off, which needs one of the two below. |
+| `keepalived.notifyFifo` | keepalived's `vrrp_notify_fifo` as keepalived sees the path; every line in it triggers a reading. Unset by default. See [Faster Failover Detection](#faster-failover-detection). |
+| `keepalived.notifyToken` | Token for `POST /api/keepalived/notify`, which a keepalived notify script calls; at least 16 characters. Unset by default: the endpoint does not exist. |
 | `keepalived.dataFile` / `statsFile` / `jsonFile` | Where keepalived writes its dumps, as keepalived sees the path (defaults `/tmp/keepalived.data`, `.stats`, `.json`). Match `state_dump_file`, `stats_dump_file` and `json_dump_file` if `keepalived.conf` sets them. |
 | `keepalived.jsonSignal` | Read the JSON dump instead of the text dump: the number `keepalived --signum=JSON` prints on the host. Only for a keepalived built with `--enable-json`. Unset by default. |
 | `keepalived.dumpTimeoutMs` | How long to wait for keepalived to write a dump (default `3000`). |
@@ -278,6 +284,74 @@ without `ptrace`, `process_vm_readv` and `process_vm_writev` — reading `/proc/
 needs the capability, not the syscall) or a custom AppArmor profile in place of `unconfined`.
 
 The agent can also run without a container, as root, with `node client/dist/index.js`.
+
+## Faster Failover Detection
+
+By default the agent reads keepalived every 5 seconds, so a failover reaches the dashboard up
+to 5 seconds late. keepalived can tell the agent itself, in two ways; switch on either, both,
+or neither. They only trigger a reading — the state still comes from keepalived's dumps — so
+leave the timer on as a safety net unless a trigger has been seen to work
+(the agent's status page lists the active ones under **Change Detection**).
+
+### Notify FIFO
+
+keepalived writes a line to a FIFO on every state change. In `keepalived.conf`:
+
+```
+global_defs {
+    vrrp_notify_fifo /run/kasm-notify.fifo
+}
+```
+
+and in the agent's `config.yaml` the same path, as keepalived sees it (or `KASM_NOTIFY_FIFO`):
+
+```yaml
+keepalived:
+    notifyFifo: /run/kasm-notify.fifo
+```
+
+No further permission is needed: the agent opens the FIFO through `/proc/<pid>/root`, like the
+dumps, and reopens it after a keepalived restart. **A FIFO has one reader.** If
+`vrrp_notify_fifo` is already set and read by something else — a `vrrp_notify_fifo_script`,
+for instance — use the notify script below instead; two readers would each get only part of
+the lines.
+
+### Notify Script
+
+keepalived runs a script on every state change, and
+[`client/scripts/kasm-notify.sh`](https://github.com/stefgo/keepalived-status-monitor/blob/main/client/scripts/kasm-notify.sh)
+passes it on to the agent's `POST /api/keepalived/notify` with `curl`. On the host:
+
+```bash
+sudo install -m 0755 kasm-notify.sh /etc/keepalived/kasm-notify.sh
+openssl rand -hex 24 | sudo tee /etc/keepalived/kasm-notify.token >/dev/null
+sudo chmod 600 /etc/keepalived/kasm-notify.token
+```
+
+In `keepalived.conf` — on every instance or sync group whose changes should be reported:
+
+```
+global_defs {
+    enable_script_security
+    script_user root
+}
+
+vrrp_instance VI_1 {
+    notify /etc/keepalived/kasm-notify.sh
+}
+```
+
+and in the agent's `config.yaml` the token from the file (or `KASM_NOTIFY_TOKEN`):
+
+```yaml
+keepalived:
+    notifyToken: <contents of /etc/keepalived/kasm-notify.token>
+```
+
+The script calls `http://127.0.0.1:3011`; with another `listenPort`, change `URL` at the top of
+the script. It never fails, so an agent that is down does not fill keepalived's log. The
+endpoint is not restricted by `allowedNetworks` — its caller is keepalived on the same host —
+but by the token; it triggers a reading and does nothing else.
 
 ## Health
 

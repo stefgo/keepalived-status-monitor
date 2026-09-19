@@ -98,6 +98,33 @@ function resolveListenPort(fromFile: unknown): number {
     return port;
 }
 
+/**
+ * Reads the `keepalived` block, with KASM_NOTIFY_FIFO and KASM_NOTIFY_TOKEN laid over it. The
+ * environment wins, as with KASM_CLIENT_PORT: a container can switch a trigger on without a
+ * mounted config file. An empty variable counts as unset.
+ *
+ * Fatal when wrong, like allowedNetworks: an agent reading the wrong file reports
+ * "keepalived unreadable" forever, which looks like a keepalived fault.
+ */
+function resolveKeepalivedConfig(fromFile: unknown): AgentKeepalivedConfig {
+    const raw: Record<string, unknown> =
+        fromFile && typeof fromFile === "object" ? { ...(fromFile as Record<string, unknown>) } : {};
+    const fifo = process.env.KASM_NOTIFY_FIFO?.trim();
+    if (fifo) raw.notifyFifo = fifo;
+    const token = process.env.KASM_NOTIFY_TOKEN?.trim();
+    if (token) raw.notifyToken = token;
+
+    const keepalived = AgentKeepalivedConfigSchema.safeParse(raw);
+    if (!keepalived.success) {
+        logger.fatal(
+            { path: CONFIG_PATH },
+            `Invalid keepalived settings -- keepalived.${firstIssue(keepalived.error)}`,
+        );
+        process.exit(1);
+    }
+    return keepalived.data;
+}
+
 function writeToDisk(): void {
     try {
         fs.writeFileSync(CONFIG_PATH, configDoc.toString());
@@ -186,19 +213,7 @@ if (fs.existsSync(CONFIG_PATH)) {
             config.logLevel = loadedConfig.logLevel;
         }
 
-        // Fatal when wrong, like allowedNetworks: an agent reading the wrong file reports
-        // "keepalived unreadable" forever, which looks like a keepalived fault.
-        const keepalived = AgentKeepalivedConfigSchema.safeParse(
-            loadedConfig.keepalived ?? undefined,
-        );
-        if (!keepalived.success) {
-            logger.fatal(
-                { path: CONFIG_PATH },
-                `Invalid config.yaml -- keepalived.${firstIssue(keepalived.error)}`,
-            );
-            process.exit(1);
-        }
-        config.keepalived = keepalived.data;
+        config.keepalived = resolveKeepalivedConfig(loadedConfig.keepalived);
 
         if (loadedConfig.enableStatusPage !== undefined) {
             config.enableStatusPage = loadedConfig.enableStatusPage;
@@ -243,6 +258,7 @@ if (fs.existsSync(CONFIG_PATH)) {
     // KASM_CLIENT_PORT still applies: a fresh container has no config.yaml yet, and moving
     // its port is exactly the case the variable exists for.
     config.listenPort = resolveListenPort(undefined);
+    config.keepalived = resolveKeepalivedConfig(undefined);
 }
 
 logger.level = config.logLevel;

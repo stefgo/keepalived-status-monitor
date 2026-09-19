@@ -4,6 +4,7 @@ import { logger } from "@kasm/shared/node";
 import { WS_EVENTS } from "@kasm/shared";
 import { ActivityService } from "./services/ActivityService.js";
 import { KeepalivedService } from "./services/KeepalivedService.js";
+import { NotifyFifoWatcher } from "./services/NotifyFifoWatcher.js";
 
 if (isWebServerNeeded()) {
     // Awaited so the process handlers below are only in place once startup is
@@ -21,6 +22,8 @@ if (isWebServerNeeded()) {
 KeepalivedService.start((status) => {
     Connection.send(WS_EVENTS.KEEPALIVED_UPDATE, status);
 });
+// Does nothing unless keepalived.notifyFifo is set.
+NotifyFifoWatcher.start();
 
 // Try to connect to server
 Connection.connect();
@@ -31,6 +34,7 @@ const shutdown = async () => {
     // Before anything else: whatever the server has not acknowledged is only in memory
     // and in a write that may still be pending, and this process is about to end.
     ActivityService.persistNow();
+    NotifyFifoWatcher.stop();
     await stopWebServer();
     process.exit(0);
 };

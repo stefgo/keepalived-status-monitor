@@ -27,9 +27,25 @@ registrationSecret:
 # keepalived parent process and reads the file through /proc/<pid>/root, so the paths below
 # are the ones keepalived itself uses -- a systemd PrivateTmp=true changes nothing.
 # Requires `pid: host` and the capabilities KILL and SYS_PTRACE (see compose.yaml).
+#
+# Three things can make the agent read keepalived; switch on whichever you want, at least one:
+# the timer (pollInterval), the notify FIFO (notifyFifo) and the notify endpoint
+# (notifyToken). The last two react to a failover at once instead of at the next poll. They
+# only trigger a reading -- what the agent reports always comes from the dumps.
 keepalived:
-    # Seconds between two readings (default: 5)
+    # Seconds between two readings; 0 switches the timer off (default: 5). With the timer off,
+    # keepalived is read once on start, on every connection to the server and on every
+    # notification -- keep it on unless a notification is set up and tested.
     pollInterval: 5
+    # Path of keepalived's `vrrp_notify_fifo`, as keepalived sees it. Every line keepalived
+    # writes there triggers a reading. Empty: off. A FIFO has one reader only -- do not point
+    # this at a FIFO something else already reads (e.g. vrrp_notify_fifo_script).
+    # Override with KASM_NOTIFY_FIFO.
+    notifyFifo:
+    # Token (at least 16 characters) for POST /api/keepalived/notify, called by a keepalived
+    # notify script (client/scripts/kasm-notify.sh). Empty: the endpoint does not exist.
+    # Override with KASM_NOTIFY_TOKEN.
+    notifyToken:
     # Match `state_dump_file`, `stats_dump_file` and `json_dump_file` if your
     # keepalived.conf sets them in global_defs.
     dataFile: /tmp/keepalived.data

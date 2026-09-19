@@ -25,14 +25,36 @@ export const AgentNetworkConfigSchema = z.object({
 });
 
 /**
- * The agent's `keepalived` block in its config.yaml: how often it reads keepalived and where
+ * The agent's `keepalived` block in its config.yaml: what makes it read keepalived and where
  * keepalived writes its dumps. The paths are as keepalived sees them -- the agent reads them
  * through `/proc/<pid>/root`, which is what makes a systemd `PrivateTmp=true` transparent.
+ *
+ * Three things can start a reading, and each is switched on by its own key: the timer
+ * (`pollInterval`), the notify FIFO (`notifyFifo`) and the notify endpoint (`notifyToken`).
+ * The last two only trigger a reading; the data always comes from the dumps.
  */
 export const AgentKeepalivedConfigSchema = z
     .object({
-        /** Seconds between two readings. */
-        pollInterval: z.number().min(1).max(3600).default(5),
+        /** Seconds between two readings; 0 switches the timer off. */
+        pollInterval: z
+            .number()
+            .min(0)
+            .max(3600)
+            .refine((value) => value === 0 || value >= 1, {
+                error: "Must be 0 (off) or at least 1 second",
+            })
+            .default(5),
+        /**
+         * keepalived's `vrrp_notify_fifo`, as keepalived sees it. Every line keepalived writes
+         * there triggers a reading. Unset leaves the FIFO alone -- it has one reader only, and
+         * that may be somebody else's.
+         */
+        notifyFifo: z.string().startsWith("/").nullish(),
+        /**
+         * The bearer token `POST /api/keepalived/notify` expects, which a keepalived notify
+         * script calls. Unset means the route does not exist.
+         */
+        notifyToken: z.string().min(16).nullish(),
         dataFile: z.string().startsWith("/").default("/tmp/keepalived.data"),
         statsFile: z.string().startsWith("/").default("/tmp/keepalived.stats"),
         jsonFile: z.string().startsWith("/").default("/tmp/keepalived.json"),
@@ -43,6 +65,16 @@ export const AgentKeepalivedConfigSchema = z
         jsonSignal: z.number().int().min(1).max(64).nullish(),
         /** How long to wait for keepalived to write a dump after the signal. */
         dumpTimeoutMs: z.number().int().min(100).max(30000).default(3000),
+    })
+    .superRefine((value, ctx) => {
+        if (value.pollInterval === 0 && !value.notifyFifo && !value.notifyToken) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["pollInterval"],
+                message:
+                    "0 switches the timer off, but neither notifyFifo nor notifyToken is set -- nothing would ever read keepalived",
+            });
+        }
     })
     .prefault({});
 

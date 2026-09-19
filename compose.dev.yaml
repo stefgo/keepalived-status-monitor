@@ -11,6 +11,10 @@
 # Failover: `docker stop kasm-keepalived-a` moves both virtual routers to node b;
 # `docker start kasm-keepalived-a` brings VI_WEB back, which node a holds with the higher
 # priority.
+#
+# Both agents poll every 5 s. On top of that, node a tells its agent about a change through
+# the notify FIFO and node b through the notify script and endpoint, so both triggers can be
+# watched in the agents' debug logs.
 
 services:
     server-dev:
@@ -96,6 +100,9 @@ services:
             - NET_ADMIN
         volumes:
             - ./docker/dev/keepalived-b.conf:/etc/keepalived/keepalived.conf:ro
+            # The notify script and the token it presents to client-b's notify endpoint.
+            - ./client/scripts/kasm-notify.sh:/etc/keepalived/kasm-notify.sh:ro
+            - ./docker/dev/kasm-notify.token:/etc/keepalived/kasm-notify.token:ro
         networks:
             kasm-dev:
                 ipv4_address: 172.28.0.12
@@ -146,6 +153,8 @@ services:
             - NODE_ENV=development
             - KASM_CLIENT_CONFIG=/data/config.yaml
             - KASM_CLIENT_DATA_DIR=/data
+            # Node a reports state changes through its notify FIFO (keepalived-a.conf).
+            - KASM_NOTIFY_FIFO=/run/kasm-notify.fifo
 
         # See server-dev: the dev image declares no HEALTHCHECK either.
         healthcheck:
@@ -163,6 +172,14 @@ services:
         depends_on:
             - server-dev
             - keepalived-b
+        environment:
+            - LOG_LEVEL=debug
+            - NODE_ENV=development
+            - KASM_CLIENT_CONFIG=/data/config.yaml
+            - KASM_CLIENT_DATA_DIR=/data
+            # Node b reports state changes through its notify script, which calls this
+            # agent's notify endpoint with the token in docker/dev/kasm-notify.token.
+            - KASM_NOTIFY_TOKEN=kasm-dev-notify-token-not-a-secret
         volumes:
             - ./client:/app/client
             - ./shared:/app/shared

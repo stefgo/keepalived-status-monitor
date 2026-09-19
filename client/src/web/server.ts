@@ -4,10 +4,12 @@ import fastifyStatic from "@fastify/static";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { config, persistIdentity, persistServerUrl, deleteRegistrationSecret } from "../core/Config.js";
 import { Connection } from "../core/Connection.js";
 import { KeepalivedService } from "../services/KeepalivedService.js";
+import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
 import { isCertificateError, serverRequest } from "../core/ServerHttp.js";
 import { logger } from "@kasm/shared/node";
 import { initSetupPin, rotateSetupPin, verifySetupPin } from "../core/SetupPin.js";
@@ -31,8 +33,21 @@ const __dirname = path.dirname(__filename);
 let fastifyInstance: any = null;
 
 /**
+ * Whether the request carries `Authorization: Bearer <expected>`. Both sides are hashed
+ * first, so timingSafeEqual gets two buffers of one length and the comparison says nothing
+ * about how much of the token was right.
+ */
+function hasBearerToken(request: FastifyRequest, expected: string): boolean {
+    const match = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "");
+    if (!match) return false;
+    const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
+    return crypto.timingSafeEqual(digest(match[1]), digest(expected));
+}
+
+/**
  * Returns true when the web server is needed:
  * - status or register page enabled, OR
+ * - the notify endpoint enabled (keepalived.notifyToken set), OR
  * - `outbound` mode is applicable, so the server has to be able to dial this agent
  *   (registrationSecret set, or authToken present without serverUrl)
  *
@@ -41,6 +56,7 @@ let fastifyInstance: any = null;
 export function isWebServerNeeded(): boolean {
     if (config.enableStatusPage !== false) return true;
     if (config.enableRegisterPage !== false) return true;
+    if (config.keepalived.notifyToken) return true;
     if (config.registrationSecret) return true;
     if (config.authToken && !config.serverUrl) return true;
     return false;
@@ -196,9 +212,17 @@ export async function startWebServer() {
      */
     fastify.get("/api/status/keepalived", async () => {
         const status = KeepalivedService.latest();
-        if (!status) return { collected: false };
+        // What makes the agent read keepalived, so an operator can see a FIFO that is set
+        // but not found without going through the log.
+        const triggers = {
+            poll: config.keepalived.pollInterval,
+            fifo: NotifyFifoWatcher.state(),
+            endpoint: !!config.keepalived.notifyToken,
+        };
+        if (!status) return { collected: false, triggers };
         return {
             collected: true,
+            triggers,
             running: status.running,
             version: status.version ?? null,
             error: status.error ?? null,
@@ -218,6 +242,32 @@ export async function startWebServer() {
      * agent reports, not a fault of the agent.
      */
     fastify.get("/api/health", async () => ({ status: "ok" }));
+
+    /**
+     * Called by a keepalived notify script (`curl`, see client/scripts/kasm-notify.sh) when an
+     * instance or sync group changes state. It only triggers a reading: the body -- the
+     * arguments keepalived passed the script -- goes to the debug log and nowhere else.
+     *
+     * Registered only with keepalived.notifyToken set, and guarded by that token rather than
+     * by allowedNetworks: the caller is keepalived on this host, not the server. Answers
+     * before the reading is taken, so the script never holds keepalived up.
+     */
+    const notifyToken = config.keepalived.notifyToken;
+    if (notifyToken) {
+        fastify.post(
+            "/api/keepalived/notify",
+            { bodyLimit: 1024 },
+            async (request: FastifyRequest, reply: FastifyReply) => {
+                if (!hasBearerToken(request, notifyToken)) {
+                    logger.warn({ ip: request.ip }, "keepalived notify rejected: invalid token");
+                    return reply.code(401).send({ error: "Unauthorized" });
+                }
+                logger.debug({ notify: request.body ?? null }, "keepalived notify endpoint");
+                KeepalivedService.trigger("endpoint");
+                return reply.code(202).send({ status: "triggered" });
+            },
+        );
+    }
 
     // Attempt to establish connection
     fastify.post(

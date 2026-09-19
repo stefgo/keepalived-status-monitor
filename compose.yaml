@@ -82,6 +82,11 @@ services:
         restart: unless-stopped
         environment:
             - NODE_ENV=production
+            # Let keepalived report a failover at once instead of at the next 5-second poll
+            # (docs/install.md, "Faster Failover Detection"): its vrrp_notify_fifo, and/or the
+            # token its notify script presents. Both unset by default.
+            # - KASM_NOTIFY_FIFO=/run/kasm-notify.fifo
+            # - KASM_NOTIFY_TOKEN=<contents of /etc/keepalived/kasm-notify.token>
         # Reports on the agent, not on its server connection or on keepalived: an agent that
         # cannot reach the server, or reports keepalived as stopped, is still healthy. If this
         # agent's config.yaml disables the web server (enableStatusPage and enableRegisterPage

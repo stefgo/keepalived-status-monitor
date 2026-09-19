@@ -14,7 +14,7 @@ import { parseStatsDump } from "./parsers/statsDump.js";
  * The host's process table. The agent runs with `pid: host`, so this is the host's view;
  * `KASM_PROC_DIR` points it elsewhere for a test against a copied tree.
  */
-const PROC_DIR = process.env.KASM_PROC_DIR?.trim() || "/proc";
+export const PROC_DIR = process.env.KASM_PROC_DIR?.trim() || "/proc";
 
 /** The last reading, kept on disk so a restart can still tell what changed while it was away. */
 const LAST_STATUS_FILE = "keepalived-last.json";
@@ -32,7 +32,8 @@ const DUMP_POLL_MS = 50;
 type Listener = (status: KeepalivedStatus) => void;
 
 /**
- * Reads keepalived's state, on a timer and on request.
+ * Reads keepalived's state -- on a timer, when the server asks, and when keepalived itself
+ * says something changed (notify FIFO or notify endpoint, see trigger()).
  *
  * keepalived has no status API. It writes its state to a file when it receives a signal:
  * SIGUSR1 for the data dump, SIGUSR2 for the counters, a real-time signal for JSON. The agent
@@ -46,6 +47,9 @@ export class KeepalivedService {
     private static current: KeepalivedStatus | null = null;
     private static lastSent: { at: number; signature: string } | null = null;
     private static inFlight: Promise<KeepalivedStatus> | null = null;
+    /** A trigger arrived while a reading was in flight; one more follows that reading. */
+    private static rerunRequested = false;
+    private static started = false;
     private static timer: NodeJS.Timeout | null = null;
     private static listener: Listener | null = null;
     /** keepalived's version, read once per process out of its binary. */
@@ -56,12 +60,18 @@ export class KeepalivedService {
         return this.current;
     }
 
-    /** Starts the poll loop. `listener` receives every reading worth sending. */
+    /**
+     * Takes the first reading and starts the poll loop, unless `pollInterval` is 0 -- then
+     * the triggers and the server's requests are all that read keepalived after the first.
+     * `listener` receives every reading worth sending.
+     */
     static start(listener: Listener): void {
         this.listener = listener;
-        if (this.timer) return;
+        if (this.started) return;
+        this.started = true;
         const loop = async () => {
             await this.poll(false);
+            if (config.keepalived.pollInterval <= 0) return;
             this.timer = setTimeout(loop, config.keepalived.pollInterval * 1000);
             this.timer.unref?.();
         };
@@ -74,6 +84,25 @@ export class KeepalivedService {
     }
 
     /**
+     * keepalived reported a change, through the notify FIFO or the notify endpoint. Reads now,
+     * and sends the result if it differs like any timed reading.
+     *
+     * Not simply poll(): a reading already in flight may have signalled keepalived before the
+     * change, and joining it would hand on the state from before. Such a trigger asks for one
+     * more reading after it instead. However many triggers arrive meanwhile -- a sync group
+     * writes a line for itself and one per instance -- that is one, so keepalived is never
+     * signalled more than one reading ahead.
+     */
+    static trigger(reason: string): void {
+        logger.debug({ reason }, "keepalived reading triggered");
+        if (this.inFlight) {
+            this.rerunRequested = true;
+            return;
+        }
+        this.poll(false).catch((err) => logger.warn({ err }, "Triggered keepalived reading failed"));
+    }
+
+    /**
      * One reading. Concurrent callers share it: a REQUEST_STATE_UPDATE that lands while the
      * timer's reading is still waiting for its dump would otherwise signal keepalived twice.
      */
@@ -81,6 +110,10 @@ export class KeepalivedService {
         if (!this.inFlight) {
             this.inFlight = this.read().finally(() => {
                 this.inFlight = null;
+                if (this.rerunRequested) {
+                    this.rerunRequested = false;
+                    this.trigger("rerun");
+                }
             });
         }
         return this.inFlight.then((status) => {
@@ -219,7 +252,7 @@ export class KeepalivedService {
  * `keepalived`. Its children (VRRP, checker) handle the dumps, but the parent is the one that
  * forwards the signals and the one that survives a child being restarted.
  */
-function findKeepalivedPid(): number | null {
+export function findKeepalivedPid(): number | null {
     let entries: string[];
     try {
         entries = fs.readdirSync(PROC_DIR);

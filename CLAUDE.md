@@ -86,6 +86,9 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - Persistent WebSocket connection to server
 - `KeepalivedService` finds keepalived's parent in `/proc`, sends SIGUSR1/SIGUSR2, reads
   the dumps through `/proc/<pid>/root`, and reports state changes as activity events
+- A reading is started by the timer, the notify FIFO (`NotifyFifoWatcher`) or the notify
+  endpoint (`POST /api/keepalived/notify`), each switched on separately. FIFO and endpoint
+  only trigger; the data always comes from the dumps
 - Parsers take over named fields only — `auth_pass` must never reach the wire
 - Optional built-in Fastify web server
 
