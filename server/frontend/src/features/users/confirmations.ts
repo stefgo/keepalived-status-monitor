@@ -8,7 +8,7 @@ import type { AlertOptions, ConfirmOptions } from "@stefgo/react-ui-components";
 export function describeDeleteUser(username: string): ConfirmOptions {
     return {
         title: `Delete user "${username}"?`,
-        description: "The account can no longer sign in. A session it has already opened stays valid until it expires. Nothing else is removed with it -- clients, containers and notifications belong to the installation, not to a user.",
+        description: "The account can no longer sign in. A session it has already opened stays valid until it expires. Nothing else is removed with it -- clients, registration tokens and notifications belong to the installation, not to a user.",
         confirmLabel: "Delete user",
         variant: "danger",
     };

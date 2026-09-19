@@ -2,7 +2,7 @@
 # .github/workflows/docs.yml. docs/ is the same directory the repository serves
 # on GitHub, so every page has to render on both -- see the note on `toc` below.
 site_name: Keepalived Status Monitor (KASM)
-site_description: Centralized management for Docker hosts and their containers
+site_description: Monitors keepalived (VRRP) across hosts — which node holds which virtual address, and when that changes
 site_url: https://stefgo.github.io/keepalived-status-monitor/
 site_author: stefgo
 
