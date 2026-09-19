@@ -24,7 +24,7 @@ export function useVrrpClusters() {
 }
 
 /**
- * `clusterPath` against the clusters of the moment: whether a cluster needs `?vips=` depends
+ * `clusterPath` against the clusters of the moment: whether a cluster needs `?net=` depends
  * on whether another one shares its site and VRID.
  */
 export function useClusterPath() {

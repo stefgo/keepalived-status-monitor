@@ -85,8 +85,9 @@ them.
 
 - **VRRP at a glance** — every instance on every host with its state, configured and
   effective priority, interface, VRID, virtual addresses and last transition.
-- **Cluster view** — instances grouped by virtual router and checked for split brain,
-  missing MASTER and degraded members.
+- **Cluster view** — instances grouped by site, VRID and the network they sit on, then
+  checked for split brain, missing MASTER, degraded members and hosts that disagree on the
+  virtual addresses.
 - **Failover history** — every state change as an activity event with keepalived's own
   timestamp; MASTER stepping down is a warning, FAULT an error.
 - **Counters** — keepalived's per-instance statistics, on each instance's page next to those

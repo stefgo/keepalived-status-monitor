@@ -177,14 +177,14 @@ function ClientInstanceRoute() {
     return <Navigate to={path} replace />;
 }
 
-/** `/clusters/<vrid>` or `/clusters/<site>/<vrid>`; `?vips=` where several clusters share both. */
+/** `/clusters/<vrid>` or `/clusters/<site>/<vrid>`; `?net=` where several clusters share both. */
 function ClusterRoute() {
     // Decoded by the router already.
     const { site, vrid = "" } = useParams();
     const [searchParams] = useSearchParams();
     if (!/^\d+$/.test(vrid)) return <NotFound />;
 
-    return <ClusterDetail site={site ?? null} vrid={Number(vrid)} vips={searchParams.get("vips")} />;
+    return <ClusterDetail site={site ?? null} vrid={Number(vrid)} net={searchParams.get("net")} />;
 }
 
 function ClientEditRoute() {

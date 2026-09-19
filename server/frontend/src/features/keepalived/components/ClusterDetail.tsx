@@ -2,7 +2,7 @@ import { ReactNode, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Network } from "lucide-react";
 import { Card, EntityHeader, type EntityDetail } from "@stefgo/react-ui-components";
-import type { VrrpCluster } from "@kasm/shared";
+import { mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivityStore } from "../../../stores/useActivityStore";
@@ -14,7 +14,7 @@ import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
 import { activityDetail, activityMessage } from "../../activity/lib/activityText";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import {
-    clusterAddressKey,
+    clusterNetworkKey,
     clusterLabel,
     clusterPath,
     clusterVipLabel,
@@ -40,8 +40,8 @@ const GROUP_STICKY = "sticky left-0 bg-hover";
 interface ClusterDetailProps {
     site: string | null;
     vrid: number;
-    /** `clusterAddressKey` of the cluster meant, where several share site and VRID. */
-    vips: string | null;
+    /** `clusterNetworkKey` of the cluster meant, where several share site and VRID. */
+    net: string | null;
 }
 
 /** The distinct values the members report, or a dash where none reports one. */
@@ -56,7 +56,7 @@ const distinct = (values: (string | null | undefined)[]): string =>
  * receives, and a count that moves on one host alone is the one to look at. Which hosts get a
  * column is picked in the host table.
  */
-export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
+export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const { state } = useLocation();
     // The surface that opened this page says where it was; a directly opened URL goes back
     // to the cluster list.
@@ -71,11 +71,11 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
 
     const candidates = clustersAt(clusters, site, vrid);
     const cluster =
-        vips === null
+        net === null
             ? candidates.length === 1
                 ? candidates[0]
                 : undefined
-            : candidates.find((c) => clusterAddressKey(c) === vips);
+            : candidates.find((c) => clusterNetworkKey(c) === net);
 
     // The node that should be MASTER first, as in the member list.
     const members = useMemo(
@@ -150,6 +150,9 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
 
     const online = members.filter((m) => m.online);
     const offline = members.filter((m) => !m.online);
+    // Hosts that do not carry the cluster's full address list. Offline ones count too: what
+    // is wrong here is the configuration, not the state.
+    const mismatched = mismatchedVips(members);
     const masters = online.filter((m) => m.instance.state === "MASTER");
     const instances = members.map((m) => m.instance);
     const newest = (dates: (string | null | undefined)[]) =>
@@ -163,6 +166,14 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
             value: cluster.vips.length > 0 ? cluster.vips.map((vip) => <div key={vip}>{vip}</div>) : "–",
             mono: true,
             visibility: "always",
+        },
+        {
+            // What identifies the cluster, next to site and VRID: the segment its addresses
+            // sit on. Two clusters of one site and VRID are told apart by exactly this.
+            label: "Network",
+            value:
+                cluster.networks.length > 0 ? cluster.networks.map((net) => <div key={net}>{net}</div>) : "–",
+            mono: true,
         },
         { label: "MASTER", value: joined(masters.map((m) => hostLink(m.clientId))), visibility: "always" },
         { label: "Hosts", value: `${online.length} / ${members.length} online`, visibility: "always" },
@@ -201,12 +212,34 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
                 title={clusterLabel(cluster)}
                 meta={<ClusterHealthBadge health={cluster.health} />}
                 alert={
-                    offline.length > 0 && (
-                        <p className="text-sm text-warning">
-                            {joined(offline.map((m) => hostLink(m.clientId)))}{" "}
-                            {offline.length === 1 ? "is" : "are"} offline. What is shown for{" "}
-                            {offline.length === 1 ? "it" : "them"} is the last reading, not the present state.
-                        </p>
+                    (offline.length > 0 || mismatched.length > 0) && (
+                        <div className="space-y-2">
+                            {mismatched.length > 0 && (
+                                <div className="space-y-1 text-sm text-error">
+                                    <p>
+                                        The hosts do not agree on the addresses of this virtual router.
+                                        keepalived never compares them, so whichever host is MASTER serves
+                                        its own list and the rest stays down.
+                                    </p>
+                                    <ul className="space-y-1">
+                                        {mismatched.map(({ member, missing }) => (
+                                            <li key={memberKey(member)}>
+                                                {hostLink(member.clientId)} does not serve{" "}
+                                                <span className="font-mono">{missing.join(", ")}</span>.
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {offline.length > 0 && (
+                                <p className="text-sm text-warning">
+                                    {joined(offline.map((m) => hostLink(m.clientId)))}{" "}
+                                    {offline.length === 1 ? "is" : "are"} offline. What is shown for{" "}
+                                    {offline.length === 1 ? "it" : "them"} is the last reading, not the present
+                                    state.
+                                </p>
+                            )}
+                        </div>
                     )
                 }
                 details={details}
@@ -368,8 +401,10 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
 };
 
 /**
- * Several clusters behind one site and VRID -- separate segments of one site, told apart by
- * their addresses. The page lets the reader pick one rather than guess.
+ * Several clusters behind one site and VRID: separate network segments reusing the VRID,
+ * which is allowed -- a VRID is unique per broadcast domain only. The page lets the reader
+ * pick one rather than guess. Hosts that merely disagree about their addresses do not end up
+ * here; they are one cluster, flagged as a mismatch.
  */
 const ClusterChoice = ({
     label,
@@ -385,7 +420,7 @@ const ClusterChoice = ({
     return (
         <Card title={`${label} is used by ${candidates.length} clusters`} padding="md" classNames={{ content: "space-y-4" }}>
             <p className="text-text-secondary">
-                These clusters share the VRID but answer for different virtual addresses. Pick one.
+                These clusters share the VRID but sit on different networks. Pick one.
             </p>
             <ul className="space-y-2">
                 {candidates.map((candidate) => (
@@ -395,7 +430,7 @@ const ClusterChoice = ({
                             state={state}
                             className="font-mono text-text-primary hover:text-primary"
                         >
-                            {clusterVipLabel(candidate)}
+                            {candidate.networks.join(", ") || clusterVipLabel(candidate)}
                         </Link>
                         <ClusterHealthBadge health={candidate.health} />
                         <span className="text-text-muted">

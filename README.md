@@ -15,8 +15,11 @@ next to each keepalived and a central Fastify/React server with a dashboard and 
 - **VRRP at a glance:** Every VRRP instance on every host with its state (MASTER, BACKUP,
   FAULT), configured and effective priority, interface, VRID, virtual addresses and the time
   of its last transition.
-- **Cluster view:** Instances of all hosts are grouped by virtual router. Each cluster is
-  checked for **split brain** (more than one MASTER), **no MASTER** and degraded members.
+- **Cluster view:** Instances of all hosts are grouped by virtual router — site, VRID and the
+  network their addresses sit on, since a VRID is unique per broadcast domain only. Each
+  cluster is checked for **split brain** (more than one MASTER), **no MASTER**, degraded
+  members and a **VIP mismatch** — members whose address lists differ, so a failover would
+  take addresses down. keepalived never compares those lists itself.
 - **Failover history:** Every state change is recorded with keepalived's own timestamp and a
   severity — a MASTER stepping down is a warning, FAULT an error. The agent compares its
   readings itself, so a failover during a server outage is reported once it is back.

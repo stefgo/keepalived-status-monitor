@@ -29,9 +29,10 @@ type ClusterRow =
 const HEALTH_RANK: Record<VrrpClusterHealth, number> = {
     "split-brain": 0,
     "no-master": 1,
-    degraded: 2,
-    unknown: 3,
-    ok: 4,
+    "vip-mismatch": 2,
+    degraded: 3,
+    unknown: 4,
+    ok: 5,
 };
 
 const STATE_RANK: Record<VrrpState, number> = {
@@ -67,7 +68,7 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
     }));
 }
 
-/** A cluster matches on its VRID, site or an address, or when one of its hosts matches. */
+/** A cluster matches on its VRID, site, network or an address, or when a host of it does. */
 function matches(row: ClusterRow, query: string): boolean {
     if (row.kind === "member") {
         return (
@@ -79,6 +80,7 @@ function matches(row: ClusterRow, query: string): boolean {
         String(row.cluster.vrid ?? "").includes(query) ||
         !!row.cluster.site?.toLowerCase().includes(query) ||
         row.cluster.vips.some((vip) => vip.toLowerCase().includes(query)) ||
+        row.cluster.networks.some((net) => net.toLowerCase().includes(query)) ||
         row.children.some((child) => matches(child, query))
     );
 }
@@ -259,7 +261,7 @@ export const ClusterOverview = () => {
             treeExpanded={{ all: true }}
             keyField="key"
             searchable
-            searchPlaceholder="Search VRID, site, address or host…"
+            searchPlaceholder="Search VRID, site, network, address or host…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
             noResultsMessage="No cluster matches this search."

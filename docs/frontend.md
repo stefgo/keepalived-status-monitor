@@ -102,7 +102,7 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/login`            | `Login.tsx`     | Authentication page (Local & OIDC).                                 |
 | `/`                 | `AppLayout`     | The `KeepalivedDashboard`.                                          |
 | `/clusters`         | `AppLayout`     | Every VRRP cluster (`ClusterOverview`).                             |
-| `/clusters/:vrid`, `/clusters/:site/:vrid` | `AppLayout` | One VRRP cluster (`ClusterDetail`); `?vips=` where several share site and VRID. |
+| `/clusters/:vrid`, `/clusters/:site/:vrid` | `AppLayout` | One VRRP cluster (`ClusterDetail`); `?net=` where several share site and VRID. |
 | `/clients`          | `AppLayout`     | Registered clients overview.                                        |
 | `/clients/new`      | `AppLayout`     | The `AddClientWizard`.                                              |
 | `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
@@ -253,7 +253,7 @@ first level is the virtual router — VRID, virtual addresses and the health bad
 its hosts — online dot, link to the client, instance, VRRP state, priority — ordered by
 effective priority, so the node that should be MASTER is on top. Every row starts expanded. An
 offline member's row is dimmed. A cluster row opens the cluster's page, a host row the host.
-The search matches VRID, address, host and instance name and keeps a whole
+The search matches VRID, site, network, address, host and instance name and keeps a whole
 cluster when one of its hosts matches. The list view, which narrow screens always get, shows
 one entry per cluster with its hosts inside it; its addresses open the cluster's page.
 
@@ -275,10 +275,10 @@ deleted are left out.
 
 One cluster at `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for clients with a site,
 opened from a cluster row, a cluster card's title or an instance row on a client's page.
-`clusterPath` in `lib/vrrp.ts` builds the address. A VRID is unique per site only as a rule:
-two segments of one site may use it for different addresses, and only then does the path
-carry `?vips=` (`clusterAddressKey`) to tell them apart. A bare address that fits several
-clusters shows a list to pick from. A cluster without a VRID has no page.
+`clusterPath` in `lib/vrrp.ts` builds the address. A VRID is unique per broadcast domain
+only: two segments of one site may use the same one, and only then does the path carry
+`?net=` (`clusterNetworkKey`) to tell them apart. A bare path that fits several clusters
+shows a list to pick from. A cluster without a VRID has no page.
 
 - An `EntityHeader` with site / VRID and the health badge. Site, VRID, virtual addresses,
   the MASTER host and how many hosts are online stay on screen; instance name, interface,

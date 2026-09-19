@@ -109,25 +109,43 @@ export interface VrrpClusterMember {
     instance: VrrpInstance;
 }
 
-export type VrrpClusterHealth = "ok" | "split-brain" | "no-master" | "degraded" | "unknown";
+export type VrrpClusterHealth = "ok" | "split-brain" | "no-master" | "vip-mismatch" | "degraded" | "unknown";
 
 /**
- * The instances of all hosts that answer for the same virtual router. The server groups
- * them by the site of their client, the VRID and the set of virtual addresses: a VRID alone
- * is only unique per network segment, and two unrelated clusters on different segments may
- * well share one -- private addresses included, which is what the site is for.
+ * The instances of all hosts that answer for the same virtual router. The server groups them
+ * by the site of their client, the VRID, and the network their virtual addresses sit on: a
+ * VRID is unique per broadcast domain only, and two unrelated clusters on different segments
+ * may well share one -- private networks included, which is what the site is for.
+ *
+ * The addresses are not part of that identity. They are what this tool watches, so a cluster
+ * that changed identity whenever they did could never report that its hosts disagree about
+ * them.
  */
 export interface VrrpCluster {
     key: string;
     /** The site all members' clients share; null for clients without one. */
     site: string | null;
     vrid: number | null;
+    /**
+     * The networks the cluster's addresses sit on, canonically written (`172.28.0.0/24`).
+     * What tells two clusters of one site and VRID apart. Empty for instances that report no
+     * address at all, which are grouped by their instance name instead.
+     */
+    networks: string[];
+    /** Every address the members carry between them; where they differ, see `health`. */
     vips: string[];
     members: VrrpClusterMember[];
     /**
      * Counted over online members only. `split-brain`: more than one MASTER. `no-master`:
-     * online members exist, none is MASTER. `degraded`: one MASTER holds, but a member is
-     * in FAULT, offline, or the only one left. `unknown`: no member is online.
+     * online members exist, none is MASTER. `vip-mismatch`: the members do not all carry the
+     * same addresses, so a failover would change which of them are up. `degraded`: one
+     * MASTER holds, but a member is in FAULT, offline, or the only one left. `unknown`: no
+     * member is online.
+     *
+     * `vip-mismatch` is the one case counted over **every** member, online or not: it is a
+     * statement about the configuration rather than the present state. A running outage is
+     * more urgent than a misconfiguration, so `split-brain` and `no-master` keep their place
+     * where the addresses disagree as well.
      */
     health: VrrpClusterHealth;
 }

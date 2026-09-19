@@ -64,6 +64,12 @@ export const CLUSTER_HEALTH: Record<
         variant: "error",
         description: "More than one member claims MASTER for the same virtual router.",
     },
+    "vip-mismatch": {
+        label: "VIP mismatch",
+        variant: "error",
+        description:
+            "The members do not all carry the same virtual addresses: a failover would change which of them are up. Counted over every member, offline ones included.",
+    },
     unknown: { label: "Unknown", variant: "neutral", description: "No member of this cluster is online." },
 };
 
@@ -90,10 +96,11 @@ export function clusterVipLabel(cluster: VrrpCluster): string | undefined {
 }
 
 /**
- * The part of a cluster's key after site and VRID: its addresses, or the instance name of a
- * cluster without any. It tells apart two clusters that share site and VRID.
+ * The part of a cluster's key after site and VRID: the network its addresses sit on, or the
+ * instance name of a cluster that reports none. It tells apart two clusters that share site
+ * and VRID -- separate segments reusing the VRID, which is allowed.
  */
-export function clusterAddressKey(cluster: VrrpCluster): string {
+export function clusterNetworkKey(cluster: VrrpCluster): string {
     return cluster.key.slice(`${cluster.site ?? ""}|${cluster.vrid ?? "?"}|`.length);
 }
 
@@ -104,7 +111,7 @@ export function clustersAt(clusters: VrrpCluster[], site: string | null, vrid: n
 
 /**
  * Where a cluster has its page: `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for a
- * client with a site. Only where another cluster shares both does `?vips=` name the one
+ * client with a site. Only where another cluster shares both does `?net=` name the one
  * meant. A cluster without a VRID has no page -- keepalived reports one for every instance.
  */
 export function clusterPath(cluster: VrrpCluster, clusters: VrrpCluster[]): string | undefined {
@@ -113,7 +120,7 @@ export function clusterPath(cluster: VrrpCluster, clusters: VrrpCluster[]): stri
         ? `/clusters/${encodeURIComponent(cluster.site)}/${cluster.vrid}`
         : `/clusters/${cluster.vrid}`;
     return clustersAt(clusters, cluster.site, cluster.vrid).length > 1
-        ? `${path}?vips=${encodeURIComponent(clusterAddressKey(cluster))}`
+        ? `${path}?net=${encodeURIComponent(clusterNetworkKey(cluster))}`
         : path;
 }
 

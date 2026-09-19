@@ -673,19 +673,28 @@ how current it is.
 `GET /api/v1/keepalived/clusters`
 
 **Description:** The instances of all clients, grouped by the virtual router they answer
-for: same client `site`, same VRID and same set of virtual addresses (prefix lengths
-ignored). A VRID alone is unique only per network segment, so the addresses are part of the
-key; an instance without addresses is grouped by VRID and name. Two sites that use the same
-VRID *and* the same private addresses are told apart by the site only — every member of a
-cluster needs the same one, and clients without a site share the empty one. The grouping is `buildVrrpClusters` from
-`@kasm/shared`, the same function the dashboard runs.
+for: same client `site`, same VRID, and a **shared network**. A VRID is unique per broadcast
+domain only, so the network the virtual addresses sit on is what tells two otherwise equal
+clusters apart — `192.168.1.100/24` belongs to `192.168.1.0/24`, and an address written
+without a prefix is the host route keepalived makes of it (`/32`), which matches only
+itself. Instances whose networks overlap are one cluster, transitively; an instance that
+reports no address at all is grouped by VRID and instance name. Two sites that use the same
+VRID *and* the same private network are told apart by the site only — every member of a
+cluster needs the same one, and clients without a site share the empty one. The grouping is
+`buildVrrpClusters` from `@kasm/shared`, the same function the dashboard runs.
+
+The virtual addresses are deliberately **not** part of the identity. They are what this
+tool watches, so a cluster whose identity changed with them could never report that its
+hosts disagree about them — see `vip-mismatch` below. `vips` is therefore the union of what
+the members carry, and `key` is `<site>|<vrid>|<network>`.
 
 ```json
 [
     {
-        "key": "|51|192.168.1.100",
+        "key": "|51|192.168.1.0/24",
         "site": null,
         "vrid": 51,
+        "networks": ["192.168.1.0/24"],
         "vips": ["192.168.1.100/24"],
         "health": "degraded",
         "members": [
@@ -703,6 +712,7 @@ report, not its present one:
 | :------- | :---- |
 | `split-brain` | More than one online member is MASTER. |
 | `no-master` | Online members exist, none is MASTER. |
+| `vip-mismatch` | The members do not all carry the same virtual addresses, so a failover changes which of them are up. The one value counted over **every** member, offline included: it describes the configuration, not the state. An outage above keeps its place. |
 | `degraded` | One MASTER, but a member is in FAULT, offline, or the only member. |
 | `unknown` | No member is online. |
 | `ok` | One MASTER, every member online and none in FAULT. |
