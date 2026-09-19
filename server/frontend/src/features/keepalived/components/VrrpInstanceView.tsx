@@ -8,7 +8,7 @@ import {
     type DataTableDef,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
-import { formatInterval } from "../lib/vrrp";
+import { formatInterval, vrrpStateLabel } from "../lib/vrrp";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
 export interface VrrpInstanceRow {
@@ -48,7 +48,7 @@ export const Priority = ({ instance }: { instance: VrrpInstance }) => {
 /** The configured state, where keepalived was told to start in another one than it is in now. */
 const WantedState = ({ instance }: { instance: VrrpInstance }) =>
     instance.wantedState && instance.wantedState !== "UNKNOWN" && instance.wantedState !== instance.state ? (
-        <span className="text-xs text-text-muted">configured {instance.wantedState}</span>
+        <span className="text-xs text-text-muted">configured {vrrpStateLabel(instance.wantedState)}</span>
     ) : null;
 
 export const Vips = ({ instance }: { instance: VrrpInstance }) =>

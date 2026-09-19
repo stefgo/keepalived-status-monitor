@@ -1,4 +1,5 @@
 import { ActivityRecord } from "@kasm/shared";
+import { vrrpStateLabel } from "../../keepalived/lib/vrrp";
 
 /**
  * Turns an event into the sentence a reader sees.
@@ -29,12 +30,14 @@ function host(event: ActivityRecord): string {
 export function activityMessage(event: ActivityRecord): string {
     switch (event.kind) {
         case "vrrp.state_changed": {
-            const from = str(event, "from") ?? "?";
-            const to = str(event, "to") ?? "?";
-            return `${instance(event)}: ${from} → ${to}`;
+            const from = str(event, "from");
+            const to = str(event, "to");
+            return `${instance(event)}: ${from ? vrrpStateLabel(from) : "?"} → ${to ? vrrpStateLabel(to) : "?"}`;
         }
-        case "vrrp.instance_added":
-            return `${instance(event)} appeared (${str(event, "state") ?? "unknown state"})`;
+        case "vrrp.instance_added": {
+            const state = str(event, "state");
+            return `${instance(event)} appeared (${state ? vrrpStateLabel(state) : "unknown state"})`;
+        }
         case "vrrp.instance_removed":
             return `${instance(event)} disappeared`;
         case "keepalived.started": {
