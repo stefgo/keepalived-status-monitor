@@ -80,7 +80,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         <div className="space-y-6">
             <EntityHeader
                 leading={<StatusDot online={isOnline} size="md" />}
-                title={clientName(client)}
+                title={`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}
                 meta={
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>
