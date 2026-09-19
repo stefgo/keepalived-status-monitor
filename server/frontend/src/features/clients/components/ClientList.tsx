@@ -230,7 +230,7 @@ export const ClientList = ({
             listColumns={listColumns}
             keyField="id"
             searchable
-            searchPlaceholder="Search clients…"
+            searchPlaceholder="Search name, hostname, site or ID…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No clients connected."
             rowClassName="align-top"
