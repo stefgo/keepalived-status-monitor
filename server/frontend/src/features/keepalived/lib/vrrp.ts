@@ -1,5 +1,19 @@
 import type { BadgeProps } from "@stefgo/react-ui-components";
-import type { VrrpClusterHealth, VrrpState } from "@kasm/shared";
+import type { KeepalivedState, VrrpClusterHealth, VrrpState } from "@kasm/shared";
+
+/**
+ * One host's reading in a few words: whether keepalived could be read, and how many of its
+ * instances serve or have failed. A process the agent found but could not read is running,
+ * yet reports nothing -- "Unreadable", so its zero counts are not taken for the truth.
+ */
+export function summarizeKeepalived(state: KeepalivedState) {
+    return {
+        status: state.running ? (state.error ? "Unreadable" : "Running") : "Stopped",
+        instances: state.instances.length,
+        masters: state.instances.filter((instance) => instance.state === "MASTER").length,
+        faults: state.instances.filter((instance) => instance.state === "FAULT").length,
+    };
+}
 
 /**
  * One colour per state, used everywhere a state is shown. MASTER is green because it is the

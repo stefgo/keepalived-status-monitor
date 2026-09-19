@@ -221,13 +221,15 @@ It lives in the workspace rather than in a modal, because the two branches end i
 ### ClientOverview (`features/clients`)
 
 The detail view for a single client, shown when navigating to `/client/:clientId`. An
-`EntityHeader` names the client and keeps its identity behind the details toggle — id, agent
-version, allowed or target address, keepalived version, time of the last reading. Its menu
-reads keepalived now (online clients only) and opens the editor.
+`EntityHeader` names the client and keeps keepalived's state on screen as details —
+running, unreadable or stopped with its version and PID, instances, MASTER, FAULT
+(`summarizeKeepalived`). A FAULT count above zero is also a badge in the title row, and a
+failed reading's error sits in the header's `alert`. The client's identity stays behind
+"Show more" — id, agent version, allowed or target address, time of the last reading. Its
+menu reads keepalived now (online clients only) and opens the editor.
 
-Below it `ClientKeepalivedPanel` shows the last reading: four `StatCard`s (keepalived running
-or stopped with its PID, instances, MASTER, FAULT), a failed reading's error, the
-`VrrpInstanceTable`, the sync groups and the counters per instance in a `Collapsible`. **An
+Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceTable`, the sync
+groups and the counters per instance in a `Collapsible`. **An
 offline client keeps its reading on screen**, dimmed and with a line saying that it is the
 last one reported rather than the present state — the server keeps it for exactly that.
 
@@ -376,7 +378,7 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `DashboardPage`        | Type for a navigation entry (`{ id, path, nav }`).        |
 | `LoginPage`            | Pre-built login form UI (local & OIDC).                   |
 | `Card`                 | Generic surface card. `padding="none"` for a card that holds a table. |
-| `StatCard`             | Stat tile — the dashboard numbers (clickable, leading to their page) and a client's keepalived summary. |
+| `StatCard`             | Stat tile — the dashboard numbers (clickable, leading to their page). |
 | `Input`                | Form input field.                                         |
 | `Button`               | Button with variants (primary, secondary, danger).        |
 | `DataTable`            | Table view with sorting and paging.                       |

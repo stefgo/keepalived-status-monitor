@@ -1,5 +1,4 @@
-import { Activity, AlertTriangle, Crown, ShieldCheck } from "lucide-react";
-import { Card, Collapsible, StatCard } from "@stefgo/react-ui-components";
+import { Card, Collapsible } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
 import { formatDate } from "../../../utils";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
@@ -13,7 +12,10 @@ interface ClientKeepalivedPanelProps {
     online: boolean;
 }
 
-/** What one host's keepalived reports: its instances, sync groups and counters. */
+/**
+ * What one host's keepalived reports: its instances, sync groups and counters. Its state and
+ * the instance counts live in the client's header, which stays on screen.
+ */
 export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelProps) => {
     if (!state) {
         return online ? (
@@ -25,8 +27,6 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
         );
     }
 
-    const masters = state.instances.filter((instance) => instance.state === "MASTER").length;
-    const faults = state.instances.filter((instance) => instance.state === "FAULT").length;
     const withStats = state.instances.filter(
         (instance) => instance.stats && Object.keys(instance.stats).length > 0,
     );
@@ -38,24 +38,6 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
                     The agent is offline. What follows is its last reading from{" "}
                     {formatDate(state.collectedAt)}, not the present state.
                 </p>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard
-                    label="keepalived"
-                    value={state.running ? (state.error ? "Unreadable" : "Running") : "Stopped"}
-                    sub={state.pid ? `PID ${state.pid}` : undefined}
-                    icon={ShieldCheck}
-                />
-                <StatCard label="Instances" value={String(state.instances.length)} icon={Activity} />
-                <StatCard label="MASTER" value={String(masters)} icon={Crown} />
-                <StatCard label="FAULT" value={String(faults)} icon={AlertTriangle} />
-            </div>
-
-            {state.error && (
-                <Card padding="md">
-                    <p className="text-error text-sm">{state.error}</p>
-                </Card>
             )}
 
             {state.instances.length > 0 && (

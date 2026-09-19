@@ -16,6 +16,7 @@ import {
 import { StatusDot } from "./StatusDot";
 import { MENU_ENTRY } from "../../../components/menuEntry";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
+import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
 
 interface ClientOverviewProps {
     client: Client;
@@ -46,11 +47,22 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const isOnline = client.status === CLIENT_STATUS.ONLINE;
     const isInbound = client.connectionMode !== CONNECTION_MODE.OUTBOUND;
 
+    const summary = reading ? summarizeKeepalived(reading) : null;
+    const keepalived = reading
+        ? [summary?.status, reading.version && `v${reading.version}`, reading.pid && `PID ${reading.pid}`]
+              .filter(Boolean)
+              .join(" · ")
+        : "–";
+
     /**
-     * What the header row has no room for. All of it opens on request, so a closed header
-     * is just the row.
+     * What the header row has no room for. keepalived's state stays on screen; the rest
+     * opens on request.
      */
     const details: EntityDetail[] = [
+        { label: "keepalived", value: keepalived, visibility: "always" },
+        { label: "Instances", value: summary ? String(summary.instances) : "–", visibility: "always" },
+        { label: "MASTER", value: summary ? String(summary.masters) : "–", visibility: "always" },
+        { label: "FAULT", value: summary ? String(summary.faults) : "–", visibility: "always" },
         { label: "ID", value: client.id, copyable: client.id },
         { label: "Agent", value: client.version || "Unknown" },
         isInbound
@@ -59,7 +71,6 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         ...(isInbound && client.inboundLastIp
             ? [{ label: "Last IP", value: client.inboundLastIp }]
             : []),
-        { label: "keepalived", value: reading?.version ? `v${reading.version}` : "–" },
         { label: "Last Reading", value: reading ? formatDate(reading.collectedAt, { seconds: true }) : "–" },
         ...(isOnline ? [] : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
     ];
@@ -73,8 +84,12 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>
                         {!isOnline && <Badge variant="warning">Offline</Badge>}
+                        {summary && summary.faults > 0 && (
+                            <Badge variant="error">{summary.faults} FAULT</Badge>
+                        )}
                     </>
                 }
+                alert={reading?.error && <p className="text-error text-sm">{reading.error}</p>}
                 details={details}
                 // Names the view, not the client: one entry for every client page.
                 persist={{ key: "kasm.client.details", scope: "local" }}
