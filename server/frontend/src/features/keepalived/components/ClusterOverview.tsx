@@ -1,8 +1,7 @@
-import { useMemo } from "react";
+import { ReactNode, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
-    Badge,
     DataMultiView,
     type DataListColumnDef,
     type DataTableDef,
@@ -13,7 +12,8 @@ import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { StatusDot } from "../../clients/components/StatusDot";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { CLUSTER_HEALTH, instancePath } from "../lib/vrrp";
+import { clusterLabel, clusterPath, clusterVipLabel } from "../lib/vrrp";
+import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
@@ -46,19 +46,6 @@ const STATE_RANK: Record<VrrpState, number> = {
 
 const effectivePriority = (member: VrrpClusterMember) =>
     member.instance.effectivePriority ?? member.instance.priority ?? 0;
-
-const HealthBadge = ({ health }: { health: VrrpClusterHealth }) => (
-    <span title={CLUSTER_HEALTH[health].description}>
-        <Badge variant={CLUSTER_HEALTH[health].variant}>{CLUSTER_HEALTH[health].label}</Badge>
-    </span>
-);
-
-/** The VRID is unique per site only, so the site leads it. */
-const vridLabel = (cluster: VrrpCluster) =>
-    `${cluster.site ? `${cluster.site} / ` : ""}VRID ${cluster.vrid ?? "?"}`;
-
-const vipLabel = (cluster: VrrpCluster) =>
-    cluster.vips.length > 0 ? cluster.vips.join(", ") : cluster.members[0]?.instance.name;
 
 function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
     return clusters.map((cluster) => ({
@@ -99,7 +86,7 @@ function matches(row: ClusterRow, query: string): boolean {
 const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => (
     <Link
         to={`/client/${row.member.clientId}`}
-        // The row opens the instance; the name opens the host.
+        // The row leads to the host as well; without this a click would push it twice.
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"
     >
@@ -107,6 +94,33 @@ const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => 
         {row.hostName}
     </Link>
 );
+
+/** A cluster's page, where it has one; plain text where it has none. */
+const ClusterLink = ({
+    cluster,
+    clusters,
+    children,
+}: {
+    cluster: VrrpCluster;
+    clusters: VrrpCluster[];
+    children: ReactNode;
+}) => {
+    const { pathname } = useLocation();
+    const path = clusterPath(cluster, clusters);
+    return path ? (
+        <Link
+            to={path}
+            state={{ from: pathname }}
+            // The row leads to the cluster as well; without this a click would push it twice.
+            onClick={(e) => e.stopPropagation()}
+            className="text-text-primary hover:text-primary"
+        >
+            {children}
+        </Link>
+    ) : (
+        <span className="text-text-primary">{children}</span>
+    );
+};
 
 /**
  * Every VRRP cluster across the fleet as a tree: the virtual router with its addresses, and
@@ -138,14 +152,14 @@ export const ClusterOverview = () => {
                     ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
                     : row.hostName,
             tableCellClassName: "text-sm",
-            tableItemRender: (row) => (row.kind === "cluster" ? vridLabel(row.cluster) : <HostLink row={row} />),
+            tableItemRender: (row) => (row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />),
         },
         {
             tableHeader: "Virtual IPs / Instance",
             tableCellClassName: "text-sm",
             tableItemRender: (row) =>
                 row.kind === "cluster" ? (
-                    vipLabel(row.cluster)
+                    clusterVipLabel(row.cluster)
                 ) : (
                     <>
                         {row.member.instance.name}
@@ -164,7 +178,7 @@ export const ClusterOverview = () => {
                 row.kind === "cluster" ? HEALTH_RANK[row.cluster.health] : STATE_RANK[row.member.instance.state],
             tableItemRender: (row) =>
                 row.kind === "cluster" ? (
-                    <HealthBadge health={row.cluster.health} />
+                    <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
                     <VrrpStateBadge state={row.member.instance.state} />
                 ),
@@ -195,11 +209,11 @@ export const ClusterOverview = () => {
                     listItemRender: (row) =>
                         row.kind === "cluster" && (
                             <div className="flex flex-wrap items-center gap-2 py-1">
-                                <span className="text-text-primary">
-                                    {vipLabel(row.cluster)}
-                                </span>
-                                <span className="text-sm text-text-muted">{vridLabel(row.cluster)}</span>
-                                <HealthBadge health={row.cluster.health} />
+                                <ClusterLink cluster={row.cluster} clusters={clusters}>
+                                    {clusterVipLabel(row.cluster)}
+                                </ClusterLink>
+                                <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
+                                <ClusterHealthBadge health={row.cluster.health} />
                             </div>
                         ),
                 },
@@ -216,13 +230,9 @@ export const ClusterOverview = () => {
                                                 className={`flex flex-wrap items-center gap-2 ${child.member.online ? "" : "opacity-60"}`}
                                             >
                                                 <HostLink row={child} />
-                                                <Link
-                                                    to={instancePath(child.member.clientId, child.member.instance.name)}
-                                                    state={{ from: pathname }}
-                                                    className="text-text-secondary hover:text-primary"
-                                                >
+                                                <span className="text-text-secondary">
                                                     {child.member.instance.name}
-                                                </Link>
+                                                </span>
                                                 <VrrpStateBadge state={child.member.instance.state} />
                                             </li>
                                         ),
@@ -253,21 +263,23 @@ export const ClusterOverview = () => {
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
             noResultsMessage="No cluster matches this search."
-            // `onRowClick` makes every row look clickable; a cluster row does nothing on click,
-            // so it takes the pointer and the hover back. The list shows cluster rows only.
+            // `onRowClick` makes every row look clickable; a cluster without a VRID has no page,
+            // so its row takes the pointer and the hover back. The list shows cluster rows only.
             rowClassName={(row) =>
                 row.kind === "cluster"
-                    ? "align-top cursor-default hover:bg-transparent"
+                    ? clusterPath(row.cluster, clusters)
+                        ? "align-top"
+                        : "align-top cursor-default hover:bg-transparent"
                     : row.member.online
                       ? "align-top"
                       : "align-top opacity-60"
             }
-            // A host opens its instance; a cluster row only expands and collapses. `from` is
-            // how the instance page knows where back is.
-            onRowClick={(row) =>
-                row.kind === "member" &&
-                navigate(instancePath(row.member.clientId, row.member.instance.name), { state: { from: pathname } })
-            }
+            // A cluster row opens the cluster's page, a host row the host. `from` is how the
+            // cluster page knows where back is.
+            onRowClick={(row) => {
+                const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : `/client/${row.member.clientId}`;
+                if (to) navigate(to, { state: { from: pathname } });
+            }}
         />
     );
 };

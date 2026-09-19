@@ -7,6 +7,7 @@ import {
     useNavigate,
     useLocation,
     useParams,
+    useSearchParams,
 } from "react-router-dom";
 import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Bell } from "lucide-react";
 
@@ -34,6 +35,8 @@ import { useActivityStore } from "../../stores/useActivityStore";
 import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
 import { LoadingIndicator } from "../../components/LoadingIndicator";
 import { NotFoundCard } from "../../components/NotFoundCard";
+import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
+import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
 
 // Page components -- loaded on demand, so a chunk only arrives when its route does. The
 // previous shape built the element tree of every page on every render of the shell,
@@ -57,8 +60,8 @@ const KeepalivedDashboard = lazy(() =>
         default: m.KeepalivedDashboard,
     })),
 );
-const InstanceOverview = lazy(() =>
-    import("../keepalived/components/InstanceOverview").then((m) => ({ default: m.InstanceOverview })),
+const ClusterDetail = lazy(() =>
+    import("../keepalived/components/ClusterDetail").then((m) => ({ default: m.ClusterDetail })),
 );
 const ClusterOverview = lazy(() =>
     import("../keepalived/components/ClusterOverview").then((m) => ({ default: m.ClusterOverview })),
@@ -149,13 +152,39 @@ function ClientDetailRoute() {
     return <ClientOverview client={client} />;
 }
 
+/**
+ * The page of one host's instance, which the cluster page has replaced. An old link lands
+ * on the cluster the instance takes part in -- once the readings are in, which is why this
+ * waits on them rather than giving up on the first render.
+ */
 function ClientInstanceRoute() {
     const client = useRouteClient();
     // Decoded by the router already.
     const { instanceName = "" } = useParams();
+    const clusters = useVrrpClusters();
     if (!client) return <ClientsRoute />;
 
-    return <InstanceOverview client={client} instanceName={instanceName} />;
+    const cluster = clusterOf(clusters, client.id, instanceName);
+    const path = cluster && clusterPath(cluster, clusters);
+    if (!path) {
+        return (
+            <NotFoundCard title="Instance not found" backTo={`/client/${client.id}`} backLabel="Back to the host">
+                No cluster has the VRRP instance <code className="font-mono text-sm">{instanceName}</code> of this
+                host.
+            </NotFoundCard>
+        );
+    }
+    return <Navigate to={path} replace />;
+}
+
+/** `/clusters/<vrid>` or `/clusters/<site>/<vrid>`; `?vips=` where several clusters share both. */
+function ClusterRoute() {
+    // Decoded by the router already.
+    const { site, vrid = "" } = useParams();
+    const [searchParams] = useSearchParams();
+    if (!/^\d+$/.test(vrid)) return <NotFound />;
+
+    return <ClusterDetail site={site ?? null} vrid={Number(vrid)} vips={searchParams.get("vips")} />;
 }
 
 function ClientEditRoute() {
@@ -284,7 +313,7 @@ function AppLayout() {
             },
             {
                 id: "clients",
-                path: ["/clients", "/client/:clientId", "/client/:clientId/instance/:instanceName"],
+                path: ["/clients", "/client/:clientId"],
                 nav: {
                     groupId: "resources",
                     label: "Clients",
@@ -295,7 +324,7 @@ function AppLayout() {
             },
             {
                 id: "clusters",
-                path: "/clusters",
+                path: ["/clusters", "/clusters/:vrid", "/clusters/:site/:vrid"],
                 nav: {
                     groupId: "resources",
                     label: "VRRP Clusters",
@@ -370,6 +399,8 @@ function AppLayout() {
                 <Routes>
                     <Route path="/" element={<KeepalivedDashboard />} />
                     <Route path="/clusters" element={<ClusterOverview />} />
+                    <Route path="/clusters/:vrid" element={<ClusterRoute />} />
+                    <Route path="/clusters/:site/:vrid" element={<ClusterRoute />} />
                     <Route path="/clients" element={<ClientsRoute />} />
                     <Route path="/clients/new" element={<AddClientRoute />} />
                     <Route path="/client/:clientId" element={<ClientDetailRoute />} />

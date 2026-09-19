@@ -1,60 +1,74 @@
-import { Link } from "react-router-dom";
-import { Badge } from "@stefgo/react-ui-components";
+import { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import type { VrrpCluster } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { clientName } from "../../../utils";
 import { StatusDot } from "../../clients/components/StatusDot";
-import { CLUSTER_HEALTH, instancePath } from "../lib/vrrp";
+import { useClusterPath } from "../hooks/useVrrpClusters";
+import { clusterVipLabel } from "../lib/vrrp";
+import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { VrrpInstanceView } from "./VrrpInstanceView";
+
+interface ClusterCardProps {
+    cluster: VrrpCluster;
+    /**
+     * Replaces the cluster's addresses, VRID, site and health in the card header -- for the
+     * cluster's own page, whose header says all of that already.
+     */
+    title?: ReactNode;
+}
 
 /**
  * One virtual router and every host that takes part in it. The instance view is the card
  * itself: it brings its own, and a second one around it would nest two frames. A row opens
- * that host's instance; the host name in it opens the host.
+ * that host; the title opens the cluster's page.
  */
-export const ClusterCard = ({ cluster }: { cluster: VrrpCluster }) => {
+export const ClusterCard = ({ cluster, title }: ClusterCardProps) => {
+    const { pathname } = useLocation();
     const clients = useClientStore((s) => s.clients);
-    const health = CLUSTER_HEALTH[cluster.health];
-    const title = cluster.vips.length > 0 ? cluster.vips.join(", ") : cluster.members[0]?.instance.name;
+    const clusterPath = useClusterPath();
+    const path = clusterPath(cluster);
+    const vipLabel = <span className="font-mono">{clusterVipLabel(cluster)}</span>;
 
     return (
         <VrrpInstanceView
             showHost
             title={
-                <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono">{title}</span>
-                    <span className="text-sm font-normal text-text-muted">
-                        VRID {cluster.vrid ?? "?"}
-                    </span>
-                    {cluster.site && (
+                title ?? (
+                    <span className="flex flex-wrap items-center gap-2">
+                        {path ? (
+                            <Link to={path} state={{ from: pathname }} className="hover:text-primary">
+                                {vipLabel}
+                            </Link>
+                        ) : (
+                            vipLabel
+                        )}
                         <span className="text-sm font-normal text-text-muted">
-                            Site {cluster.site}
+                            VRID {cluster.vrid ?? "?"}
                         </span>
-                    )}
-                </span>
+                        {cluster.site && (
+                            <span className="text-sm font-normal text-text-muted">
+                                Site {cluster.site}
+                            </span>
+                        )}
+                    </span>
+                )
             }
-            extraActions={
-                <span title={health.description}>
-                    <Badge variant={health.variant}>{health.label}</Badge>
-                </span>
-            }
+            extraActions={title === undefined && <ClusterHealthBadge health={cluster.health} />}
             rows={[...cluster.members]
                 .sort((a, b) => (b.instance.effectivePriority ?? 0) - (a.instance.effectivePriority ?? 0))
                 .map((member) => {
                     const client = clients.find((c) => c.id === member.clientId);
                     return {
                         key: `${member.clientId}:${member.instance.name}`,
-                        href: instancePath(member.clientId, member.instance.name),
+                        href: `/client/${member.clientId}`,
                         instance: member.instance,
                         stale: !member.online,
                         host: (
-                            <Link
-                                to={`/client/${member.clientId}`}
-                                className="flex items-center gap-2 hover:text-primary"
-                            >
+                            <span className="flex items-center gap-2">
                                 <StatusDot online={member.online} />
                                 {client ? clientName(client) : member.clientId}
-                            </Link>
+                            </span>
                         ),
                     };
                 })}

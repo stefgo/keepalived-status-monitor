@@ -2,7 +2,8 @@ import { Network } from "lucide-react";
 import { Card } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
-import { instancePath } from "../lib/vrrp";
+import { useVrrpClusters } from "../hooks/useVrrpClusters";
+import { clusterOf, clusterPath } from "../lib/vrrp";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
@@ -14,14 +15,16 @@ interface ClientKeepalivedPanelProps {
 
 /**
  * What one host's keepalived reports: its instances and sync groups. Its state lives in
- * the client's header, which stays on screen; an instance's counters are on its own page,
- * next to those of the other hosts in its cluster. Only shown while the agent is online:
+ * the client's header, which stays on screen; an instance's counters are on the page of its
+ * cluster, next to those of the other hosts in it. Only shown while the agent is online:
  * an offline host's last reading is not the present state.
  *
  * Nothing at all where keepalived is not running -- the header's badge says so -- or could
  * not be read: its error is in the header, and an empty table would claim there is no VRRP.
  */
 export const ClientKeepalivedPanel = ({ clientId, state }: ClientKeepalivedPanelProps) => {
+    const clusters = useVrrpClusters();
+
     if (!state) {
         return <LoadingIndicator label="No keepalived reading yet. Waiting for the first one from the agent…" />;
     }
@@ -35,11 +38,14 @@ export const ClientKeepalivedPanel = ({ clientId, state }: ClientKeepalivedPanel
                         <Network size={18} className="text-text-muted" /> VRRP instances
                     </>
                 }
-                rows={state.instances.map((instance) => ({
-                    key: instance.name,
-                    instance,
-                    href: instancePath(clientId, instance.name),
-                }))}
+                rows={state.instances.map((instance) => {
+                    const cluster = clusterOf(clusters, clientId, instance.name);
+                    return {
+                        key: instance.name,
+                        instance,
+                        href: cluster && clusterPath(cluster, clusters),
+                    };
+                })}
                 emptyMessage="No VRRP instances found."
             />
 

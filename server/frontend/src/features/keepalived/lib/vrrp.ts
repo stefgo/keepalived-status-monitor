@@ -1,5 +1,5 @@
 import type { BadgeProps } from "@stefgo/react-ui-components";
-import type { KeepalivedState, VrrpClusterHealth, VrrpState } from "@kasm/shared";
+import type { KeepalivedState, VrrpCluster, VrrpClusterHealth, VrrpState } from "@kasm/shared";
 
 /**
  * One host's reading in a few words: whether keepalived could be read, and how many of its
@@ -79,9 +79,53 @@ export function statLabel(key: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** Where one host's instance has its page. Instance names are unique per keepalived config. */
-export function instancePath(clientId: string, instanceName: string): string {
-    return `/client/${clientId}/instance/${encodeURIComponent(instanceName)}`;
+/** The VRID is unique per site only, so the site leads it. */
+export function clusterLabel(cluster: VrrpCluster): string {
+    return `${cluster.site ? `${cluster.site} / ` : ""}VRID ${cluster.vrid ?? "?"}`;
+}
+
+/** A cluster's addresses, or the name of its instances where it has none. */
+export function clusterVipLabel(cluster: VrrpCluster): string | undefined {
+    return cluster.vips.length > 0 ? cluster.vips.join(", ") : cluster.members[0]?.instance.name;
+}
+
+/**
+ * The part of a cluster's key after site and VRID: its addresses, or the instance name of a
+ * cluster without any. It tells apart two clusters that share site and VRID.
+ */
+export function clusterAddressKey(cluster: VrrpCluster): string {
+    return cluster.key.slice(`${cluster.site ?? ""}|${cluster.vrid ?? "?"}|`.length);
+}
+
+/** The clusters behind one site and VRID: one as a rule, several on separate segments of a site. */
+export function clustersAt(clusters: VrrpCluster[], site: string | null, vrid: number): VrrpCluster[] {
+    return clusters.filter((cluster) => cluster.site === site && cluster.vrid === vrid);
+}
+
+/**
+ * Where a cluster has its page: `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for a
+ * client with a site. Only where another cluster shares both does `?vips=` name the one
+ * meant. A cluster without a VRID has no page -- keepalived reports one for every instance.
+ */
+export function clusterPath(cluster: VrrpCluster, clusters: VrrpCluster[]): string | undefined {
+    if (cluster.vrid === null) return undefined;
+    const path = cluster.site
+        ? `/clusters/${encodeURIComponent(cluster.site)}/${cluster.vrid}`
+        : `/clusters/${cluster.vrid}`;
+    return clustersAt(clusters, cluster.site, cluster.vrid).length > 1
+        ? `${path}?vips=${encodeURIComponent(clusterAddressKey(cluster))}`
+        : path;
+}
+
+/** The cluster one host's instance takes part in. */
+export function clusterOf(
+    clusters: VrrpCluster[],
+    clientId: string,
+    instanceName: string,
+): VrrpCluster | undefined {
+    return clusters.find((cluster) =>
+        cluster.members.some((member) => member.clientId === clientId && member.instance.name === instanceName),
+    );
 }
 
 interface CounterDef {

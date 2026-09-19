@@ -18,7 +18,7 @@ export interface VrrpInstanceRow {
     host?: ReactNode;
     /** Dims a row whose host is offline: its state is the last one reported, not the present one. */
     stale?: boolean;
-    /** The instance's page. A row with one opens it; links inside the row keep their own target. */
+    /** Where the row leads -- the instance's cluster, or its host. Links inside the row keep their own target. */
     href?: string;
 }
 
@@ -180,7 +180,7 @@ export const VrrpInstanceView = ({
             keyField="key"
             rowClassName={(row) => (row.stale ? "align-top opacity-60" : "align-top")}
             // Only where a row leads somewhere, or every row would look clickable. `from` is
-            // how the instance page knows where back is.
+            // how the cluster page knows where back is.
             onRowClick={
                 rows.some((row) => row.href)
                     ? (row) => row.href && navigate(row.href, { state: { from: pathname } })

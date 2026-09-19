@@ -38,7 +38,8 @@ src/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
-│   │       ├── InstanceOverview.tsx      # One host's instance: details, cluster, counters, history
+│   │       ├── ClusterDetail.tsx         # One cluster: details, hosts, counters, history
+│   │       ├── ClusterHealthBadge.tsx    # A cluster's health, explained in the tooltip
 │   │       ├── VrrpInstanceView.tsx      # Instances as table or list, with or without a host column
 │   │       ├── VrrpStateBadge.tsx        # One badge per VRRP state
 │   │       └── ClientKeepalivedPanel.tsx # One host: instances and sync groups
@@ -101,11 +102,12 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/login`            | `Login.tsx`     | Authentication page (Local & OIDC).                                 |
 | `/`                 | `AppLayout`     | The `KeepalivedDashboard`.                                          |
 | `/clusters`         | `AppLayout`     | Every VRRP cluster (`ClusterOverview`).                             |
+| `/clusters/:vrid`, `/clusters/:site/:vrid` | `AppLayout` | One VRRP cluster (`ClusterDetail`); `?vips=` where several share site and VRID. |
 | `/clients`          | `AppLayout`     | Registered clients overview.                                        |
 | `/clients/new`      | `AppLayout`     | The `AddClientWizard`.                                              |
 | `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
 | `/client/:clientId/edit` | `AppLayout` | The `ClientEditor` for that client.                               |
-| `/client/:clientId/instance/:instanceName` | `AppLayout` | One VRRP instance of that client (`InstanceOverview`). |
+| `/client/:clientId/instance/:instanceName` | `AppLayout` | Redirects to the cluster of that instance; kept for old links. |
 | `/notifications`    | `AppLayout`     | The activity list. The path and the menu entry keep the old name.   |
 | `/users`            | `AppLayout`     | User management.                                                    |
 | `/tokens`           | `AppLayout`     | Registration token management.                                      |
@@ -232,7 +234,7 @@ failed reading's error sits in the header's `alert`. The client's identity stays
 menu reads keepalived now (online clients only) and opens the editor.
 
 Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView` and the sync
-groups. A row opens the instance's own page, where its counters are. **An
+groups. A row opens the page of the instance's cluster, where its counters are. **An
 offline client keeps its reading on screen**, dimmed and with a line saying that it is the
 last one reported rather than the present state — the server keeps it for exactly that.
 
@@ -250,14 +252,15 @@ first level is the virtual router — VRID, virtual addresses and the health bad
 (`CLUSTER_HEALTH` in `lib/vrrp.ts`, with the explanation as the tooltip); the second level is
 its hosts — online dot, link to the client, instance, VRRP state, priority — ordered by
 effective priority, so the node that should be MASTER is on top. Every row starts expanded. An
-offline member's row is dimmed. A host row opens that host's instance; the host name in it
-opens the host. The search matches VRID, address, host and instance name and keeps a whole
+offline member's row is dimmed. A cluster row opens the cluster's page, a host row the host.
+The search matches VRID, address, host and instance name and keeps a whole
 cluster when one of its hosts matches. The list view, which narrow screens always get, shows
-one entry per cluster with its hosts inside it.
+one entry per cluster with its hosts inside it; its addresses open the cluster's page.
 
-`ClusterCard` is the same cluster as a single card — the virtual addresses and VRID as its
-title, a `VrrpInstanceView` with a host column as its body. The dashboard lists the troubled
-clusters with it, and the instance page shows the instance's own cluster.
+`ClusterCard` is the same cluster as a single card — the virtual addresses (a link to the
+cluster's page) and VRID as its title, a `VrrpInstanceView` with a host column as its body,
+where a row opens the host. The dashboard lists the troubled clusters with it; the cluster
+page uses it as its list of hosts, with a plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
 `@kasm/shared` over the readings in `useKeepalivedStore` and the online clients in
@@ -266,28 +269,35 @@ page and the endpoint cannot disagree, and a client going offline changes a clus
 on the next render without anything being sent. Readings of clients that have since been
 deleted are left out.
 
-### InstanceOverview (`features/keepalived`)
+### ClusterDetail (`features/keepalived`)
 
-One host's instance at `/client/:clientId/instance/:instanceName`, opened from any instance
-row — the client's panel or a cluster card. The name is unique within one keepalived config,
-so client and name are the whole address; `instancePath` in `lib/vrrp.ts` builds it.
+One cluster at `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for clients with a site,
+opened from a cluster row, a cluster card's title or an instance row on a client's page.
+`clusterPath` in `lib/vrrp.ts` builds the address. A VRID is unique per site only as a rule:
+two segments of one site may use it for different addresses, and only then does the path
+carry `?vips=` (`clusterAddressKey`) to tell them apart. A bare address that fits several
+clusters shows a list to pick from. A cluster without a VRID has no page.
 
-- An `EntityHeader` with the name and state. Host, VRID, priority and virtual addresses stay
-  on screen; interface, advertisement interval, configured state, sync group, last
-  transition and last reading sit behind "Show more".
-- The instance's `ClusterCard`, so the other hosts of the virtual router are one click away.
-- **Counters side by side**, one column per cluster member, this host first. They are only
+- An `EntityHeader` with site / VRID and the health badge. Site, VRID, virtual addresses,
+  the MASTER host and how many hosts are online stay on screen; instance name, interface,
+  advertisement interval and sync group — each the distinct values of all hosts — the
+  latest transition and the latest reading sit behind "Show more". Offline hosts are named
+  in the header's alert.
+- The cluster's `ClusterCard` as the list of hosts; a row opens the host.
+- **Counters side by side**, one column per host, ordered by effective priority. They are only
   worth reading together: what the MASTER sends, a BACKUP receives. `groupCounters` puts them
   into groups (advertisements, MASTER role, priority zero, packet errors, authentication
   errors) under one name whichever dump they came from — the text dump says
   `advertisements_received`, the JSON dump `advert_rcvd`, and one agent may send both. A
   counter this build does not know lands in "Other" rather than being dropped. An error
   count above zero is red.
-- The last 20 activity events of this instance on this host, trace left out as on the
-  activity page, with a link to that page searching for the instance's name.
+- The last 20 activity events of the cluster's instances, each led by its host, trace left
+  out as on the activity page. Where all hosts name the instance alike, a link opens that
+  page searching for the name.
 
-A reading without the instance — renamed or removed in keepalived.conf — shows a
-`NotFoundCard` leading back to the host.
+A cluster no host reports any more shows a `NotFoundCard` leading back to the cluster list.
+The instance page this one replaced, `/client/:clientId/instance/:instanceName`, is kept as
+a redirect to the instance's cluster, so old links still land.
 
 ### VrrpInstanceView & VrrpStateBadge (`features/keepalived`)
 
