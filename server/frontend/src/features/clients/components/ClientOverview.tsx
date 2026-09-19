@@ -55,14 +55,11 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         : "–";
 
     /**
-     * What the header row has no room for. keepalived's state stays on screen; the rest
-     * opens on request.
+     * What the header row has no room for. keepalived's state and the time of the last
+     * reading stay on screen; the rest opens on request. An offline client shows none of
+     * it: the Offline badge says all there is to say.
      */
-    const details: EntityDetail[] = [
-        { label: "keepalived", value: keepalived, visibility: "always" },
-        { label: "Instances", value: summary ? String(summary.instances) : "–", visibility: "always" },
-        { label: "MASTER", value: summary ? String(summary.masters) : "–", visibility: "always" },
-        { label: "FAULT", value: summary ? String(summary.faults) : "–", visibility: "always" },
+    const details: EntityDetail[] = isOnline ? [
         { label: "ID", value: client.id, copyable: client.id },
         { label: "Agent", value: client.version || "Unknown" },
         isInbound
@@ -71,9 +68,13 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         ...(isInbound && client.inboundLastIp
             ? [{ label: "Last IP", value: client.inboundLastIp }]
             : []),
-        { label: "Last Reading", value: reading ? formatDate(reading.collectedAt, { seconds: true }) : "–" },
-        ...(isOnline ? [] : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
-    ];
+        { label: "keepalived", value: keepalived, visibility: "always" },
+        {
+            label: "Last Reading",
+            value: reading ? formatDate(reading.collectedAt, { seconds: true }) : "–",
+            visibility: "always",
+        },
+    ] : [];
 
     return (
         <div className="space-y-6">
@@ -84,7 +85,10 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>
                         {!isOnline && <Badge variant="warning">Offline</Badge>}
-                        {summary && summary.faults > 0 && (
+                        {isOnline && reading && !reading.running && (
+                            <Badge variant="warning">No keepalived running</Badge>
+                        )}
+                        {isOnline && summary && summary.faults > 0 && (
                             <Badge variant="error">{summary.faults} FAULT</Badge>
                         )}
                     </>
@@ -134,7 +138,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 }
             />
 
-            <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} online={isOnline} />
+            {isOnline && <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />}
         </div>
     );
 };

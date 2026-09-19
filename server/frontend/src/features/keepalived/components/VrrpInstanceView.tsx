@@ -28,6 +28,8 @@ interface VrrpInstanceViewProps {
     title?: ReactNode;
     /** Rendered in the card header next to the view toggle. */
     extraActions?: ReactNode;
+    /** Shown in place of the rows when there are none. */
+    emptyMessage?: string;
 }
 
 const effectivePriority = (instance: VrrpInstance) => instance.effectivePriority ?? instance.priority ?? 0;
@@ -60,7 +62,13 @@ const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTrans
  * VRRP instances as a table or a list, the reader's choice; a narrow screen always gets the
  * list. Rows keep the caller's order until a column is sorted.
  */
-export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }: VrrpInstanceViewProps) => {
+export const VrrpInstanceView = ({
+    rows,
+    showHost = false,
+    title,
+    extraActions,
+    emptyMessage = "No VRRP instances.",
+}: VrrpInstanceViewProps) => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
 
@@ -178,7 +186,7 @@ export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }
                     ? (row) => row.href && navigate(row.href, { state: { from: pathname } })
                     : undefined
             }
-            emptyMessage="No VRRP instances."
+            emptyMessage={emptyMessage}
         />
     );
 };
