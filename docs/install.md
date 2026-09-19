@@ -240,9 +240,42 @@ shipped `compose.yaml` grants it and nothing more:
 | `security_opt: apparmor:unconfined` | Docker's default AppArmor profile forbids reading another process's root even with the capability. Hosts without AppArmor ignore the line. |
 | `network_mode: host` | Keeps the agent's web port under the host's address, which outbound mode dials. |
 
-The agent gets no Docker socket, no host file system mount and no privileged mode. A reading
-that fails for lack of a permission says which one in the agent's status and in the activity
-list (`keepalived could not be read`).
+A reading that fails for lack of a permission says which one in the agent's status and in the
+activity list (`keepalived could not be read`).
+
+### What These Permissions Amount To
+
+The agent gets no Docker socket, no host file system mount and no privileged mode — and is
+still **root on the host in all but name**. `SYS_PTRACE` is not limited to keepalived: it
+applies to every process in the host's PID namespace. `/proc/1/root` is the host's whole file
+system, `/proc/<pid>/environ` every process's environment, and without a user namespace
+(which `pid: host` rules out) the container's root is the host's root, so root-owned host
+files are readable and writable through that path. `ptrace` itself is allowed as well, which
+means code can be injected into host processes.
+
+Treat the agent accordingly: whoever takes it over takes over the host. What limits that is
+its attack surface — set `allowedNetworks`, and disable the register page once no
+re-registration is expected.
+
+### Hardening
+
+`compose.yaml` takes away what the agent does not need:
+
+| Setting | Effect |
+| :------ | :----- |
+| `cap_drop: ALL` | Leaves nothing but `KILL` and `SYS_PTRACE`. Gone are, among others, `NET_RAW` (forged VRRP or ARP packets on the host network), `DAC_OVERRIDE` (files of other users), `CHOWN`, `SETUID` and `MKNOD`. |
+| `security_opt: no-new-privileges:true` | A setuid binary cannot raise privileges again. |
+| `read_only: true`, `tmpfs: /tmp` | The agent writes `config.yaml` and its data volume, nothing else. |
+
+**`client-config.yaml` has to belong to root** (`sudo chown root: client-config.yaml`).
+Without `DAC_OVERRIDE` root in the container can write only files it owns; a file belonging
+to the operator's user stays readable, but the identity from registration is not saved
+(`Failed to save config.yaml` in the agent's log) and the agent has to be registered again
+after a restart.
+
+None of this closes the two paths above. That takes a custom seccomp profile (Docker's default
+without `ptrace`, `process_vm_readv` and `process_vm_writev` — reading `/proc/<pid>/root`
+needs the capability, not the syscall) or a custom AppArmor profile in place of `unconfined`.
 
 The agent can also run without a container, as root, with `node client/dist/index.js`.
 

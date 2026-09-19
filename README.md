@@ -92,7 +92,9 @@ services:
 ### Client
 
 The agent runs on each keepalived host. It needs to see keepalived's process, so it shares the
-host's PID namespace, and it reads keepalived's state files through `/proc/<pid>/root`:
+host's PID namespace, and it reads keepalived's state files through `/proc/<pid>/root`.
+That makes it root on the host in all but name — see
+[Agent Permissions](https://stefgo.github.io/keepalived-status-monitor/install/#agent-permissions):
 
 ```yaml
 services:
@@ -102,11 +104,17 @@ services:
         image: ghcr.io/stefgo/kasm-client:latest
         network_mode: host
         pid: host
+        cap_drop:
+            - ALL
         cap_add:
             - KILL          # signal keepalived to write its state
             - SYS_PTRACE    # read that state through /proc/<pid>/root
         security_opt:
             - apparmor:unconfined
+            - no-new-privileges:true
+        read_only: true
+        tmpfs:
+            - /tmp
         volumes:
             - ./client-config.yaml:/app/client/config.yaml
             # The agent's own state: its last reading and unacknowledged activity.
@@ -121,7 +129,8 @@ volumes:
 
 1. Copy `client/config.example.yaml` to `client-config.yaml`. If your `keepalived.conf` moves
    the dump files (`state_dump_file`, `stats_dump_file`), set the same paths under
-   `keepalived:`.
+   `keepalived:`. Make the file belong to root (`sudo chown root: client-config.yaml`):
+   the agent has no `DAC_OVERRIDE` and could not save its registration otherwise.
 2. In the server dashboard choose **Add Client** and pick "The agent connects to this server"
    to get a registration token — the wizard also takes the display name and allowed address
    the client should start with. Start the agent and open its web UI at

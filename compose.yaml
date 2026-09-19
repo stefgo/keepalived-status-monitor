@@ -38,17 +38,37 @@ services:
         # - SYS_PTRACE lets it read that state through /proc/<pid>/root, keepalived's own
         #   view of the file system -- so a systemd PrivateTmp=true makes no difference.
         # - AppArmor's docker-default profile forbids reading another process's root even
-        #   with the capability, hence unconfined. Nothing else is granted: no Docker
-        #   socket, no host file system mount, no privileged mode.
+        #   with the capability, hence unconfined.
         # - network_mode: host keeps the agent's web port reachable under the host's
         #   address, which outbound mode dials. Move it with KASM_CLIENT_PORT.
+        #
+        # This is NOT isolation from the host. SYS_PTRACE works on every process in the host
+        # PID namespace, not just keepalived: /proc/1/root is the host's whole file system,
+        # and the container's root is the host's root, so root-owned host files are readable
+        # and writable through it. Treat the agent as root on the host and keep its web port
+        # small (allowedNetworks, pages disabled once registered).
+        #
+        # What can be taken away is:
+        # - cap_drop: ALL leaves nothing but the two capabilities above. Gone are, among
+        #   others, NET_RAW (forged VRRP or ARP on the host network), DAC_OVERRIDE (files of
+        #   other users), CHOWN, SETUID and MKNOD. Without DAC_OVERRIDE the agent can write
+        #   client-config.yaml only if the file belongs to root: `sudo chown root:
+        #   client-config.yaml`, or the identity from registration is not saved.
+        # - no-new-privileges stops setuid binaries from raising privileges again.
+        # - read_only: the agent writes config.yaml and its data volume, nothing else.
         network_mode: host
         pid: host
+        cap_drop:
+            - ALL
         cap_add:
             - KILL
             - SYS_PTRACE
         security_opt:
             - apparmor:unconfined
+            - no-new-privileges:true
+        read_only: true
+        tmpfs:
+            - /tmp
         volumes:
             # Persist client configuration
             - ./client-config.yaml:/app/client/config.yaml
