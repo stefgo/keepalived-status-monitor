@@ -48,9 +48,11 @@
 
 @layer base {
     :root {
-        /* Emerald: the plate of the favicon, and the header of the docs site. */
-        --ruic-primary: 5 150 105;
-        --ruic-primary-hover: 4 120 87;
+        /* Green (#10982d): the plate of the favicon, and the header of the docs site. It has
+           the luminance of Tailwind's emerald-600, so every contrast stays where it was, but
+           a purer hue (145° instead of 163°) that carries far more chroma. */
+        --ruic-primary: 16 152 45;
+        --ruic-primary-hover: 8 122 33;
     }
 
     body {

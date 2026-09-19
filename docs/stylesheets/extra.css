@@ -4,16 +4,16 @@
  * has to go in as `primary: custom` plus these variables -- there is no way to
  * write the hex value in mkdocs.yml itself.
  *
- * #059669 is KASM's accent: server/frontend/src/index.css overrides the library's
- * `--ruic-primary` with it (5 150 105), and the favicon and logo use the same
+ * #10982d is KASM's accent: server/frontend/src/index.css overrides the library's
+ * `--ruic-primary` with it (16 152 45), and the favicon and logo use the same
  * green. Keeping the two in sync is the point; if that override changes, this
  * value follows it.
  */
 :root,
 [data-md-color-scheme="slate"] {
-    --md-primary-fg-color:        #059669;
-    --md-primary-fg-color--light: #34d399;
-    --md-primary-fg-color--dark:  #047857; /* --ruic-primary-hover */
+    --md-primary-fg-color:        #10982d;
+    --md-primary-fg-color--light: #0ed82a;
+    --md-primary-fg-color--dark:  #087a21; /* --ruic-primary-hover */
     --md-primary-bg-color:        #ffffff;
     --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
 }

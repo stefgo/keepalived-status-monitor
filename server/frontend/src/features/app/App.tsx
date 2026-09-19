@@ -241,7 +241,7 @@ function AppLayout() {
     const title = (
         <div className="flex flex-col">
             <h1 className="text-xl font-bold text-text-primary leading-tight">
-                KA<span className="text-primary">S</span>M
+                K<span className="text-primary">AS</span>M
             </h1>
             <span className="pt-1 text-[10px] font-mono text-text-muted -mt-1 leading-none">
                 {typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0"}
