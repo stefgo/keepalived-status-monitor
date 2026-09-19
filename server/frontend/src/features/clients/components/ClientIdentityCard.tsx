@@ -45,6 +45,7 @@ export const ClientIdentityCard = ({
 }: ClientIdentityCardProps) => {
     const isInbound = client.connectionMode !== CONNECTION_MODE.OUTBOUND;
     const [displayName, setDisplayName] = useState(client.displayName || "");
+    const [site, setSite] = useState(client.site || "");
     // The check is opt-out per client: the box carries the decision, the field the value.
     const [restrictIp, setRestrictIp] = useState(!!client.inboundAllowedIp);
     const [allowedIp, setAllowedIp] = useState(client.inboundAllowedIp || "");
@@ -93,6 +94,7 @@ export const ClientIdentityCard = ({
     // Whether leaving now would throw something away. The page asks before it does.
     const isDirty =
         displayName.trim() !== (client.displayName || "") ||
+        site.trim() !== (client.site || "") ||
         allowedIpChanged ||
         restrictIp !== !!client.inboundAllowedIp ||
         targetAddressChanged;
@@ -118,7 +120,10 @@ export const ClientIdentityCard = ({
         setError(null);
         setSaved(false);
         try {
-            const data: UpdateClient = { displayName: displayName.trim() };
+            const data: UpdateClient = {
+                displayName: displayName.trim(),
+                site: site.trim() || null,
+            };
             if (isInbound) {
                 // Only sent when it changed: an absent key leaves the stored value alone, and
                 // `null` is not "unchanged" but "switch the check off".
@@ -223,6 +228,19 @@ export const ClientIdentityCard = ({
                         disabled={isSaving}
                         hint={`Leave empty to use hostname (${client.hostname})`}
                         autoFocus
+                    />
+
+                    <Input
+                        label="Site"
+                        value={site}
+                        onChange={(e) => {
+                            setSite(e.target.value);
+                            setSaved(false);
+                        }}
+                        placeholder="e.g. dc-berlin"
+                        maxLength={100}
+                        disabled={isSaving}
+                        hint="Separates VRRP clusters that share a VRID and addresses on different network segments. All hosts of one cluster need the same site. Leave empty if your VRIDs are unique across the network."
                     />
 
                     {isInbound && (

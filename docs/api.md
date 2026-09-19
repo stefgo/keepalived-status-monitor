@@ -317,6 +317,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 | `id`          | string         | Client UUID.                                             |
 | `hostname`    | string         | Hostname of the client machine.                          |
 | `displayName` | string \| null | Optional human-readable name.                            |
+| `site`        | string \| null | Network segment or location the operator put the client in. Part of the [cluster key](#list-clusters); `null` for none. |
 | `status`      | string         | `"online"` or `"offline"`.                               |
 | `lastSeen`    | string \| null | ISO 8601 timestamp of last connection.                   |
 | `version`     | string \| null | Agent version reported on last connection.               |
@@ -336,6 +337,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "hostname": "lb-01",
         "displayName": "Load balancer 1",
+        "site": null,
         "status": "online",
         "lastSeen": "2024-01-01T12:30:00.000Z",
         "version": "1.0.0",
@@ -398,6 +400,7 @@ An empty `outboundTargetAddress` or `registrationSecret` is answered with `400` 
 | Field         | Type   | Required | Description                         |
 | :------------ | :----- | :------- | :---------------------------------- |
 | `displayName` | string | No       | The new display name for the client. |
+| `site` | string \| null | No | At most 100 characters, trimmed. `null` or an empty string clears it; leaving the field out keeps the stored value. |
 | `inboundAllowedIp` | string \| null | No | Inbound clients only. An IPv4 address or CIDR network restricts connections to it; `null` switches the check off; leaving the field out keeps the stored value. |
 | `outboundTargetAddress` | string | No | Outbound clients only. `host` or `host:port` the server dials; without a port, `:3011` is appended. Same rule as on `POST /clients/outbound`. |
 
@@ -670,15 +673,18 @@ how current it is.
 `GET /api/v1/keepalived/clusters`
 
 **Description:** The instances of all clients, grouped by the virtual router they answer
-for: same VRID and same set of virtual addresses (prefix lengths ignored). A VRID alone is
-unique only per network segment, so the addresses are part of the key; an instance without
-addresses is grouped by VRID and name. The grouping is `buildVrrpClusters` from
+for: same client `site`, same VRID and same set of virtual addresses (prefix lengths
+ignored). A VRID alone is unique only per network segment, so the addresses are part of the
+key; an instance without addresses is grouped by VRID and name. Two sites that use the same
+VRID *and* the same private addresses are told apart by the site only — every member of a
+cluster needs the same one, and clients without a site share the empty one. The grouping is `buildVrrpClusters` from
 `@kasm/shared`, the same function the dashboard runs.
 
 ```json
 [
     {
-        "key": "51|192.168.1.100",
+        "key": "|51|192.168.1.100",
+        "site": null,
         "vrid": 51,
         "vips": ["192.168.1.100/24"],
         "health": "degraded",

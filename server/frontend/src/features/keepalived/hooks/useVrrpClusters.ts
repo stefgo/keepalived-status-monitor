@@ -12,12 +12,12 @@ export function useVrrpClusters() {
     const clients = useClientStore((s) => s.clients);
 
     return useMemo(() => {
-        const known = new Set(clients.map((client) => client.id));
+        const sites = new Map(clients.map((client) => [client.id, client.site ?? null]));
         const online = clients
             .filter((client) => client.status === CLIENT_STATUS.ONLINE)
             .map((client) => client.id);
         // A reading of a client that has since been deleted is not part of any cluster.
-        const current = Object.values(states).filter((state) => known.has(state.clientId));
-        return buildVrrpClusters(current, online);
+        const current = Object.values(states).filter((state) => sites.has(state.clientId));
+        return buildVrrpClusters(current, online, (clientId) => sites.get(clientId) ?? null);
     }, [states, clients]);
 }

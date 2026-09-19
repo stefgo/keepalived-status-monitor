@@ -56,6 +56,7 @@ export const ClientList = ({
         return sortedClients.filter(c =>
             (c.displayName ?? "").toLowerCase().includes(q) ||
             c.hostname.toLowerCase().includes(q) ||
+            (c.site ?? "").toLowerCase().includes(q) ||
             c.id.toLowerCase().includes(q),
         );
     }, [sortedClients, searchQuery]);
@@ -87,6 +88,14 @@ export const ClientList = ({
                     </div>
                 </>
             ),
+        });
+
+        cols.push({
+            tableHeader: "Site",
+            sortable: true,
+            sortValue: (client) => client.site ?? "",
+            tableCellClassName: "align-top text-sm text-text-primary",
+            tableItemRender: (client) => client.site || EMPTY_VALUE,
         });
 
         cols.push({
@@ -142,6 +151,15 @@ export const ClientList = ({
         contentFields.push({
             accessorKey: "id",
             listLabel: "ID",
+        });
+
+        contentFields.push({
+            listItemRender: (client) => (
+                <span className="text-sm text-text-primary">
+                    {client.site || EMPTY_VALUE}
+                </span>
+            ),
+            listLabel: "Site",
         });
 
         contentFields.push({

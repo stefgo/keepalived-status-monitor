@@ -76,7 +76,7 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
     }));
 }
 
-/** A cluster matches on its VRID or an address, or when one of its hosts matches. */
+/** A cluster matches on its VRID, site or an address, or when one of its hosts matches. */
 function matches(row: ClusterRow, query: string): boolean {
     if (row.kind === "member") {
         return (
@@ -86,6 +86,7 @@ function matches(row: ClusterRow, query: string): boolean {
     }
     return (
         String(row.cluster.vrid ?? "").includes(query) ||
+        !!row.cluster.site?.toLowerCase().includes(query) ||
         row.cluster.vips.some((vip) => vip.toLowerCase().includes(query)) ||
         row.children.some((child) => matches(child, query))
     );
@@ -131,7 +132,12 @@ export const ClusterOverview = () => {
             tableCellClassName: "text-sm",
             tableItemRender: (row) =>
                 row.kind === "cluster" ? (
-                    `VRID ${row.cluster.vrid ?? "?"}`
+                    <>
+                        VRID {row.cluster.vrid ?? "?"}
+                        {row.cluster.site && (
+                            <div className="text-xs text-text-muted">Site {row.cluster.site}</div>
+                        )}
+                    </>
                 ) : (
                     <HostLink row={row} />
                 ),
@@ -195,6 +201,9 @@ export const ClusterOverview = () => {
                                     {vipLabel(row.cluster)}
                                 </span>
                                 <span className="text-sm text-text-muted">VRID {row.cluster.vrid ?? "?"}</span>
+                                {row.cluster.site && (
+                                    <span className="text-sm text-text-muted">Site {row.cluster.site}</span>
+                                )}
                                 <HealthBadge health={row.cluster.health} />
                             </div>
                         ),
@@ -245,7 +254,7 @@ export const ClusterOverview = () => {
             treeExpanded={{ all: true }}
             keyField="key"
             searchable
-            searchPlaceholder="Search VRID, address or host…"
+            searchPlaceholder="Search VRID, site, address or host…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
             noResultsMessage="No cluster matches this search."

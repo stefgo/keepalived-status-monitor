@@ -82,6 +82,12 @@ export const ClientSchema = z.object({
     id: z.uuid(),
     hostname: z.string(),
     displayName: z.string().optional(),
+    /**
+     * The network segment or location the operator put this client in. Part of the VRRP
+     * cluster key: a VRID is unique only per segment, so hosts at two sites may use the same
+     * one. Null means no site, which every client without one shares.
+     */
+    site: z.string().nullish(),
     status: z.enum(CLIENT_STATUS),
     lastSeen: z.string(),
     version: z.string().optional(),
@@ -231,16 +237,20 @@ export const CreateOutboundClientSchema = z.object({
  *
  * `outboundTargetAddress` applies to outbound clients only; the controller refuses it for
  * an inbound one, the way it refuses `inboundAllowedIp` for an outbound one.
+ *
+ * `site`: `null` or an empty string clears it, an absent key leaves it alone.
  */
 export const UpdateClientSchema = z
     .object({
         displayName: z.string().optional(),
+        site: z.string().trim().max(100).nullable().optional(),
         inboundAllowedIp: Ipv4OrCidrSchema.nullable().optional(),
         outboundTargetAddress: TargetAddressSchema.optional(),
     })
     .refine(
         (body) =>
             body.displayName !== undefined ||
+            body.site !== undefined ||
             body.inboundAllowedIp !== undefined ||
             body.outboundTargetAddress !== undefined,
         { message: "Nothing to update" },

@@ -10,6 +10,8 @@ export interface ClientRow {
     id: string;
     hostname: string | null;
     display_name: string | null;
+    /** Migration 02. Part of the VRRP cluster key; null means no site. */
+    site: string | null;
     auth_token: string | null;
     connection_mode: ConnectionMode;
     /**
@@ -106,6 +108,12 @@ export class ClientRepository {
         return db
             .prepare("UPDATE clients SET display_name = ? WHERE id = ?")
             .run(displayName, id);
+    }
+
+    static updateSite(id: string, site: string | null): { changes: number } {
+        return db
+            .prepare("UPDATE clients SET site = ?, updated_at = datetime('now') WHERE id = ?")
+            .run(site, id);
     }
 
     /**

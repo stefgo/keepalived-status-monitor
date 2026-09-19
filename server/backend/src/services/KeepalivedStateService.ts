@@ -7,6 +7,7 @@ import {
     firstIssue,
 } from "@kasm/shared";
 import { logger } from "@kasm/shared/node";
+import { ClientRepository } from "../repositories/ClientRepository.js";
 import { KeepalivedStateRepository } from "../repositories/KeepalivedStateRepository.js";
 import { ProxyService } from "./ProxyService.js";
 
@@ -56,7 +57,12 @@ export class KeepalivedStateService {
     }
 
     static getClusters(): VrrpCluster[] {
-        return buildVrrpClusters(this.getAll(), ProxyService.getConnectedClientIds());
+        const sites = new Map(ClientRepository.findAll().map((client) => [client.id, client.site]));
+        return buildVrrpClusters(
+            this.getAll(),
+            ProxyService.getConnectedClientIds(),
+            (clientId) => sites.get(clientId) ?? null,
+        );
     }
 
     static delete(clientId: string): void {

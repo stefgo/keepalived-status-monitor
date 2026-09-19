@@ -124,7 +124,7 @@ export class ClientController {
     }
 
     /**
-     * Updates a client's display name, for inbound clients the
+     * Updates a client's display name and site, for inbound clients the
      * address or network its connections must come from, and for outbound clients the
      * address the server dials. `inboundAllowedIp: null` switches that check off; an absent
      * key leaves it alone.
@@ -135,7 +135,7 @@ export class ClientController {
         if (!parsed.success) {
             return reply.code(400).send({ error: firstIssue(parsed.error) });
         }
-        const { displayName, inboundAllowedIp, outboundTargetAddress } = parsed.data;
+        const { displayName, site, inboundAllowedIp, outboundTargetAddress } = parsed.data;
 
         const client = ClientRepository.findById(clientId);
         if (!client) {
@@ -155,6 +155,10 @@ export class ClientController {
 
         if (displayName !== undefined) {
             ClientRepository.updateDisplayName(clientId, displayName);
+        }
+        if (site !== undefined) {
+            // The schema has trimmed it already; an empty site is no site.
+            ClientRepository.updateSite(clientId, site || null);
         }
         if (inboundAllowedIp !== undefined) {
             ClientRepository.updateInboundAllowedIp(clientId, inboundAllowedIp);

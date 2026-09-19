@@ -113,11 +113,14 @@ export type VrrpClusterHealth = "ok" | "split-brain" | "no-master" | "degraded" 
 
 /**
  * The instances of all hosts that answer for the same virtual router. The server groups
- * them by VRID and the set of virtual addresses: a VRID alone is only unique per network
- * segment, and two unrelated clusters on different segments may well share one.
+ * them by the site of their client, the VRID and the set of virtual addresses: a VRID alone
+ * is only unique per network segment, and two unrelated clusters on different segments may
+ * well share one -- private addresses included, which is what the site is for.
  */
 export interface VrrpCluster {
     key: string;
+    /** The site all members' clients share; null for clients without one. */
+    site: string | null;
     vrid: number | null;
     vips: string[];
     members: VrrpClusterMember[];

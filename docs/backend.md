@@ -144,7 +144,7 @@ The server's side of **outbound** clients, the ones the server dials.
 #### `KeepalivedStateService`
 - `handleUpdate(clientId, payload)` — One `KEEPALIVED_UPDATE`: parsed against `KeepalivedStatusSchema` (loose, so an agent that reports more is never dropped; an unknown state word becomes `UNKNOWN`), stored as the client's reading in `keepalived_state`, and broadcast as `KEEPALIVED_STATE_UPDATE` with `clientId` and `receivedAt`. A malformed reading is logged with the client id and the field and discarded; the last good one stays stored.
 - `getAll()` / `getByClientId(clientId)` — The stored readings, parsed again on the way out so a row an older build wrote cannot reach the dashboard in a shape it does not expect.
-- `getClusters()` — `buildVrrpClusters` from `@kasm/shared` over every reading and the ids `ProxyService` has connected. The dashboard runs the same function over what it was pushed, so the endpoint and the page cannot disagree.
+- `getClusters()` — `buildVrrpClusters` from `@kasm/shared` over every reading, the ids `ProxyService` has connected and the `site` of every client, which is part of the cluster key. The dashboard runs the same function over what it was pushed, so the endpoint and the page cannot disagree.
 - `delete(clientId)` — With the client.
 - **No failover logic here.** The agent compares its readings itself and reports every change as an activity event, with keepalived's own transition time. That keeps a failover during a server outage on record, which a server-side diff between two readings could not.
 

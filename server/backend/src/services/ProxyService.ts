@@ -75,6 +75,7 @@ export class ProxyService {
             id: client.id,
             hostname: client.hostname,
             displayName: client.display_name,
+            site: client.site,
             status: this.connectedClients.has(client.id)
                 ? CLIENT_STATUS.ONLINE
                 : CLIENT_STATUS.OFFLINE,

@@ -26,6 +26,11 @@ export const ClusterCard = ({ cluster }: { cluster: VrrpCluster }) => {
                     <span className="text-sm font-normal text-text-muted">
                         VRID {cluster.vrid ?? "?"}
                     </span>
+                    {cluster.site && (
+                        <span className="text-sm font-normal text-text-muted">
+                            Site {cluster.site}
+                        </span>
+                    )}
                 </span>
             }
             extraActions={
