@@ -8,7 +8,6 @@ import { StatusDot } from "./StatusDot";
 import { DataTableDef } from "@stefgo/react-ui-components";
 import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
 import { DataMultiView } from "@stefgo/react-ui-components";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 
 /**
  * What the connected agent says it can do, reported as it named it. Only the agent on the
@@ -45,23 +44,6 @@ export const ClientList = ({
     extraActions,
 }: ClientListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
-    const states = useKeepalivedStore((s) => s.states);
-
-    /**
-     * What the host's keepalived last reported, in one line: how many instances it runs and
-     * how many of them are MASTER, or why there is nothing to count.
-     */
-    const keepalivedSummary = (client: Client): { text: string; tone: string } => {
-        const state = states[client.id];
-        if (!state) return { text: EMPTY_VALUE, tone: "text-text-muted" };
-        if (!state.running) return { text: "Not running", tone: "text-error" };
-        if (state.error) return { text: "Unreadable", tone: "text-error" };
-        const masters = state.instances.filter((instance) => instance.state === "MASTER").length;
-        const faults = state.instances.filter((instance) => instance.state === "FAULT").length;
-        const parts = [`${state.instances.length} instances`, `${masters} MASTER`];
-        if (faults > 0) parts.push(`${faults} FAULT`);
-        return { text: parts.join(" · "), tone: faults > 0 ? "text-error" : "text-text-primary" };
-    };
 
     const sortedClients = useMemo(
         () => [...clients].sort((a, b) => clientName(a).localeCompare(clientName(b))),
@@ -105,15 +87,6 @@ export const ClientList = ({
                     </div>
                 </>
             ),
-        });
-
-        cols.push({
-            tableHeader: "keepalived",
-            tableCellClassName: "align-top text-sm",
-            tableItemRender: (client) => {
-                const { text, tone } = keepalivedSummary(client);
-                return <span className={`whitespace-nowrap ${tone}`}>{text}</span>;
-            },
         });
 
         cols.push({
@@ -197,14 +170,6 @@ export const ClientList = ({
                     </span>
                 ),
             listLabel: "Status",
-        });
-
-        contentFields.push({
-            listItemRender: (client) => {
-                const { text, tone } = keepalivedSummary(client);
-                return <span className={`text-sm ${tone}`}>{text}</span>;
-            },
-            listLabel: "keepalived",
         });
 
         if (renderRowActions) {

@@ -271,16 +271,6 @@ function AppLayout() {
                 },
             },
             {
-                id: "clusters",
-                path: "/clusters",
-                nav: {
-                    groupId: "resources",
-                    label: "VRRP Clusters",
-                    icon: Network,
-                    onClick: () => navigate("/clusters"),
-                },
-            },
-            {
                 id: "clients",
                 path: ["/clients", "/client/:clientId"],
                 nav: {
@@ -289,6 +279,16 @@ function AppLayout() {
                     icon: Monitor,
                     badge: `${stats.clients.active} / ${stats.clients.total}`,
                     onClick: () => navigate("/clients"),
+                },
+            },
+            {
+                id: "clusters",
+                path: "/clusters",
+                nav: {
+                    groupId: "resources",
+                    label: "VRRP Clusters",
+                    icon: Network,
+                    onClick: () => navigate("/clusters"),
                 },
             },
             {
