@@ -1,9 +1,10 @@
+import { Network } from "lucide-react";
 import { Card, Collapsible } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
 import { formatDate } from "../../../utils";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { statLabel } from "../lib/vrrp";
-import { VrrpInstanceTable } from "./VrrpInstanceTable";
+import { VrrpInstanceView } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
 interface ClientKeepalivedPanelProps {
@@ -41,15 +42,18 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
             )}
 
             {state.instances.length > 0 && (
-                <Card title="VRRP instances" titleAs="h3">
-                    <VrrpInstanceTable
-                        rows={state.instances.map((instance) => ({
-                            key: instance.name,
-                            instance,
-                            stale: !online,
-                        }))}
-                    />
-                </Card>
+                <VrrpInstanceView
+                    title={
+                        <>
+                            <Network size={18} className="text-text-muted" /> VRRP instances
+                        </>
+                    }
+                    rows={state.instances.map((instance) => ({
+                        key: instance.name,
+                        instance,
+                        stale: !online,
+                    }))}
+                />
             )}
 
             {state.syncGroups.length > 0 && (
@@ -74,7 +78,7 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
                                 {Object.entries(instance.stats ?? {}).map(([key, value]) => (
                                     <div key={key} className="flex justify-between gap-4">
                                         <dt className="text-text-secondary">{statLabel(key)}</dt>
-                                        <dd className="font-mono text-text-primary">{value}</dd>
+                                        <dd className="tabular-nums text-text-primary">{value}</dd>
                                     </div>
                                 ))}
                             </dl>

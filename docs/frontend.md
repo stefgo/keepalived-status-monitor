@@ -38,7 +38,7 @@ src/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster, the troubled ones first
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
-│   │       ├── VrrpInstanceTable.tsx     # The instance table, with or without a host column
+│   │       ├── VrrpInstanceView.tsx      # Instances as table or list, with or without a host column
 │   │       ├── VrrpStateBadge.tsx        # One badge per VRRP state
 │   │       └── ClientKeepalivedPanel.tsx # One host: status cards, instances, sync groups, counters
 │   ├── activity/                         # What happened, as structured events
@@ -228,7 +228,7 @@ failed reading's error sits in the header's `alert`. The client's identity stays
 "Show more" — id, agent version, allowed or target address, time of the last reading. Its
 menu reads keepalived now (online clients only) and opens the editor.
 
-Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceTable`, the sync
+Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView`, the sync
 groups and the counters per instance in a `Collapsible`. **An
 offline client keeps its reading on screen**, dimmed and with a line saying that it is the
 last one reported rather than the present state — the server keeps it for exactly that.
@@ -244,8 +244,8 @@ usable reading (keepalived stopped or unreadable), then every cluster whose heal
 
 `/clusters` lists every cluster as a `ClusterCard`, the ones needing attention first. The card
 title is the virtual addresses and the VRID; its badge is the health (`CLUSTER_HEALTH` in
-`lib/vrrp.ts`, with the explanation as the tooltip). Below it the members in a
-`VrrpInstanceTable` with a host column — online dot, link to the client — ordered by effective
+`lib/vrrp.ts`, with the explanation as the tooltip). The card is a `VrrpInstanceView` with a
+host column — online dot, link to the client — whose members are ordered by effective
 priority, so the node that should be MASTER is on top. An offline member's row is dimmed.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
@@ -255,13 +255,16 @@ page and the endpoint cannot disagree, and a client going offline changes a clus
 on the next render without anything being sent. Readings of clients that have since been
 deleted are left out.
 
-### VrrpInstanceTable & VrrpStateBadge (`features/keepalived`)
+### VrrpInstanceView & VrrpStateBadge (`features/keepalived`)
 
-One table for a host's instances and for a cluster's members: instance (with its sync group),
+One view for a host's instances and for a cluster's members: instance (with its sync group),
 state (with the configured state where it differs), interface, VRID, priority (configured →
 effective where a track script moved it), advertisement interval, virtual addresses and the
-last transition. A plain table in a horizontally scrolling box, so a narrow screen scrolls
-rather than squeezing nine columns. `VrrpStateBadge` gives every state one colour, everywhere:
+last transition. A `DataMultiView` that shows them as a table or a list; interface and
+advertisement interval are in the list only, to keep the table narrow. Every card has its
+own toggle, and the choice is stored under one key (`vrrpInstanceViewMode`) for all of them.
+A narrow screen always gets the list. Rows keep the caller's order until a column (instance,
+state, priority) is sorted. `VrrpStateBadge` gives every state one colour, everywhere:
 MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the rest `neutral`.
 
 `Escape` on a detail page is handled by `hooks/useEscapeToLeave`. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
