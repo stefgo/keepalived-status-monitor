@@ -259,8 +259,9 @@ one entry per cluster with its hosts inside it; its addresses open the cluster's
 
 `ClusterCard` is the same cluster as a single card — the virtual addresses (a link to the
 cluster's page) and VRID as its title, a `VrrpInstanceView` with a host column as its body,
-where a row opens the host. It leaves out the virtual addresses (`showVips={false}`): they are
-part of the cluster key, so every member has the same ones. The dashboard lists the troubled clusters with it; the cluster
+where a row opens the host. It leaves out the virtual addresses and the VRID
+(`showVips={false}`, `showVrid={false}`): both are part of the cluster key, so every member
+reports the same ones. The dashboard lists the troubled clusters with it; the cluster
 page uses it as its list of hosts, with a plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
@@ -290,9 +291,10 @@ clusters shows a list to pick from. A cluster without a VRID has no page.
 - **Counters side by side**, one column per compared host, ordered by effective priority, the
   counter column sticky while the rest scrolls. At first only the hosts that counted packet or
   authentication errors are compared (`defaultCompareSelection`); where none did, the card
-  says so and waits for a pick. Only the reader's own picks are kept, in memory, so a host that joins later still gets the
-  default. A host left out that counted errors is named above the table with a link to compare
-  it — the pick must not hide the one host that matters. They are only
+  says so and waits for a pick. Where a compared host counted errors, the table shows only
+  the groups holding them; "Show all" in the card header brings back the others, "Show errors
+  only" narrows it again. Only the reader's own picks are kept, in memory, so a host that joins later still gets the
+  default. They are only
   worth reading together: what the MASTER sends, a BACKUP receives. `groupCounters` puts them
   into groups (advertisements, MASTER role, priority zero, packet errors, authentication
   errors) under one name whichever dump they came from — the text dump says

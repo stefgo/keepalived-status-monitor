@@ -45,8 +45,10 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
     return (
         <VrrpInstanceView
             showHost
-            // The addresses are part of what makes the cluster: every member has the same ones.
+            // The addresses and the VRID are part of what makes the cluster: every member
+            // reports the same ones.
             showVips={false}
+            showVrid={false}
             title={
                 title ?? (
                     <span className="flex flex-wrap items-center gap-2">

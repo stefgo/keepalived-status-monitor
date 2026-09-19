@@ -29,6 +29,8 @@ interface VrrpInstanceViewProps {
     showHost?: boolean;
     /** Off where every row answers for the same addresses and the title says which. */
     showVips?: boolean;
+    /** Off where every row belongs to the same virtual router. */
+    showVrid?: boolean;
     title?: ReactNode;
     /** Rendered in the card header next to the view toggle. */
     extraActions?: ReactNode;
@@ -75,6 +77,7 @@ export const VrrpInstanceView = ({
     rows,
     showHost = false,
     showVips = true,
+    showVrid = true,
     title,
     extraActions,
     emptyMessage = "No VRRP instances.",
@@ -132,11 +135,15 @@ export const VrrpInstanceView = ({
         },
         // Interface and advertisement interval are in the list only: they rarely differ
         // between rows, and the table is wide enough without them.
-        {
-            tableHeader: "VRID",
-            tableCellClassName: "text-sm",
-            tableItemRender: ({ instance }) => instance.vrid ?? "–",
-        },
+        ...(showVrid
+            ? [
+                  {
+                      tableHeader: "VRID",
+                      tableCellClassName: "text-sm",
+                      tableItemRender: ({ instance }: VrrpInstanceRow) => instance.vrid ?? "–",
+                  },
+              ]
+            : []),
         {
             tableHeader: "Priority",
             sortable: true,
@@ -185,7 +192,7 @@ export const VrrpInstanceView = ({
               ]
             : []),
         { listLabel: "Interface", listItemRender: ({ instance }) => instance.interface ?? "–" },
-        { listLabel: "VRID", listItemRender: ({ instance }) => instance.vrid ?? "–" },
+        ...(showVrid ? [{ listLabel: "VRID", listItemRender: ({ instance }: VrrpInstanceRow) => instance.vrid ?? "–" }] : []),
         { listLabel: "Priority", listItemRender: ({ instance }) => <Priority instance={instance} /> },
         { listLabel: "Advert", listItemRender: ({ instance }) => formatInterval(instance.advertInterval) },
         ...(showVips

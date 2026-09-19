@@ -34,6 +34,8 @@ const HISTORY_LIMIT = 20;
 
 /** The sticky first column of the counter table needs its own background to cover what scrolls under it. */
 const STICKY = "sticky left-0 bg-card";
+/** The same for a group heading, on the band's background. */
+const GROUP_STICKY = "sticky left-0 bg-hover";
 
 interface ClusterDetailProps {
     site: string | null;
@@ -52,8 +54,7 @@ const distinct = (values: (string | null | undefined)[]): string =>
  *
  * The counters are only worth reading next to each other: what the MASTER sends, a BACKUP
  * receives, and a count that moves on one host alone is the one to look at. Which hosts get a
- * column is picked in the host table; a host left out that counted errors is named above the
- * counters, so the pick cannot hide it.
+ * column is picked in the host table.
  */
 export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
     const { state } = useLocation();
@@ -111,6 +112,10 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
             cluster: cluster?.key,
             overrides: new Map([...(overrides ?? []), ...keys.map((key): [string, boolean] => [key, on])]),
         });
+    // Where errors were counted, the counters open on their groups alone; the cluster whose
+    // key is stored here shows all of them. Another cluster starts narrowed again.
+    const [allGroupsOf, setAllGroupsOf] = useState<string>();
+    const allGroups = allGroupsOf !== undefined && allGroupsOf === cluster?.key;
 
     const label = `${site ? `${site} / ` : ""}VRID ${vrid}`;
 
@@ -179,8 +184,12 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
     ];
 
     const compared = members.filter((m) => isCompared(memberKey(m)));
-    const hiddenErrors = members.filter((m) => !isCompared(memberKey(m)) && hasProblemCounts(m.instance.stats));
-    const counters = groupCounters(compared.map((m) => m.instance.stats));
+    const allCounters = groupCounters(compared.map((m) => m.instance.stats));
+    const errorGroups = allCounters.filter((group) =>
+        group.rows.some((row) => row.problem && row.values.some((value) => (value ?? 0) > 0)),
+    );
+    const narrowed = errorGroups.length > 0 && !allGroups;
+    const counters = narrowed ? errorGroups : allCounters;
     // "Show all" searches the activity page by instance name, which only works where the
     // hosts agree on one.
     const instanceNames = [...new Set(instances.map((i) => i.name))];
@@ -222,21 +231,18 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
                         : "Counters"
                 }
                 titleAs="h3"
-            >
-                {hiddenErrors.length > 0 && (
-                    <p className="px-4 pt-4 text-sm text-warning">
-                        {joined(hiddenErrors.map((m) => hostLink(m.clientId)))}{" "}
-                        {hiddenErrors.length === 1 ? "counted errors but is" : "counted errors but are"} not
-                        compared.{" "}
+                action={
+                    errorGroups.length > 0 && (
                         <button
                             type="button"
-                            className="font-medium underline hover:text-primary"
-                            onClick={() => pick(hiddenErrors.map(memberKey), true)}
+                            className="text-sm text-text-secondary hover:text-primary"
+                            onClick={() => setAllGroupsOf(narrowed ? cluster.key : undefined)}
                         >
-                            Compare {hiddenErrors.length === 1 ? "it" : "them"}
+                            {narrowed ? "Show all" : "Show errors only"}
                         </button>
-                    </p>
-                )}
+                    )
+                }
+            >
                 {compared.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">
                         {members.some((m) => hasProblemCounts(m.instance.stats))
@@ -249,42 +255,51 @@ export const ClusterDetail = ({ site, vrid, vips }: ClusterDetailProps) => {
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b border-border">
-                                    <th className={`${STICKY} px-4 py-2 text-left font-medium text-text-secondary`}>
-                                        Counter
+                                {/* Host and state look like the counter rows below; they are headers only to the markup. */}
+                                <tr>
+                                    <th className={`${STICKY} px-4 py-1.5 text-left font-normal text-text-secondary`}>
+                                        Host
                                     </th>
                                     {compared.map((m) => (
                                         <th
-                                            key={`${m.clientId}:${m.instance.name}`}
-                                            className={`px-4 py-2 text-right font-medium whitespace-nowrap ${m.online ? "" : "opacity-60"}`}
+                                            key={memberKey(m)}
+                                            className={`px-4 py-1.5 text-right font-normal whitespace-nowrap text-text-primary ${m.online ? "" : "opacity-60"}`}
                                         >
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Link
-                                                    to={`/client/${m.clientId}`}
-                                                    className="text-text-secondary hover:text-primary"
-                                                >
-                                                    {hostName(m.clientId)}
-                                                </Link>
-                                                <VrrpStateBadge state={m.instance.state} />
-                                            </div>
+                                            <Link to={`/client/${m.clientId}`} className="hover:text-primary">
+                                                {hostName(m.clientId)}
+                                            </Link>
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr className="border-t border-border">
+                                    <th className={`${STICKY} px-4 py-1.5 text-left font-normal text-text-secondary`}>
+                                        State
+                                    </th>
+                                    {compared.map((m) => (
+                                        <th
+                                            key={memberKey(m)}
+                                            className={`px-4 py-1.5 text-right font-normal ${m.online ? "" : "opacity-60"}`}
+                                        >
+                                            <VrrpStateBadge state={m.instance.state} />
                                         </th>
                                     ))}
                                 </tr>
                             </thead>
                             {counters.map((group) => (
                                 <tbody key={group.title}>
-                                    <tr>
+                                    {/* A band across the table, so a group reads as a heading and not as one more counter. */}
+                                    <tr className="border-y border-border bg-hover">
                                         {/* Only the first cell is sticky, so the title stays in view while the rest scrolls. */}
                                         <th
-                                            className={`${STICKY} whitespace-nowrap px-4 pt-4 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-text-muted`}
+                                            className={`${GROUP_STICKY} whitespace-nowrap px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-text-primary`}
                                         >
                                             {group.title}
                                         </th>
                                         <td colSpan={compared.length} />
                                     </tr>
                                     {group.rows.map((row) => (
-                                        <tr key={row.label} className="border-t border-border first:border-t-0">
-                                            <td className={`${STICKY} px-4 py-1.5 text-text-secondary`}>{row.label}</td>
+                                        <tr key={row.label} className="border-t border-border">
+                                            <td className={`${STICKY} py-1.5 pr-4 pl-8 text-text-secondary`}>{row.label}</td>
                                             {row.values.map((value, i) => (
                                                 <td
                                                     key={i}
