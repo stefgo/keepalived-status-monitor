@@ -32,19 +32,21 @@ src/
 │   │           ├── useAddClientForm.ts   # Form state, held above the wizard
 │   │           └── steps/                # StepConnectionMode, StepInboundDetails, StepOutboundDetails
 │   ├── keepalived/                       # VRRP: dashboard, clusters, a host's instances
-│   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, formatting
+│   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
 │   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the stores, recomputed live
 │   │   └── components/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster, the troubled ones first
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
+│   │       ├── InstanceOverview.tsx      # One host's instance: details, cluster, counters, history
 │   │       ├── VrrpInstanceView.tsx      # Instances as table or list, with or without a host column
 │   │       ├── VrrpStateBadge.tsx        # One badge per VRRP state
-│   │       └── ClientKeepalivedPanel.tsx # One host: status cards, instances, sync groups, counters
+│   │       └── ClientKeepalivedPanel.tsx # One host: instances and sync groups
 │   ├── activity/                         # What happened, as structured events
 │   │   ├── confirmations.ts              # Delete-all text
 │   │   ├── components/
 │   │   │   ├── ActivityGroupSteps.tsx    # The members of one correlated group
+│   │   │   ├── ActivityLevelIcon.tsx     # One icon per level, wherever an event is listed
 │   │   │   └── ActivityView.tsx          # The page, still reached as "Notifications"
 │   │   └── lib/
 │   │       ├── activityText.ts           # kind + data -> the sentence a reader sees
@@ -103,6 +105,7 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/clients/new`      | `AppLayout`     | The `AddClientWizard`.                                              |
 | `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
 | `/client/:clientId/edit` | `AppLayout` | The `ClientEditor` for that client.                               |
+| `/client/:clientId/instance/:instanceName` | `AppLayout` | One VRRP instance of that client (`InstanceOverview`). |
 | `/notifications`    | `AppLayout`     | The activity list. The path and the menu entry keep the old name.   |
 | `/users`            | `AppLayout`     | User management.                                                    |
 | `/tokens`           | `AppLayout`     | Registration token management.                                      |
@@ -228,8 +231,8 @@ failed reading's error sits in the header's `alert`. The client's identity stays
 "Show more" — id, agent version, allowed or target address, time of the last reading. Its
 menu reads keepalived now (online clients only) and opens the editor.
 
-Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView`, the sync
-groups and the counters per instance in a `Collapsible`. **An
+Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView` and the sync
+groups. A row opens the instance's own page, where its counters are. **An
 offline client keeps its reading on screen**, dimmed and with a line saying that it is the
 last one reported rather than the present state — the server keeps it for exactly that.
 
@@ -246,7 +249,8 @@ usable reading (keepalived stopped or unreadable), then every cluster whose heal
 title is the virtual addresses and the VRID; its badge is the health (`CLUSTER_HEALTH` in
 `lib/vrrp.ts`, with the explanation as the tooltip). The card is a `VrrpInstanceView` with a
 host column — online dot, link to the client — whose members are ordered by effective
-priority, so the node that should be MASTER is on top. An offline member's row is dimmed.
+priority, so the node that should be MASTER is on top. An offline member's row is dimmed. A
+row opens that host's instance; the host name in it opens the host.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
 `@kasm/shared` over the readings in `useKeepalivedStore` and the online clients in
@@ -254,6 +258,29 @@ priority, so the node that should be MASTER is on top. An offline member's row i
 page and the endpoint cannot disagree, and a client going offline changes a cluster's health
 on the next render without anything being sent. Readings of clients that have since been
 deleted are left out.
+
+### InstanceOverview (`features/keepalived`)
+
+One host's instance at `/client/:clientId/instance/:instanceName`, opened from any instance
+row — the client's panel or a cluster card. The name is unique within one keepalived config,
+so client and name are the whole address; `instancePath` in `lib/vrrp.ts` builds it.
+
+- An `EntityHeader` with the name and state. Host, VRID, priority and virtual addresses stay
+  on screen; interface, advertisement interval, configured state, sync group, last
+  transition and last reading sit behind "Show more".
+- The instance's `ClusterCard`, so the other hosts of the virtual router are one click away.
+- **Counters side by side**, one column per cluster member, this host first. They are only
+  worth reading together: what the MASTER sends, a BACKUP receives. `groupCounters` puts them
+  into groups (advertisements, MASTER role, priority zero, packet errors, authentication
+  errors) under one name whichever dump they came from — the text dump says
+  `advertisements_received`, the JSON dump `advert_rcvd`, and one agent may send both. A
+  counter this build does not know lands in "Other" rather than being dropped. An error
+  count above zero is red.
+- The last 20 activity events of this instance on this host, trace left out as on the
+  activity page, with a link to that page searching for the instance's name.
+
+A reading without the instance — renamed or removed in keepalived.conf — shows a
+`NotFoundCard` leading back to the host.
 
 ### VrrpInstanceView & VrrpStateBadge (`features/keepalived`)
 
@@ -264,7 +291,8 @@ last transition. A `DataMultiView` that shows them as a table or a list; interfa
 advertisement interval are in the list only, to keep the table narrow. Every card has its
 own toggle, and the choice is stored under one key (`vrrpInstanceViewMode`) for all of them.
 A narrow screen always gets the list. Rows keep the caller's order until a column (instance,
-state, priority) is sorted. `VrrpStateBadge` gives every state one colour, everywhere:
+state, priority) is sorted. A row with an `href` opens it and passes the current path as
+`from`, which the page it opens uses as the way back. `VrrpStateBadge` gives every state one colour, everywhere:
 MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the rest `neutral`.
 
 `Escape` on a detail page is handled by `hooks/useEscapeToLeave`. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
@@ -395,7 +423,6 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `Modal`                | The base every dialog is built from — focus trap, Escape, scroll lock, focus return. |
 | `Wizard` / `WizardStep` | The step flow the `AddClientWizard` is built on.          |
 | `Select`               | Dropdown in the forms.                                    |
-| `Collapsible`          | The counters of each VRRP instance on the client page.    |
 | `useToast` / `ToastProvider` | Transient result messages raised from the shell.     |
 | `cn`                   | Class-name join; the app uses it where it draws a surface itself. |
 | `ConfirmProvider` / `useConfirm` | Every confirmation and failure notice. See [Confirmations](#confirmations). |

@@ -89,7 +89,8 @@ them.
   missing MASTER and degraded members.
 - **Failover history** — every state change as an activity event with keepalived's own
   timestamp; MASTER stepping down is a warning, FAULT an error.
-- **Counters** — keepalived's per-instance statistics.
+- **Counters** — keepalived's per-instance statistics, on each instance's page next to those
+  of the other hosts in its cluster.
 - **Nothing sensitive leaves the host** — only named fields are read; no Docker socket, no
   host file system mount.
 - **Secure communication** — agents register with a short-lived token and a setup PIN, then

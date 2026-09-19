@@ -134,7 +134,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 }
             />
 
-            <ClientKeepalivedPanel state={reading ?? null} online={isOnline} />
+            <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} online={isOnline} />
         </div>
     );
 };

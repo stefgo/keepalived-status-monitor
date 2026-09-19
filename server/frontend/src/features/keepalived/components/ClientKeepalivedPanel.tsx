@@ -1,23 +1,25 @@
 import { Network } from "lucide-react";
-import { Card, Collapsible } from "@stefgo/react-ui-components";
+import { Card } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
 import { formatDate } from "../../../utils";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
-import { statLabel } from "../lib/vrrp";
+import { instancePath } from "../lib/vrrp";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
 interface ClientKeepalivedPanelProps {
+    clientId: string;
     /** The client's last reading, or null before it has sent one. */
     state: KeepalivedState | null;
     online: boolean;
 }
 
 /**
- * What one host's keepalived reports: its instances, sync groups and counters. Its state and
- * the instance counts live in the client's header, which stays on screen.
+ * What one host's keepalived reports: its instances and sync groups. Its state and the
+ * instance counts live in the client's header, which stays on screen; an instance's counters
+ * are on its own page, next to those of the other hosts in its cluster.
  */
-export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelProps) => {
+export const ClientKeepalivedPanel = ({ clientId, state, online }: ClientKeepalivedPanelProps) => {
     if (!state) {
         return online ? (
             <LoadingIndicator label="No keepalived reading yet. Waiting for the first one from the agent…" />
@@ -27,10 +29,6 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
             </Card>
         );
     }
-
-    const withStats = state.instances.filter(
-        (instance) => instance.stats && Object.keys(instance.stats).length > 0,
-    );
 
     return (
         <div className="space-y-6">
@@ -52,6 +50,7 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
                         key: instance.name,
                         instance,
                         stale: !online,
+                        href: instancePath(clientId, instance.name),
                     }))}
                 />
             )}
@@ -67,23 +66,6 @@ export const ClientKeepalivedPanel = ({ state, online }: ClientKeepalivedPanelPr
                             </li>
                         ))}
                     </ul>
-                </Card>
-            )}
-
-            {withStats.length > 0 && (
-                <Card title="Counters" titleAs="h3" padding="md" classNames={{ content: "space-y-2" }}>
-                    {withStats.map((instance) => (
-                        <Collapsible key={instance.name} title={instance.name}>
-                            <dl className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-sm">
-                                {Object.entries(instance.stats ?? {}).map(([key, value]) => (
-                                    <div key={key} className="flex justify-between gap-4">
-                                        <dt className="text-text-secondary">{statLabel(key)}</dt>
-                                        <dd className="tabular-nums text-text-primary">{value}</dd>
-                                    </div>
-                                ))}
-                            </dl>
-                        </Collapsible>
-                    ))}
                 </Card>
             )}
         </div>

@@ -57,6 +57,9 @@ const KeepalivedDashboard = lazy(() =>
         default: m.KeepalivedDashboard,
     })),
 );
+const InstanceOverview = lazy(() =>
+    import("../keepalived/components/InstanceOverview").then((m) => ({ default: m.InstanceOverview })),
+);
 const ClusterOverview = lazy(() =>
     import("../keepalived/components/ClusterOverview").then((m) => ({ default: m.ClusterOverview })),
 );
@@ -144,6 +147,15 @@ function ClientDetailRoute() {
     if (!client) return <ClientsRoute />;
 
     return <ClientOverview client={client} />;
+}
+
+function ClientInstanceRoute() {
+    const client = useRouteClient();
+    // Decoded by the router already.
+    const { instanceName = "" } = useParams();
+    if (!client) return <ClientsRoute />;
+
+    return <InstanceOverview client={client} instanceName={instanceName} />;
 }
 
 function ClientEditRoute() {
@@ -272,7 +284,7 @@ function AppLayout() {
             },
             {
                 id: "clients",
-                path: ["/clients", "/client/:clientId"],
+                path: ["/clients", "/client/:clientId", "/client/:clientId/instance/:instanceName"],
                 nav: {
                     groupId: "resources",
                     label: "Clients",
@@ -362,6 +374,7 @@ function AppLayout() {
                     <Route path="/clients/new" element={<AddClientRoute />} />
                     <Route path="/client/:clientId" element={<ClientDetailRoute />} />
                     <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
+                    <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
                     <Route path="/notifications" element={<ActivityView />} />
                     <Route path="/users" element={<UserOverview />} />
                     <Route path="/tokens" element={<TokenOverview />} />

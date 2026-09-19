@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { VrrpInstance } from "@kasm/shared";
 import {
     DataMultiView,
@@ -10,17 +11,19 @@ import { formatDate } from "../../../utils";
 import { formatInterval } from "../lib/vrrp";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
-interface Row {
+export interface VrrpInstanceRow {
     key: string;
     instance: VrrpInstance;
     /** Rendered in front of the instance name -- the host, where the view spans several. */
     host?: ReactNode;
     /** Dims a row whose host is offline: its state is the last one reported, not the present one. */
     stale?: boolean;
+    /** The instance's page. A row with one opens it; links inside the row keep their own target. */
+    href?: string;
 }
 
 interface VrrpInstanceViewProps {
-    rows: Row[];
+    rows: VrrpInstanceRow[];
     showHost?: boolean;
     title?: ReactNode;
     /** Rendered in the card header next to the view toggle. */
@@ -29,7 +32,7 @@ interface VrrpInstanceViewProps {
 
 const effectivePriority = (instance: VrrpInstance) => instance.effectivePriority ?? instance.priority ?? 0;
 
-const Priority = ({ instance }: { instance: VrrpInstance }) => {
+export const Priority = ({ instance }: { instance: VrrpInstance }) => {
     const adjusted =
         instance.effectivePriority !== null &&
         instance.effectivePriority !== undefined &&
@@ -48,7 +51,7 @@ const WantedState = ({ instance }: { instance: VrrpInstance }) =>
         <span className="text-xs text-text-muted">configured {instance.wantedState}</span>
     ) : null;
 
-const Vips = ({ instance }: { instance: VrrpInstance }) =>
+export const Vips = ({ instance }: { instance: VrrpInstance }) =>
     instance.vips.length > 0 ? <>{instance.vips.map((vip) => <div key={vip}>{vip}</div>)}</> : <>–</>;
 
 const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTransition, { seconds: true });
@@ -58,9 +61,18 @@ const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTrans
  * list. Rows keep the caller's order until a column is sorted.
  */
 export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }: VrrpInstanceViewProps) => {
-    const tableDef: DataTableDef<Row>[] = [
+    const navigate = useNavigate();
+    const { pathname } = useLocation();
+
+    const tableDef: DataTableDef<VrrpInstanceRow>[] = [
         ...(showHost
-            ? [{ tableHeader: "Host", tableCellClassName: "text-sm", tableItemRender: (row: Row) => row.host }]
+            ? [
+                  {
+                      tableHeader: "Host",
+                      tableCellClassName: "text-sm",
+                      tableItemRender: (row: VrrpInstanceRow) => row.host,
+                  },
+              ]
             : []),
         {
             tableHeader: "Instance",
@@ -116,7 +128,7 @@ export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }
         },
     ];
 
-    const fields: DataListDef<Row>[] = [
+    const fields: DataListDef<VrrpInstanceRow>[] = [
         {
             listLabel: null,
             listItemRender: ({ instance, host }) => (
@@ -131,7 +143,12 @@ export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }
             ),
         },
         ...(rows.some((row) => row.instance.syncGroup)
-            ? [{ listLabel: "Sync group", listItemRender: ({ instance }: Row) => instance.syncGroup ?? "–" }]
+            ? [
+                  {
+                      listLabel: "Sync group",
+                      listItemRender: ({ instance }: VrrpInstanceRow) => instance.syncGroup ?? "–",
+                  },
+              ]
             : []),
         { listLabel: "Interface", listItemRender: ({ instance }) => instance.interface ?? "–" },
         { listLabel: "VRID", listItemRender: ({ instance }) => instance.vrid ?? "–" },
@@ -140,7 +157,7 @@ export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }
         { listLabel: "Virtual IPs", listItemRender: ({ instance }) => <Vips instance={instance} /> },
         { listLabel: "Last transition", listItemRender: ({ instance }) => lastTransition(instance) },
     ];
-    const listColumns: DataListColumnDef<Row>[] = [{ fields, columnClassName: "flex-1" }];
+    const listColumns: DataListColumnDef<VrrpInstanceRow>[] = [{ fields, columnClassName: "flex-1" }];
 
     return (
         <DataMultiView
@@ -154,6 +171,13 @@ export const VrrpInstanceView = ({ rows, showHost = false, title, extraActions }
             listColumns={listColumns}
             keyField="key"
             rowClassName={(row) => (row.stale ? "align-top opacity-60" : "align-top")}
+            // Only where a row leads somewhere, or every row would look clickable. `from` is
+            // how the instance page knows where back is.
+            onRowClick={
+                rows.some((row) => row.href)
+                    ? (row) => row.href && navigate(row.href, { state: { from: pathname } })
+                    : undefined
+            }
             emptyMessage="No VRRP instances."
         />
     );

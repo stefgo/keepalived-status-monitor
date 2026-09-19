@@ -1,8 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-    AlertCircle,
-    AlertTriangle,
-    Info,
     ChevronRight,
     ChevronDown,
     Trash2,
@@ -11,7 +8,6 @@ import {
     EyeOff,
     Server,
     Network,
-    Activity,
 } from "lucide-react";
 import {
     ActionButton,
@@ -27,18 +23,12 @@ import { useActivityStore } from "../../../stores/useActivityStore";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
+import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { activityDetail, activityMessage } from "../lib/activityText";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, formatDate } from "../../../utils";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
-
-const levelIcon: Record<ActivityLevel, React.ReactNode> = {
-    error: <AlertCircle size={16} className="text-error shrink-0" />,
-    warning: <AlertTriangle size={16} className="text-warning shrink-0" />,
-    info: <Info size={16} className="text-info shrink-0" />,
-    trace: <Activity size={16} className="text-text-muted shrink-0" />,
-};
 
 function SubjectBadges({ event }: { event: ActivityRecord }) {
     const subject = event.subject;
@@ -169,7 +159,7 @@ export function ActivityView() {
             // The row grows when a group is expanded, so the icon is pinned to the top line
             // of the message instead of floating in the middle of the row.
             tableCellClassName: "px-0 pl-6 w-px align-top pt-2.5",
-            tableItemRender: (g) => levelIcon[g.level],
+            tableItemRender: (g) => <ActivityLevelIcon level={g.level} />,
         },
         {
             tableHeader: "Message",

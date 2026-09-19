@@ -21,7 +21,8 @@ next to each keepalived and a central Fastify/React server with a dashboard and 
   severity — a MASTER stepping down is a warning, FAULT an error. The agent compares its
   readings itself, so a failover during a server outage is reported once it is back.
 - **Counters:** keepalived's per-instance statistics (advertisements, priority-zero packets,
-  authentication errors, …).
+  authentication errors, …), on each instance's page next to those of the other hosts in its
+  cluster.
 - **Real-time:** Agents push their readings over WebSockets; the dashboard updates live.
 - **Nothing sensitive leaves the host:** The agent reads keepalived's state dump and passes on
   only the fields it names — `auth_pass` and the rest of the configuration stay on the host.

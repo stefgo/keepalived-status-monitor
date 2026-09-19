@@ -4,12 +4,13 @@ import type { VrrpCluster } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { clientName } from "../../../utils";
 import { StatusDot } from "../../clients/components/StatusDot";
-import { CLUSTER_HEALTH } from "../lib/vrrp";
+import { CLUSTER_HEALTH, instancePath } from "../lib/vrrp";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 
 /**
  * One virtual router and every host that takes part in it. The instance view is the card
- * itself: it brings its own, and a second one around it would nest two frames.
+ * itself: it brings its own, and a second one around it would nest two frames. A row opens
+ * that host's instance; the host name in it opens the host.
  */
 export const ClusterCard = ({ cluster }: { cluster: VrrpCluster }) => {
     const clients = useClientStore((s) => s.clients);
@@ -38,6 +39,7 @@ export const ClusterCard = ({ cluster }: { cluster: VrrpCluster }) => {
                     const client = clients.find((c) => c.id === member.clientId);
                     return {
                         key: `${member.clientId}:${member.instance.name}`,
+                        href: instancePath(member.clientId, member.instance.name),
                         instance: member.instance,
                         stale: !member.online,
                         host: (
