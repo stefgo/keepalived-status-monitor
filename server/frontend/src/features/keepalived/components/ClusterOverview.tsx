@@ -53,6 +53,10 @@ const HealthBadge = ({ health }: { health: VrrpClusterHealth }) => (
     </span>
 );
 
+/** The VRID is unique per site only, so the site leads it. */
+const vridLabel = (cluster: VrrpCluster) =>
+    `${cluster.site ? `${cluster.site} / ` : ""}VRID ${cluster.vrid ?? "?"}`;
+
 const vipLabel = (cluster: VrrpCluster) =>
     cluster.vips.length > 0 ? cluster.vips.join(", ") : cluster.members[0]?.instance.name;
 
@@ -128,19 +132,13 @@ export const ClusterOverview = () => {
         {
             tableHeader: "VRID / Host",
             sortable: true,
-            sortValue: (row) => (row.kind === "cluster" ? (row.cluster.vrid ?? -1) : row.hostName),
+            // By site first, then numerically by VRID (1–255, hence the padding).
+            sortValue: (row) =>
+                row.kind === "cluster"
+                    ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
+                    : row.hostName,
             tableCellClassName: "text-sm",
-            tableItemRender: (row) =>
-                row.kind === "cluster" ? (
-                    <>
-                        VRID {row.cluster.vrid ?? "?"}
-                        {row.cluster.site && (
-                            <div className="text-xs text-text-muted">Site {row.cluster.site}</div>
-                        )}
-                    </>
-                ) : (
-                    <HostLink row={row} />
-                ),
+            tableItemRender: (row) => (row.kind === "cluster" ? vridLabel(row.cluster) : <HostLink row={row} />),
         },
         {
             tableHeader: "Virtual IPs / Instance",
@@ -200,10 +198,7 @@ export const ClusterOverview = () => {
                                 <span className="text-text-primary">
                                     {vipLabel(row.cluster)}
                                 </span>
-                                <span className="text-sm text-text-muted">VRID {row.cluster.vrid ?? "?"}</span>
-                                {row.cluster.site && (
-                                    <span className="text-sm text-text-muted">Site {row.cluster.site}</span>
-                                )}
+                                <span className="text-sm text-text-muted">{vridLabel(row.cluster)}</span>
                                 <HealthBadge health={row.cluster.health} />
                             </div>
                         ),
