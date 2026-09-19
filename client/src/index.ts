@@ -55,6 +55,13 @@ process.on("unhandledRejection", (reason) => {
 // the supervisor restarts us (compose.yaml: restart: unless-stopped).
 process.on("uncaughtException", (err) => {
     logger.fatal({ err }, "Uncaught exception, terminating");
+    // The coalesced write may still be pending; the events it holds would die with the
+    // process. Guarded, because the state that threw may be the queue's own.
+    try {
+        ActivityService.persistNow();
+    } catch (persistErr) {
+        logger.error({ err: persistErr }, "Could not persist the activity queue");
+    }
     // Give the pino transport worker a moment to flush before we go.
     setTimeout(() => process.exit(1), 250);
 });

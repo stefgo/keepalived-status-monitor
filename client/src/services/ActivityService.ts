@@ -33,6 +33,13 @@ const QUEUE_FILE = "queue.json";
 const QUEUE_WRITE_DELAY_MS = 1000;
 
 /**
+ * How long a batch that went out may stay unacknowledged before it is offered again. The
+ * server withholds the ack for what it failed to store; without a retry those events would
+ * wait for the next event or the next reconnect, which on a quiet host may be days away.
+ */
+const ACK_RETRY_MS = 60_000;
+
+/**
  * The agent's activity reporting: it turns what it observes into events and gets them to
  * the server.
  *
@@ -46,6 +53,7 @@ export class ActivityService {
     private static send: ((events: ActivityEvent[]) => boolean) | null = null;
     private static loaded = false;
     private static writeTimer: NodeJS.Timeout | null = null;
+    private static retryTimer: NodeJS.Timeout | null = null;
 
     /**
      * Reads back what the last run of the process had not had acknowledged. Anything that
@@ -150,11 +158,22 @@ export class ActivityService {
         this.flush();
     }
 
-    /** Offers everything unacknowledged to the server. Called on every reconnect too. */
+    /**
+     * Offers everything unacknowledged to the server. Called on every reconnect too.
+     *
+     * A batch that went out arms the retry timer; one that could not go out does not, since
+     * the reconnect flushes anyway and a timer would only find the socket closed again.
+     */
     static flush(): void {
         this.load();
+        this.clearRetry();
         if (this.queue.length === 0 || !this.send) return;
-        this.send([...this.queue]);
+        if (!this.send([...this.queue])) return;
+        this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            this.flush();
+        }, ACK_RETRY_MS);
+        this.retryTimer.unref?.();
     }
 
     /** Drops what the server has stored. Ids it does not name stay and are offered again. */
@@ -165,5 +184,12 @@ export class ActivityService {
         const before = this.queue.length;
         this.queue = this.queue.filter((event) => !acked.has(event.id));
         if (this.queue.length !== before) this.persist();
+        if (this.queue.length === 0) this.clearRetry();
+    }
+
+    private static clearRetry(): void {
+        if (!this.retryTimer) return;
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
     }
 }

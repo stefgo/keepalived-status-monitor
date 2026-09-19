@@ -228,7 +228,7 @@ What the agent has seen, on its way to the server.
 - **Events, not sentences.** An event carries a `kind`, a `level`, a subject (instance name,
   VRID, interface) and a `data` object. The wording is written in the dashboard, so an agent of
   an older version keeps reporting usable facts.
-- **At-least-once delivery.** The agent gives each event its id and keeps it until the server acknowledges that id with `ACTIVITY_ACK` — not until it has been sent. The queue is offered again on every reconnect, and the id makes a second copy a no-op on the server. A failover while the server is unreachable is therefore on record once it is back. The queue holds at most 500 events; past that the oldest go first.
+- **At-least-once delivery.** The agent gives each event its id and keeps it until the server acknowledges that id with `ACTIVITY_ACK` — not until it has been sent. The queue is offered again on every reconnect, and a minute after a batch that went out but was not acknowledged — the server withholds the ack for what it failed to store. The id makes a second copy a no-op on the server. A failover while the server is unreachable is therefore on record once it is back. The queue holds at most 500 events; past that the oldest go first.
 
 ### 6. Version Detection (`src/core/Version.ts`)### 6. Version Detection (`src/core/Version.ts`)
 
@@ -307,8 +307,8 @@ the agent has to survive a restart lives in its **data directory** (`src/core/Da
   scratch file is the worse failure — the connection an operator would fix it over is the one
   it is refusing to open.
 - The activity queue holds at most 500 events and nothing older than seven days; the oldest
-  go first. Writes are coalesced over a second, and a `SIGTERM` flushes what is pending before
-  the process ends.
+  go first. Writes are coalesced over a second, and a `SIGTERM` — or an uncaught exception —
+  flushes what is pending before the process ends.
 
 There is no local database.
 
