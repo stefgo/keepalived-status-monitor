@@ -253,7 +253,15 @@ export const ClusterOverview = () => {
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
             noResultsMessage="No cluster matches this search."
-            rowClassName={(row) => (row.kind === "member" && !row.member.online ? "align-top opacity-60" : "align-top")}
+            // `onRowClick` makes every row look clickable; a cluster row does nothing on click,
+            // so it takes the pointer and the hover back. The list shows cluster rows only.
+            rowClassName={(row) =>
+                row.kind === "cluster"
+                    ? "align-top cursor-default hover:bg-transparent"
+                    : row.member.online
+                      ? "align-top"
+                      : "align-top opacity-60"
+            }
             // A host opens its instance; a cluster row only expands and collapses. `from` is
             // how the instance page knows where back is.
             onRowClick={(row) =>
