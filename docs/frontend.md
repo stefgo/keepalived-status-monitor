@@ -259,7 +259,8 @@ one entry per cluster with its hosts inside it; its addresses open the cluster's
 
 `ClusterCard` is the same cluster as a single card — the virtual addresses (a link to the
 cluster's page) and VRID as its title, a `VrrpInstanceView` with a host column as its body,
-where a row opens the host. The dashboard lists the troubled clusters with it; the cluster
+where a row opens the host. It leaves out the virtual addresses (`showVips={false}`): they are
+part of the cluster key, so every member has the same ones. The dashboard lists the troubled clusters with it; the cluster
 page uses it as its list of hosts, with a plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
@@ -283,8 +284,15 @@ clusters shows a list to pick from. A cluster without a VRID has no page.
   advertisement interval and sync group — each the distinct values of all hosts — the
   latest transition and the latest reading sit behind "Show more". Offline hosts are named
   in the header's alert.
-- The cluster's `ClusterCard` as the list of hosts; a row opens the host.
-- **Counters side by side**, one column per host, ordered by effective priority. They are only
+- The cluster's `ClusterCard` as the list of hosts; a row opens the host. Its `compare` prop
+  adds a leading checkbox column (`leadingHeader` / `leading` of `VrrpInstanceView`) that picks
+  the hosts the counters are compared for.
+- **Counters side by side**, one column per compared host, ordered by effective priority, the
+  counter column sticky while the rest scrolls. At first only the hosts that counted packet or
+  authentication errors are compared (`defaultCompareSelection`); where none did, the card
+  says so and waits for a pick. Only the reader's own picks are kept, in memory, so a host that joins later still gets the
+  default. A host left out that counted errors is named above the table with a link to compare
+  it — the pick must not hide the one host that matters. They are only
   worth reading together: what the MASTER sends, a BACKUP receives. `groupCounters` puts them
   into groups (advertisements, MASTER role, priority zero, packet errors, authentication
   errors) under one name whichever dump they came from — the text dump says

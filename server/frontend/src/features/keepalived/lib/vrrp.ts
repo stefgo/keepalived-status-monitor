@@ -1,5 +1,5 @@
 import type { BadgeProps } from "@stefgo/react-ui-components";
-import type { KeepalivedState, VrrpCluster, VrrpClusterHealth, VrrpState } from "@kasm/shared";
+import type { KeepalivedState, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
 
 /**
  * One host's reading in a few words: whether keepalived could be read, and how many of its
@@ -238,4 +238,24 @@ export function groupCounters(stats: (Record<string, number> | null | undefined)
     });
 
     return groups.filter((group) => group.rows.length > 0);
+}
+
+const PROBLEM_COUNTERS = COUNTER_GROUPS.filter((group) => group.problem).flatMap((group) =>
+    group.counters.flatMap((c) => c.keys),
+);
+
+/** Whether a host counted any packet or authentication error. */
+export function hasProblemCounts(stats: Record<string, number> | null | undefined): boolean {
+    return PROBLEM_COUNTERS.some((key) => (stats?.[key] ?? 0) > 0);
+}
+
+/** How a cluster member is told apart from the others: a host may take part with several instances. */
+export const memberKey = (member: VrrpClusterMember) => `${member.clientId}:${member.instance.name}`;
+
+/**
+ * The members whose counters a cluster page compares until the reader picks others: the ones
+ * that counted errors, since they are what the comparison is for.
+ */
+export function defaultCompareSelection(members: VrrpClusterMember[]): Set<string> {
+    return new Set(members.filter((m) => hasProblemCounts(m.instance.stats)).map(memberKey));
 }

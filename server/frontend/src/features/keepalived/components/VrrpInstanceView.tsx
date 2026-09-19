@@ -20,16 +20,25 @@ export interface VrrpInstanceRow {
     stale?: boolean;
     /** Where the row leads -- the instance's cluster, or its host. Links inside the row keep their own target. */
     href?: string;
+    /** Rendered in the leading column, where the view has one (see `leadingHeader`). */
+    leading?: ReactNode;
 }
 
 interface VrrpInstanceViewProps {
     rows: VrrpInstanceRow[];
     showHost?: boolean;
+    /** Off where every row answers for the same addresses and the title says which. */
+    showVips?: boolean;
     title?: ReactNode;
     /** Rendered in the card header next to the view toggle. */
     extraActions?: ReactNode;
     /** Shown in place of the rows when there are none. */
     emptyMessage?: string;
+    /**
+     * Adds a column in front of all others, headed by this, that shows each row's `leading`.
+     * In the list it opens the row's first line.
+     */
+    leadingHeader?: ReactNode;
 }
 
 const effectivePriority = (instance: VrrpInstance) => instance.effectivePriority ?? instance.priority ?? 0;
@@ -65,14 +74,26 @@ const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTrans
 export const VrrpInstanceView = ({
     rows,
     showHost = false,
+    showVips = true,
     title,
     extraActions,
     emptyMessage = "No VRRP instances.",
+    leadingHeader,
 }: VrrpInstanceViewProps) => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
+    const hasLeading = leadingHeader !== undefined;
 
     const tableDef: DataTableDef<VrrpInstanceRow>[] = [
+        ...(hasLeading
+            ? [
+                  {
+                      tableHeader: leadingHeader,
+                      tableHeaderClassName: "w-px",
+                      tableItemRender: (row: VrrpInstanceRow) => row.leading,
+                  },
+              ]
+            : []),
         ...(showHost
             ? [
                   {
@@ -123,11 +144,15 @@ export const VrrpInstanceView = ({
             tableCellClassName: "text-sm",
             tableItemRender: ({ instance }) => <Priority instance={instance} />,
         },
-        {
-            tableHeader: "Virtual IPs",
-            tableCellClassName: "text-sm",
-            tableItemRender: ({ instance }) => <Vips instance={instance} />,
-        },
+        ...(showVips
+            ? [
+                  {
+                      tableHeader: "Virtual IPs",
+                      tableCellClassName: "text-sm",
+                      tableItemRender: ({ instance }: VrrpInstanceRow) => <Vips instance={instance} />,
+                  },
+              ]
+            : []),
         {
             tableHeader: "Last transition",
             tableHeaderClassName: "whitespace-nowrap",
@@ -139,8 +164,9 @@ export const VrrpInstanceView = ({
     const fields: DataListDef<VrrpInstanceRow>[] = [
         {
             listLabel: null,
-            listItemRender: ({ instance, host }) => (
+            listItemRender: ({ instance, host, leading }) => (
                 <div className="flex flex-wrap items-center gap-2 py-1">
+                    {hasLeading && leading}
                     {host && <span className="font-medium text-text-primary">{host}</span>}
                     <span className={host ? "text-text-secondary" : "font-medium text-text-primary"}>
                         {instance.name}
@@ -162,7 +188,9 @@ export const VrrpInstanceView = ({
         { listLabel: "VRID", listItemRender: ({ instance }) => instance.vrid ?? "–" },
         { listLabel: "Priority", listItemRender: ({ instance }) => <Priority instance={instance} /> },
         { listLabel: "Advert", listItemRender: ({ instance }) => formatInterval(instance.advertInterval) },
-        { listLabel: "Virtual IPs", listItemRender: ({ instance }) => <Vips instance={instance} /> },
+        ...(showVips
+            ? [{ listLabel: "Virtual IPs", listItemRender: ({ instance }: VrrpInstanceRow) => <Vips instance={instance} /> }]
+            : []),
         { listLabel: "Last transition", listItemRender: ({ instance }) => lastTransition(instance) },
     ];
     const listColumns: DataListColumnDef<VrrpInstanceRow>[] = [{ fields, columnClassName: "flex-1" }];
