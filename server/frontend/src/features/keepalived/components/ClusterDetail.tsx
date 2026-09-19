@@ -20,7 +20,6 @@ import {
     clusterVipLabel,
     clustersAt,
     defaultCompareSelection,
-    formatInterval,
     groupCounters,
     hasProblemCounts,
     memberKey,
@@ -43,10 +42,6 @@ interface ClusterDetailProps {
     /** `clusterNetworkKey` of the cluster meant, where several share site and VRID. */
     net: string | null;
 }
-
-/** The distinct values the members report, or a dash where none reports one. */
-const distinct = (values: (string | null | undefined)[]): string =>
-    [...new Set(values.filter((value): value is string => !!value))].join(", ") || "–";
 
 /**
  * One VRRP cluster: what its hosts report about the virtual router, the hosts themselves,
@@ -148,12 +143,10 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                   </span>
               ));
 
-    const online = members.filter((m) => m.online);
     const offline = members.filter((m) => !m.online);
     // Hosts that do not carry the cluster's full address list. Offline ones count too: what
     // is wrong here is the configuration, not the state.
     const mismatched = mismatchedVips(members);
-    const masters = online.filter((m) => m.instance.state === "MASTER");
     const instances = members.map((m) => m.instance);
     const newest = (dates: (string | null | undefined)[]) =>
         dates.filter((date): date is string => !!date).sort().pop();
@@ -162,35 +155,20 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         { label: "Site", value: cluster.site ?? "–", visibility: "always" },
         { label: "VRID", value: cluster.vrid ?? "–", visibility: "always" },
         {
-            label: "Virtual IPs",
-            value: cluster.vips.length > 0 ? cluster.vips.map((vip) => <div key={vip}>{vip}</div>) : "–",
-            mono: true,
-            visibility: "always",
-        },
-        {
             // What identifies the cluster, next to site and VRID: the segment its addresses
-            // sit on. Two clusters of one site and VRID are told apart by exactly this.
+            // sit on. Two clusters of one site and VRID are told apart by exactly this. The
+            // addresses themselves belong to the host that carries them, so they are a
+            // column of the table below rather than a line here.
             label: "Network",
             value:
                 cluster.networks.length > 0 ? cluster.networks.map((net) => <div key={net}>{net}</div>) : "–",
             mono: true,
-        },
-        { label: "MASTER", value: joined(masters.map((m) => hostLink(m.clientId))), visibility: "always" },
-        { label: "Hosts", value: `${online.length} / ${members.length} online`, visibility: "always" },
-        { label: "Instance", value: distinct(instances.map((i) => i.name)) },
-        { label: "Interface", value: distinct(instances.map((i) => i.interface)), mono: true },
-        {
-            label: "Advertisement interval",
-            value: distinct(instances.map((i) => (i.advertInterval == null ? null : formatInterval(i.advertInterval)))),
-        },
-        { label: "Sync group", value: distinct(instances.map((i) => i.syncGroup)) },
-        {
-            label: "Last transition",
-            value: formatDate(newest(instances.map((i) => i.lastTransition)), { seconds: true }),
+            visibility: "always",
         },
         {
             label: "Last reading",
             value: formatDate(newest(members.map((m) => readings[m.clientId]?.collectedAt)), { seconds: true }),
+            visibility: "always",
         },
     ];
 
@@ -242,9 +220,9 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                         </div>
                     )
                 }
+                // Every one of them is shown, so there is nothing for a "Show more" to
+                // remember and no `persist` key to keep.
                 details={details}
-                // Names the view, not the cluster: one entry for every cluster page.
-                persist={{ key: "kasm.cluster.details", scope: "local" }}
             />
 
             <ClusterCard

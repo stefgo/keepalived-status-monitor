@@ -45,9 +45,9 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
     return (
         <VrrpInstanceView
             showHost
-            // The addresses and the VRID are part of what makes the cluster: every member
-            // reports the same ones.
-            showVips={false}
+            // Part of what makes the cluster, so every row would repeat it. The addresses
+            // are not: they belong to the host that carries them, and the list view shows
+            // them per row, which is where a member serving a short list is read off.
             showVrid={false}
             title={
                 title ?? (

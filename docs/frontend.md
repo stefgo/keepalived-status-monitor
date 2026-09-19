@@ -259,10 +259,13 @@ one entry per cluster with its hosts inside it; its addresses open the cluster's
 
 `ClusterCard` is the same cluster as a single card — the virtual addresses (a link to the
 cluster's page) and VRID as its title, a `VrrpInstanceView` with a host column as its body,
-where a row opens the host. It leaves out the virtual addresses and the VRID
-(`showVips={false}`, `showVrid={false}`): both are part of the cluster key, so every member
-reports the same ones. The dashboard lists the troubled clusters with it; the cluster
-page uses it as its list of hosts, with a plain title, since its header says the rest.
+where a row opens the host. It leaves out the VRID (`showVrid={false}`), which is part of the
+cluster's identity and the same on every row. The virtual addresses are not: they belong to
+the host that carries them, and a member serving a short list is read off them. Like the
+interface and the advertisement interval, they are shown in the list view only — an address
+list needs a line per row, which a table column cannot give it. The dashboard lists the
+troubled clusters with this card; the cluster page uses it as its list of hosts, with a
+plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
 `@kasm/shared` over the readings in `useKeepalivedStore` and the online clients in
@@ -280,11 +283,13 @@ only: two segments of one site may use the same one, and only then does the path
 `?net=` (`clusterNetworkKey`) to tell them apart. A bare path that fits several clusters
 shows a list to pick from. A cluster without a VRID has no page.
 
-- An `EntityHeader` with site / VRID and the health badge. Site, VRID, virtual addresses,
-  the MASTER host and how many hosts are online stay on screen; instance name, interface,
-  advertisement interval and sync group — each the distinct values of all hosts — the
-  latest transition and the latest reading sit behind "Show more". Offline hosts are named
-  in the header's alert.
+- An `EntityHeader` with site / VRID and the health badge. It carries four details, all of
+  them shown: site, VRID and the network — what identifies the cluster — and the latest
+  reading. Nothing hides behind a "Show more", so the header keeps no `persist` key.
+  Everything that belongs to one host rather than to the cluster is read off the host table
+  below: which one is MASTER, which are online, their instance names, interfaces,
+  advertisement intervals, sync groups and virtual addresses. Offline hosts and members
+  whose address list falls short are named in the header's alert.
 - The cluster's `ClusterCard` as the list of hosts; a row opens the host. Its `compare` prop
   adds a leading checkbox column (`leadingHeader` / `leading` of `VrrpInstanceView`) that picks
   the hosts the counters are compared for.

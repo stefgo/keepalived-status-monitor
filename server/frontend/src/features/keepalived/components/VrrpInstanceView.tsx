@@ -27,8 +27,6 @@ export interface VrrpInstanceRow {
 interface VrrpInstanceViewProps {
     rows: VrrpInstanceRow[];
     showHost?: boolean;
-    /** Off where every row answers for the same addresses and the title says which. */
-    showVips?: boolean;
     /** Off where every row belongs to the same virtual router. */
     showVrid?: boolean;
     title?: ReactNode;
@@ -76,7 +74,6 @@ const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTrans
 export const VrrpInstanceView = ({
     rows,
     showHost = false,
-    showVips = true,
     showVrid = true,
     title,
     extraActions,
@@ -133,8 +130,9 @@ export const VrrpInstanceView = ({
                 </>
             ),
         },
-        // Interface and advertisement interval are in the list only: they rarely differ
-        // between rows, and the table is wide enough without them.
+        // Interface, advertisement interval and the virtual addresses are in the list only:
+        // an address list needs a line of its own per row, and the table is wide enough
+        // without them.
         ...(showVrid
             ? [
                   {
@@ -151,15 +149,6 @@ export const VrrpInstanceView = ({
             tableCellClassName: "text-sm",
             tableItemRender: ({ instance }) => <Priority instance={instance} />,
         },
-        ...(showVips
-            ? [
-                  {
-                      tableHeader: "Virtual IPs",
-                      tableCellClassName: "text-sm",
-                      tableItemRender: ({ instance }: VrrpInstanceRow) => <Vips instance={instance} />,
-                  },
-              ]
-            : []),
         {
             tableHeader: "Last transition",
             tableHeaderClassName: "whitespace-nowrap",
@@ -195,9 +184,7 @@ export const VrrpInstanceView = ({
         ...(showVrid ? [{ listLabel: "VRID", listItemRender: ({ instance }: VrrpInstanceRow) => instance.vrid ?? "–" }] : []),
         { listLabel: "Priority", listItemRender: ({ instance }) => <Priority instance={instance} /> },
         { listLabel: "Advert", listItemRender: ({ instance }) => formatInterval(instance.advertInterval) },
-        ...(showVips
-            ? [{ listLabel: "Virtual IPs", listItemRender: ({ instance }: VrrpInstanceRow) => <Vips instance={instance} /> }]
-            : []),
+        { listLabel: "Virtual IPs", listItemRender: ({ instance }) => <Vips instance={instance} /> },
         { listLabel: "Last transition", listItemRender: ({ instance }) => lastTransition(instance) },
     ];
     const listColumns: DataListColumnDef<VrrpInstanceRow>[] = [{ fields, columnClassName: "flex-1" }];
