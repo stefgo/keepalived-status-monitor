@@ -81,6 +81,19 @@ allowedNetworks: []
 # other than where you put it is the harder fault to find.
 listenPort: 3011
 
+# Serve this agent's web server over TLS instead of plain HTTP (default: off).
+# Only then can the server dial it as wss://host:port, which is what keeps the auth token in
+# the /ws/agent query string off the wire in the clear. Without this block nothing changes.
+# Both files must be readable at startup; if either is not, the agent stops and says which.
+# It does not fall back to HTTP -- an agent that was configured for TLS and quietly served
+# plaintext would hand out its auth token on /ws/register while looking perfectly healthy.
+# Relative paths are resolved against the agent's directory.
+# A reverse proxy terminating TLS in front of the agent works too; leave this unset then and
+# point the proxy at the plain port.
+# tls:
+#     cert: /etc/kasm/agent.crt
+#     key: /etc/kasm/agent.key
+
 # Show the status page at /status (default: true)
 enableStatusPage: true
 

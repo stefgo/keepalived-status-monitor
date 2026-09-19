@@ -53,3 +53,11 @@ security:
     # dashboard is reached exclusively via HTTPS: browsers remember the header for months and
     # refuse plain http:// for this host from then on, even after it is switched off again.
     # hsts: false
+    # Accept a certificate this server cannot verify when dialling an outbound agent over
+    # wss:// (default: false). Applies to every outbound agent alike.
+    # Only relevant for clients whose target address is written as wss://host:port; a plain
+    # host:port is dialled over ws:// and has no certificate to check in the first place.
+    # Enable it for agents carrying a self-signed certificate, which is the usual case on a
+    # home network. With a certificate from a CA this host trusts, leave it off -- the
+    # session it protects carries the agent's auth token.
+    # allow_self_signed_agent_certificates: false

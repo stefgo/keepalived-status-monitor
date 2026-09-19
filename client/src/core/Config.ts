@@ -59,6 +59,24 @@ export interface ClientConfig {
      * certificate nobody checks is one anybody in between can present.
      */
     allowSelfSignedCertificates: boolean;
+    /**
+     * Serve the agent's own web server over TLS. Absent means plain HTTP, which is what
+     * every installation had before this existed.
+     *
+     * This is the other half of `allowSelfSignedCertificates`: that one is about the
+     * certificate this agent checks when it dials the server, this one about the
+     * certificate it presents when the server dials it.
+     */
+    tls?: AgentTlsConfig;
+}
+
+/**
+ * Where the certificate and its private key are, for an agent that terminates TLS.
+ * Held exactly as the operator wrote them -- see `readTlsMaterial`.
+ */
+export interface AgentTlsConfig {
+    cert: string;
+    key: string;
 }
 
 // Global Document state to preserve comments
@@ -96,6 +114,68 @@ function resolveListenPort(fromFile: unknown): number {
         process.exit(1);
     }
     return port;
+}
+
+/**
+ * The TLS block, or undefined when the agent serves plain HTTP.
+ *
+ * Every fault here is fatal rather than a warning, which is the opposite of how the
+ * optional settings around it are read. An agent configured for TLS that fell back to
+ * HTTP would serve `/ws/register` -- the route that hands it its auth token -- in the
+ * clear, and would look exactly like a working agent while doing it. Refusing to start
+ * names the wrong field while somebody is still watching the log.
+ *
+ * The files are read here rather than at listen(): a path that is wrong is wrong at
+ * startup, not when the server first dials hours later. What is returned is what the
+ * operator wrote, not the resolved path -- see `readTlsMaterial`.
+ */
+function resolveTls(fromFile: unknown): AgentTlsConfig | undefined {
+    if (fromFile === undefined || fromFile === null) return undefined;
+
+    const fail = (reason: string): never => {
+        logger.fatal({ path: CONFIG_PATH }, `Invalid tls in config.yaml -- ${reason}`);
+        process.exit(1);
+    };
+
+    if (typeof fromFile !== "object" || Array.isArray(fromFile)) {
+        return fail("expected a block with cert and key");
+    }
+
+    const { cert, key } = fromFile as { cert?: unknown; key?: unknown };
+    if (typeof cert !== "string" || cert.trim() === "") {
+        return fail("cert must be the path to a certificate file");
+    }
+    if (typeof key !== "string" || key.trim() === "") {
+        return fail("key must be the path to a private key file");
+    }
+
+    const tls: AgentTlsConfig = { cert: cert.trim(), key: key.trim() };
+    for (const field of ["cert", "key"] as const) {
+        const file = path.resolve(ROOT_DIR, tls[field]);
+        try {
+            fs.readFileSync(file);
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            return fail(`${field} cannot be read at ${file}${code ? ` (${code})` : ""}`);
+        }
+    }
+    return tls;
+}
+
+/**
+ * The certificate and key as Fastify wants them, or undefined for a plain HTTP agent.
+ *
+ * Read on demand instead of being kept in `config`: what is stored there is what the
+ * operator wrote, so a relative path stays the relative path they chose. Config.ts has
+ * already established that both files can be read, so a throw here means they changed
+ * underneath a running agent.
+ */
+export function readTlsMaterial(): { cert: Buffer; key: Buffer } | undefined {
+    if (!config.tls) return undefined;
+    return {
+        cert: fs.readFileSync(path.resolve(ROOT_DIR, config.tls.cert)),
+        key: fs.readFileSync(path.resolve(ROOT_DIR, config.tls.key)),
+    };
 }
 
 /**
@@ -238,6 +318,8 @@ if (fs.existsSync(CONFIG_PATH)) {
         config.allowedNetworks = networks.data.allowedNetworks;
 
         config.listenPort = resolveListenPort(loadedConfig.listenPort);
+
+        config.tls = resolveTls(loadedConfig.tls);
 
         if (typeof loadedConfig.allowSelfSignedCertificates === "boolean") {
             config.allowSelfSignedCertificates = loadedConfig.allowSelfSignedCertificates;

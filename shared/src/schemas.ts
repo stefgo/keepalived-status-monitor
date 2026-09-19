@@ -369,6 +369,17 @@ export const SecurityConfigSchema = z
         allowed_networks: z.array(Ipv4OrCidrSchema).default([]),
         /** Send Strict-Transport-Security. Off unless set -- see config.example.yaml. */
         hsts: z.boolean().default(false),
+        /**
+         * Whether an outbound agent dialled over `wss://` may present a certificate this
+         * server cannot verify. Off by default, so a wrong or expired certificate is a
+         * failed connection rather than a silent one.
+         *
+         * It exists because an agent on a home network usually carries a self-signed
+         * certificate, and the alternative -- running a CA for a handful of hosts -- is
+         * more than that situation warrants. Mirrors `allowSelfSignedCertificates` on the
+         * agent, which is the same decision for the other direction of the same link.
+         */
+        allow_self_signed_agent_certificates: z.boolean().default(false),
     })
     .prefault({});
 
