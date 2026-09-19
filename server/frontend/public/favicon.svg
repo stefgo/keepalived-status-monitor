@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <!-- Two servers of a VRRP pair and the heartbeat between them: keepalived's
+         advertisements. The plate is the dashboard's accent (ruic-primary, #059669)
+         running into its hover shade. -->
+    <defs>
+        <linearGradient id="plate" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#10B981" />
+            <stop offset="100%" stop-color="#047857" />
+        </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="100" height="100" rx="25" ry="25" fill="url(#plate)" />
+    <g transform="translate(14, 14) scale(3)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="2" width="18" height="5" rx="1.5" />
+        <rect x="3" y="17" width="18" height="5" rx="1.5" />
+        <path d="M2 12h5l2-2.5 3 5 2-2.5h8" />
+        <path d="M7 4.5h.01M7 19.5h.01" />
+    </g>
+</svg>

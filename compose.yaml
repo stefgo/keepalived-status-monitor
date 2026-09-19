@@ -1,0 +1,78 @@
+services:
+    kasm-server:
+        container_name: kasm-server
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.server
+        image: kasm-server:latest
+        ports:
+            - "3010:3010"
+        volumes:
+            # Persist SQLite database and other data
+            - server-data:/app/server/backend/data
+            # Persist configuration (ensure this file exists or is created)
+            - ./server-config.yaml:/app/server/config.yaml
+        restart: unless-stopped
+        environment:
+            - NODE_ENV=production
+        # Repeats the image's HEALTHCHECK so it is visible in the file operators edit.
+        # Docker does NOT restart an unhealthy container -- `restart:` reacts to the process
+        # exiting. The state shows in `docker ps` and works with
+        # `depends_on: condition: service_healthy`.
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3010/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            interval: 30s
+            timeout: 5s
+            start_period: 20s
+            retries: 3
+
+    kasm-client:
+        container_name: kasm-client
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.client
+        image: kasm-client:latest
+        # The agent runs on the host that runs keepalived and reads it from there:
+        # - pid: host lets it see keepalived's process and signal it (SIGUSR1/SIGUSR2),
+        #   which is how keepalived is asked to write its state.
+        # - SYS_PTRACE lets it read that state through /proc/<pid>/root, keepalived's own
+        #   view of the file system -- so a systemd PrivateTmp=true makes no difference.
+        # - AppArmor's docker-default profile forbids reading another process's root even
+        #   with the capability, hence unconfined. Nothing else is granted: no Docker
+        #   socket, no host file system mount, no privileged mode.
+        # - network_mode: host keeps the agent's web port reachable under the host's
+        #   address, which outbound mode dials. Move it with KASM_CLIENT_PORT.
+        network_mode: host
+        pid: host
+        cap_add:
+            - KILL
+            - SYS_PTRACE
+        security_opt:
+            - apparmor:unconfined
+        volumes:
+            # Persist client configuration
+            - ./client-config.yaml:/app/client/config.yaml
+            # The agent's own state: its last keepalived reading, so a restart still notices
+            # a failover that happened meanwhile, and activity events the server has not
+            # acknowledged yet. A named volume, and it has to stay one -- the line above is a
+            # single-file bind mount, so anything written beside config.yaml lives in the
+            # container and is gone with the next recreate. KASM_CLIENT_DATA_DIR moves the
+            # directory for an agent that runs outside compose.
+            - client-data:/app/client/data
+        restart: unless-stopped
+        environment:
+            - NODE_ENV=production
+        # Reports on the agent, not on its server connection or on keepalived: an agent that
+        # cannot reach the server, or reports keepalived as stopped, is still healthy. If this
+        # agent's config.yaml disables the web server (enableStatusPage and enableRegisterPage
+        # false, no outbound mode), replace this block with `healthcheck: { disable: true }`.
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            interval: 30s
+            timeout: 5s
+            start_period: 20s
+            retries: 3
+
+volumes:
+    server-data:
+    client-data:

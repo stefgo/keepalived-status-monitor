@@ -1,0 +1,74 @@
+# Keepalived Status Monitor - Client Configuration
+
+# Identifier of this client. Issued by the server during registration and written here
+# together with authToken — leave empty, do not set manually.
+clientId:
+
+# Log level for the client (debug, info, warn, error)
+logLevel: "info"
+
+# URL of the KASM Server (e.g., http://your-server:3010)
+serverUrl:
+
+# Authentication token for server communication
+# Provided during initial registration and stored locally — do not set manually.
+authToken:
+
+# Secret for server-initiated registration -- `outbound` mode, named from the server's
+# side, which is where the mode names come from.
+# Set this when the server connects to the client instead of the other way around.
+# Must match the value entered in the server's Add Client wizard, in the branch where the
+# server connects to the agent.
+# Automatically removed from config after successful registration.
+registrationSecret:
+
+# How the agent reads keepalived. keepalived has no status API; it writes its state to a file
+# when signalled (SIGUSR1: data dump, SIGUSR2: counters). The agent sends the signal to the
+# keepalived parent process and reads the file through /proc/<pid>/root, so the paths below
+# are the ones keepalived itself uses -- a systemd PrivateTmp=true changes nothing.
+# Requires `pid: host` and the capabilities KILL and SYS_PTRACE (see compose.yaml).
+keepalived:
+    # Seconds between two readings (default: 5)
+    pollInterval: 5
+    # Match `state_dump_file`, `stats_dump_file` and `json_dump_file` if your
+    # keepalived.conf sets them in global_defs.
+    dataFile: /tmp/keepalived.data
+    statsFile: /tmp/keepalived.stats
+    jsonFile: /tmp/keepalived.json
+    # Read the JSON dump instead of the text dump. Only for a keepalived built with
+    # --enable-json; set it to the number `keepalived --signum=JSON` prints on the host.
+    jsonSignal:
+    # Milliseconds to wait for keepalived to write a dump (default: 3000)
+    dumpTimeoutMs: 3000
+
+# Accept a server certificate that does not validate (e.g. self-signed) for registration and
+# for the WebSocket connection. Leave false when the server has a certificate from a trusted
+# CA: the connection carries this agent's auth token, and an unchecked certificate is one
+# anybody in between can present. The reachability check on the web UI tolerates it anyway.
+allowSelfSignedCertificates: false
+
+# IPv4 addresses or CIDR networks the server may dial this agent from, checked on
+# /ws/register and /ws/agent. Empty (the default) allows every address.
+# It matters most for /ws/register, where the caller hands over the auth token this agent
+# stores. The address checked is the socket peer: behind a reverse proxy list the proxy.
+# The local web UI on the same port is not restricted by this.
+# A wrong value can only be fixed on this host -- the connection you would use is refused.
+allowedNetworks: []
+
+# Port the local web server listens on: the status and register pages, and the two routes
+# the server uses to dial this agent in outbound mode (default: 3011).
+# Override with the KASM_CLIENT_PORT environment variable, which wins over this file — in a
+# container that saves mounting a config file just to move the port.
+# Worth changing when port 3011 is already taken on the host, or with network_mode: host,
+# where the compose `ports:` mapping no longer applies.
+# An unusable value ends the start instead of falling back: an agent listening somewhere
+# other than where you put it is the harder fault to find.
+listenPort: 3011
+
+# Show the status page at /status (default: true)
+enableStatusPage: true
+
+# Show the registration page at /register and accept POST /api/register (default: true)
+# Registering requires the setup PIN printed to the agent's log on startup.
+# Disable once the client is registered and no re-registration is expected.
+enableRegisterPage: true

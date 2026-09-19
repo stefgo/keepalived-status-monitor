@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>KASM Client - Status</title>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="stylesheet" href="/styles.css" />
+    </head>
+    <body>
+        <div class="container" id="loading-container">
+            <div class="header">
+                <h1 class="title">Loading...</h1>
+                <p class="subtitle">Checking client status</p>
+            </div>
+        </div>
+
+        <div class="container" id="status-container" style="display: none">
+            <div class="header">
+                <h1 class="title" style="margin-bottom: 1.5rem">Client Status</h1>
+                <p class="subtitle">Status of connection to Keepalived Status Monitor Server</p>
+            </div>
+
+            <!-- Connection Mode -->
+            <div class="status-box" id="mode-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="mode-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content">
+                    <div class="status-label">Connection Mode</div>
+                    <div class="status-value" id="mode-text">—</div>
+                </div>
+            </div>
+
+            <!-- Combined: Server URL + Registration Secret -->
+            <div class="status-box" id="config-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="config-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content" style="overflow: visible">
+                    <div class="status-label">Configuration</div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.375rem;">
+                        <div id="server-url-row">
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.125rem;">Server URL</div>
+                            <div class="status-value monospace" id="server-url-display">—</div>
+                        </div>
+                        <div id="secret-row">
+                            <div style="font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.125rem;">Registration Secret</div>
+                            <div class="status-value" id="secret-text">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Authentication -->
+            <div class="status-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="auth-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content">
+                    <div class="status-label">Authentication</div>
+                    <div class="status-value" id="auth-text">Checking...</div>
+                </div>
+            </div>
+
+            <!-- Connection -->
+            <div class="status-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="connection-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content">
+                    <div class="status-label">Connection Status</div>
+                    <div class="status-value" id="connection-text">Checking...</div>
+                </div>
+            </div>
+
+            <!-- keepalived -->
+            <div class="status-box">
+                <svg class="status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="keepalived-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="status-content">
+                    <div class="status-label">keepalived</div>
+                    <div class="status-value" id="keepalived-text">Checking...</div>
+                </div>
+            </div>
+
+            <button type="button" id="re-register-btn" style="
+                margin-top: 1.5rem;
+                width: 100%;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                color: var(--text-secondary);
+                padding: 0.75rem;
+                border-radius: 0.5rem;
+                cursor: pointer;
+                font-size: 0.9rem;
+                transition: all 0.2s ease;
+            ">Register Client</button>
+        </div>
+
+        <div class="container" id="error-container" style="display: none">
+            <div id="error-message" class="message error" style="display: block; margin: 0"></div>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", async () => {
+                const loadingContainer = document.getElementById("loading-container");
+
+                const ICON_SUCCESS = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                const ICON_ERROR = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728"></path>';
+                const ICON_WARNING = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>';
+
+                function setIconState(iconEl, textEl, success, text) {
+                    const statusBox = iconEl.closest(".status-box");
+                    if (success) {
+                        iconEl.classList.add("success");
+                        iconEl.classList.remove("error");
+                        iconEl.innerHTML = ICON_SUCCESS;
+                        textEl.style.color = "var(--success-color)";
+                        if (statusBox) statusBox.classList.remove("error-state");
+                    } else {
+                        iconEl.classList.add("error");
+                        iconEl.classList.remove("success");
+                        iconEl.innerHTML = ICON_ERROR;
+                        textEl.style.color = "var(--error-color)";
+                        if (statusBox) statusBox.classList.add("error-state");
+                    }
+                    textEl.textContent = text;
+                }
+
+                function setWarningState(iconEl, textEl, text) {
+                    const statusBox = iconEl.closest(".status-box");
+                    iconEl.classList.remove("success", "error");
+                    iconEl.classList.add("primary");
+                    iconEl.innerHTML = ICON_WARNING;
+                    textEl.style.color = "var(--primary-color)";
+                    textEl.textContent = text;
+                    if (statusBox) {
+                        statusBox.classList.remove("error-state");
+                        statusBox.style.borderColor = "var(--primary-color)";
+                    }
+                }
+
+                function setValueColor(el, success) {
+                    el.style.color = success ? "var(--success-color)" : "var(--text-secondary)";
+                }
+
+                function showError(message) {
+                    loadingContainer.style.display = "none";
+                    const errorContainer = document.getElementById("error-container");
+                    document.getElementById("error-message").textContent = message;
+                    errorContainer.style.display = "block";
+                }
+
+                try {
+                    const [authRes, serverRes, connectionRes, configRes, keepalivedRes] = await Promise.all([
+                        fetch("/api/status/auth"),
+                        fetch("/api/status/server"),
+                        fetch("/api/status/connection"),
+                        fetch("/api/status/config"),
+                        fetch("/api/status/keepalived"),
+                    ]);
+
+                    const authData = await authRes.json();
+                    const serverData = await serverRes.json();
+                    const connectionData = await connectionRes.json();
+                    const configData = await configRes.json();
+                    const keepalivedData = await keepalivedRes.json();
+
+                    loadingContainer.style.display = "none";
+
+                    const { hasRegistrationSecret, hasAuthToken, hasServerUrl } = configData;
+
+                    // Redirect to register page if nothing is configured
+                    if (!hasRegistrationSecret && !hasAuthToken && !hasServerUrl) {
+                        window.location.href = "/register";
+                        return;
+                    }
+
+                    document.getElementById("status-container").style.display = "block";
+
+                    // --- Config box: Server URL + Registration Secret ---
+                    const configIcon = document.getElementById("config-icon");
+                    const serverUrlDisplay = document.getElementById("server-url-display");
+                    const secretText = document.getElementById("secret-text");
+
+                    if (hasServerUrl) {
+                        serverUrlDisplay.textContent = serverData.serverUrl;
+                        serverUrlDisplay.title = serverData.serverUrl;
+                        setValueColor(serverUrlDisplay, serverData.serverReachable);
+                    } else {
+                        serverUrlDisplay.textContent = "Not configured";
+                        setValueColor(serverUrlDisplay, false);
+                    }
+
+                    if (hasRegistrationSecret) {
+                        secretText.textContent = "Configured";
+                        setValueColor(secretText, true);
+                    } else {
+                        secretText.textContent = "Not configured";
+                        setValueColor(secretText, false);
+                    }
+
+                    // Determine mode completeness and show status. The mode names are the
+                    // server's -- inbound is a connection arriving there, outbound one it
+                    // opens -- so from here they read back to front. The label spells the
+                    // direction out rather than leaving the operator to work it out.
+                    const inboundComplete = hasServerUrl;
+                    const outboundComplete = !hasServerUrl && (hasRegistrationSecret || hasAuthToken);
+                    const configOk = inboundComplete || outboundComplete;
+
+                    setIconState(
+                        document.getElementById("mode-icon"),
+                        document.getElementById("mode-text"),
+                        configOk,
+                        inboundComplete
+                            ? "Inbound — this agent connects to the server"
+                            : outboundComplete
+                              ? "Outbound — the server connects to this agent"
+                              : "Error in configuration",
+                    );
+
+                    // Hide irrelevant config row when one mode is fully configured
+                    if (inboundComplete) {
+                        document.getElementById("secret-row").style.display = "none";
+                    } else if (outboundComplete) {
+                        document.getElementById("server-url-row").style.display = "none";
+                    }
+
+                    // Config box icon
+                    configIcon.classList.toggle("success", configOk);
+                    configIcon.classList.toggle("error", !configOk);
+                    configIcon.innerHTML = configOk ? ICON_SUCCESS : ICON_ERROR;
+                    if (!configOk) document.getElementById("config-box").classList.add("error-state");
+
+                    // --- Authentication ---
+                    const authIcon = document.getElementById("auth-icon");
+                    const authText = document.getElementById("auth-text");
+
+                    if (hasServerUrl) {
+                        // Inbound: auth token required
+                        setIconState(authIcon, authText, hasAuthToken,
+                            hasAuthToken ? "Authentication Token exists" : "No Token. Register first.");
+                    } else if (hasAuthToken && hasRegistrationSecret) {
+                        // Outbound: already registered but secret still present — warn
+                        setWarningState(authIcon, authText, "Client already registered");
+                    } else {
+                        // Outbound: token comes from server-initiated registration
+                        setIconState(authIcon, authText, hasAuthToken,
+                            hasAuthToken ? "Registered" : "Awaiting registration from server");
+                    }
+
+                    // --- Connection ---
+                    const connectionIcon = document.getElementById("connection-icon");
+                    const connectionText = document.getElementById("connection-text");
+
+                    if (connectionData.connected) {
+                        setIconState(connectionIcon, connectionText, true, "Connected");
+                    } else if (hasServerUrl && hasAuthToken) {
+                        // Inbound: attempt reconnect
+                        const retryRes = await fetch("/api/connect", { method: "POST" });
+                        const retryData = await retryRes.json();
+                        setIconState(
+                            connectionIcon, connectionText, retryData.connected,
+                            retryData.connected ? "Connected" : retryData.error || "Disconnected",
+                        );
+                    } else {
+                        setIconState(connectionIcon, connectionText, false,
+                            hasServerUrl ? "Disconnected" : "Waiting for server to connect");
+                    }
+
+                    // --- keepalived ---
+                    const keepalivedIcon = document.getElementById("keepalived-icon");
+                    const keepalivedText = document.getElementById("keepalived-text");
+                    if (!keepalivedData.collected) {
+                        setWarningState(keepalivedIcon, keepalivedText, "Not read yet");
+                    } else if (!keepalivedData.running) {
+                        setIconState(keepalivedIcon, keepalivedText, false, "Not running");
+                    } else if (keepalivedData.error) {
+                        setIconState(keepalivedIcon, keepalivedText, false, keepalivedData.error);
+                    } else {
+                        const version = keepalivedData.version ? `v${keepalivedData.version} · ` : "";
+                        setIconState(
+                            keepalivedIcon, keepalivedText, true,
+                            `${version}${keepalivedData.instances} VRRP instance(s), ${keepalivedData.master} MASTER`,
+                        );
+                    }
+
+                    // --- Register button ---
+                    document.getElementById("re-register-btn").addEventListener("click", () => {
+                        window.location.href = "/register";
+                    });
+
+                } catch (err) {
+                    showError("Error checking client status. Is the client running?");
+                }
+            });
+        </script>
+    </body>
+</html>

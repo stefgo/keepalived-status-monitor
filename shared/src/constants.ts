@@ -1,0 +1,117 @@
+export const WS_EVENTS = {
+    // Client -> Server
+    AUTH: "AUTH",
+    KEEPALIVED_UPDATE: "KEEPALIVED_UPDATE", // Client → Server: keepalived status snapshot
+
+    // Server -> Client (Agent)
+    AUTH_SUCCESS: "AUTH_SUCCESS",
+    AUTH_FAILURE: "AUTH_FAILURE",
+
+    GET_VERSION: "GET_VERSION", // Client <-> Server
+    REQUEST_STATE_UPDATE: "REQUEST_STATE_UPDATE", // Server → Client: read keepalived now
+
+    // Server -> Dashboard
+    CLIENTS_UPDATE: "CLIENTS_UPDATE",
+    KEEPALIVED_STATE_UPDATE: "KEEPALIVED_STATE_UPDATE", // Server → Dashboard: status per client
+
+    // Activity events
+    /** Client → Server: a batch of events the agent has not had acknowledged yet. */
+    ACTIVITY: "ACTIVITY",
+    /** Server → Client: the ids it has stored, so the agent can drop them from its queue. */
+    ACTIVITY_ACK: "ACTIVITY_ACK",
+    /** Server → Dashboard: the current activity list. */
+    ACTIVITY_UPDATE: "ACTIVITY_UPDATE",
+
+    // Inbound registration (Server → Client via /ws/register)
+    REGISTRATION_REQUEST: "REGISTRATION_REQUEST",   // Server → Client: send secret + authToken
+    REGISTRATION_SUCCESS: "REGISTRATION_SUCCESS",   // Client → Server: registration accepted
+    REGISTRATION_FAILURE: "REGISTRATION_FAILURE",   // Client → Server: secret mismatch
+
+    // Internal
+    ERROR: "ERROR",
+} as const;
+
+/**
+ * What an agent says it can do, in the `capabilities` list of its AUTH payload. An agent
+ * that predates a capability simply does not name it -- the server then knows not to expect
+ * that behaviour of it, instead of inferring it from a version string it would have to keep
+ * comparing.
+ *
+ * A new message does not earn an entry here. Both routers drop what they do not recognise,
+ * so an agent that has never heard of a message simply does nothing with it, and that is
+ * usually the correct outcome. A capability is added only where that silence would produce
+ * either a wrong decision on the server -- one that assumes the agent acted -- or a question
+ * to the operator that cannot be answered without knowing the agent's answer.
+ */
+export const AGENT_CAPABILITIES = {
+    /** Reads VRRP instances and sync groups out of keepalived. */
+    VRRP: "vrrp",
+} as const;
+
+/**
+ * The port an agent's local web server listens on unless its config.yaml names another.
+ * The server appends it when an outbound target address is given without one, and the
+ * agent falls back to it -- one number for both sides of the same default.
+ */
+export const DEFAULT_AGENT_PORT = 3011;
+
+/**
+ * Whether the server currently holds a WebSocket to the agent. Deliberately binary:
+ * ProxyService derives it from its map of open connections on every broadcast, and there
+ * is no third state it could report. `busy` used to be listed here without anything ever
+ * producing or reading it.
+ */
+export const CLIENT_STATUS = {
+    ONLINE: "online",
+    OFFLINE: "offline",
+} as const;
+
+/**
+ * Which side opens the agent connection: `inbound` agents dial the server, `outbound`
+ * agents are dialled by it. SQL strings and migrations keep the literals -- a migration
+ * must not depend on today's code.
+ */
+export const CONNECTION_MODE = {
+    INBOUND: "inbound",
+    OUTBOUND: "outbound",
+} as const;
+
+/**
+ * The states keepalived reports for a VRRP instance. `STOP` is what an instance shows while
+ * keepalived shuts it down; a host without a running keepalived reports no instances at all.
+ */
+export const VRRP_STATES = ["INIT", "BACKUP", "MASTER", "FAULT", "STOP", "DELETED", "UNKNOWN"] as const;
+
+/**
+ * Who put an event on the wire. The agent owns everything that happens on its host; the
+ * server owns what only it can know -- whether an agent is connected and that one registered.
+ */
+export const ACTIVITY_SOURCES = ["agent", "server"] as const;
+
+/**
+ * Ordered by severity, lowest first -- `ACTIVITY_LEVELS.indexOf` compares two levels.
+ * `trace` is routine bookkeeping, such as an agent connecting or disconnecting; the dashboard
+ * hides it unless asked to show it.
+ */
+export const ACTIVITY_LEVELS = ["trace", "info", "warning", "error"] as const;
+
+/**
+ * Every kind of event this build knows how to phrase. It is *not* what the wire accepts:
+ * an agent of another version may report a kind that is not in here, and dropping it would
+ * lose a fact the agent went to the trouble of observing. The server stores whatever it is
+ * handed and the dashboard falls back to a generic line for a kind it does not know -- which
+ * is the whole point of events carrying structure instead of a sentence.
+ */
+export const ACTIVITY_KINDS = [
+    // Reported by the agent, from comparing two readings of keepalived
+    "vrrp.state_changed",
+    "vrrp.instance_added",
+    "vrrp.instance_removed",
+    "keepalived.started",
+    "keepalived.stopped",
+    "keepalived.unreadable",
+    // Reported by the server
+    "client.connected",
+    "client.disconnected",
+    "client.registered",
+] as const;

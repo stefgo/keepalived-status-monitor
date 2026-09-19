@@ -1,0 +1,55 @@
+# Keepalived Status Monitor - Server Configuration
+#
+# Checked on every start: a value of the wrong type or format stops the server with a log
+# line naming the field (e.g. "security.allowed_networks.0: Must be an IPv4 address ...").
+
+# Log level for the server (trace, debug, info, warn, error, fatal)
+# Can be overridden by the LOG_LEVEL environment variable
+logLevel: info
+
+# OpenID Connect (OIDC) authentication settings
+oidc:
+    enabled: false
+    issuer:
+    client_id:
+    client_secret:
+    redirect_uri:
+
+# Secret key used to sign and verify JSON Web Tokens (JWT) for user sessions
+# This should be a long, random string
+jwtSecret:
+
+# JWT token expiration time (e.g. "24h", "7d", "30m"). Defaults to "12h" if not set.
+# Tokens always expire; there is no setting that turns expiry off. The dashboard's
+# session cookies carry the same lifetime.
+jwtExpiresIn: "12h"
+
+# General server settings
+settings:
+    # Number of days an invalid token is kept before it becomes eligible for deletion.
+    # Set to "0" to make every invalid token immediately eligible.
+    retention_invalid_tokens_days: "30"
+    # Minimum number of most-recent invalid tokens that are always retained, even if
+    # they are older than retention_invalid_tokens_days. Useful to keep an audit trail
+    # of the last N invalidations. Set to "0" to disable.
+    retention_invalid_tokens_count: "10"
+
+    # Activity log: entries older than this many days are removed ("0" disables expiry).
+    notification_retention_days: "90"
+    # The most recent entries that are always kept, however old ("0" disables).
+    notification_retention_count: "500"
+    # Interval (in hours) of the activity cleanup. "0" disables the scheduler.
+    notification_cleanup_interval_hours: "24"
+
+# Security network settings
+security:
+    # IPv4 addresses or CIDR networks an agent may open its WebSocket session (/ws/agent)
+    # from. Applies to all agents alike; empty allows every address.
+    # Which address a single inbound client must connect from is a property of that client:
+    # set at registration to the address it registered from, and editable (or switched off)
+    # in the client editor.
+    allowed_networks: []
+    # Send the Strict-Transport-Security header (default: false). Only enable this when the
+    # dashboard is reached exclusively via HTTPS: browsers remember the header for months and
+    # refuse plain http:// for this host from then on, even after it is switched off again.
+    # hsts: false

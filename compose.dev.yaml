@@ -1,0 +1,189 @@
+# Development stack: the server in watch mode, two keepalived nodes forming two VRRP
+# clusters, and one agent in watch mode next to each node.
+#
+#   docker compose -f compose.dev.yaml up --build
+#
+# Dashboard: http://localhost:3010 (admin/admin). Register the agents through their own web
+# UIs, http://localhost:3011 (node a) and http://localhost:3012 (node b), with a token from
+# the dashboard and the setup PIN from `docker logs kasm-client-a` / `kasm-client-b`; the
+# server URL as seen from the agents is http://172.28.0.10:3010.
+#
+# Failover: `docker stop kasm-keepalived-a` moves both virtual routers to node b;
+# `docker start kasm-keepalived-a` brings VI_WEB back, which node a holds with the higher
+# priority.
+
+services:
+    server-dev:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.server.dev
+            secrets:
+                - npm_token
+        image: kasm-server-dev
+        container_name: kasm-server-dev
+        hostname: kasm-server-dev
+
+        # Mount source code
+        volumes:
+            - ./server:/app/server
+            - ./shared:/app/shared
+            - ./package.json:/app/package.json
+            - ./package-lock.json:/app/package-lock.json
+
+            # Preserve Linux node_modules
+            - /app/node_modules
+            - /app/server/backend/node_modules
+            - /app/server/frontend/node_modules
+            - /app/shared/node_modules
+            - /app/client/node_modules
+
+            # Mount local UI components for development
+            - ../react-ui-components:/app/react-ui-components
+
+        working_dir: /app
+
+        # Start server in watch mode
+        command: npm run dev -w server/backend
+
+        ports:
+            - "3010:3010"
+
+        networks:
+            kasm-dev:
+                ipv4_address: 172.28.0.10
+
+        environment:
+            - LOG_LEVEL=debug
+            - NODE_ENV=development
+            - VITE_USE_LOCAL_UI=true
+            - VITE_UI_COMPONENTS_PATH=/app/react-ui-components
+
+        # The dev image's CMD is bash and declares no HEALTHCHECK, so this is the only health
+        # signal the dev container has. Longer start period: tsx has to compile first.
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3010/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            interval: 15s
+            timeout: 5s
+            start_period: 45s
+            retries: 3
+
+    # keepalived needs NET_ADMIN to add and remove the virtual addresses. Each node also
+    # publishes the port of the agent that shares its network namespace below.
+    keepalived-a:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.keepalived.dev
+        image: kasm-keepalived-dev
+        container_name: kasm-keepalived-a
+        hostname: keepalived-a
+        cap_add:
+            - NET_ADMIN
+        volumes:
+            - ./docker/dev/keepalived-a.conf:/etc/keepalived/keepalived.conf:ro
+        networks:
+            kasm-dev:
+                ipv4_address: 172.28.0.11
+        ports:
+            - "3011:3011"
+
+    keepalived-b:
+        image: kasm-keepalived-dev
+        container_name: kasm-keepalived-b
+        hostname: keepalived-b
+        depends_on:
+            - keepalived-a
+        cap_add:
+            - NET_ADMIN
+        volumes:
+            - ./docker/dev/keepalived-b.conf:/etc/keepalived/keepalived.conf:ro
+        networks:
+            kasm-dev:
+                ipv4_address: 172.28.0.12
+        ports:
+            - "3012:3011"
+
+    # One agent per node, in that node's PID and network namespace -- the same view the
+    # production agent gets from `pid: host` and `network_mode: host`.
+    client-a: &client-dev
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.client.dev
+            secrets:
+                - npm_token
+        image: kasm-client-dev
+        container_name: kasm-client-a
+        pid: "service:keepalived-a"
+        network_mode: "service:keepalived-a"
+        cap_add:
+            - KILL
+            - SYS_PTRACE
+        security_opt:
+            - apparmor:unconfined
+        depends_on:
+            - server-dev
+            - keepalived-a
+
+        volumes:
+            - ./client:/app/client
+            - ./shared:/app/shared
+            - ./package.json:/app/package.json
+            - ./package-lock.json:/app/package-lock.json
+
+            # Preserve Linux node_modules
+            - /app/node_modules
+            - /app/client/node_modules
+            - /app/shared/node_modules
+            - /app/server/backend/node_modules
+
+            # Config and state of this agent, apart from the other one's.
+            - client-a-data:/data
+
+        working_dir: /app
+        command: npm run dev -w client
+
+        environment:
+            - LOG_LEVEL=debug
+            - NODE_ENV=development
+            - KASM_CLIENT_CONFIG=/data/config.yaml
+            - KASM_CLIENT_DATA_DIR=/data
+
+        # See server-dev: the dev image declares no HEALTHCHECK either.
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            interval: 15s
+            timeout: 5s
+            start_period: 45s
+            retries: 3
+
+    client-b:
+        <<: *client-dev
+        container_name: kasm-client-b
+        pid: "service:keepalived-b"
+        network_mode: "service:keepalived-b"
+        depends_on:
+            - server-dev
+            - keepalived-b
+        volumes:
+            - ./client:/app/client
+            - ./shared:/app/shared
+            - ./package.json:/app/package.json
+            - ./package-lock.json:/app/package-lock.json
+            - /app/node_modules
+            - /app/client/node_modules
+            - /app/shared/node_modules
+            - /app/server/backend/node_modules
+            - client-b-data:/data
+
+networks:
+    kasm-dev:
+        ipam:
+            config:
+                - subnet: 172.28.0.0/24
+
+volumes:
+    client-a-data:
+    client-b-data:
+
+secrets:
+    npm_token:
+        environment: NPM_TOKEN

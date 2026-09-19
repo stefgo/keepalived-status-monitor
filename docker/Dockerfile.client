@@ -1,0 +1,65 @@
+# Builder Stage
+FROM node:22-bookworm AS builder
+
+WORKDIR /app
+
+# Copy manifest files and registry config
+COPY package.json package-lock.json .npmrc ./
+COPY client/package.json client/
+COPY shared/package.json shared/
+COPY server/backend/package.json server/backend/
+COPY server/frontend/package.json server/frontend/
+
+# Install all dependencies (including dev for building, with GitHub Packages auth)
+RUN --mount=type=secret,id=npm_token \
+    NPM_TOKEN=$(cat /run/secrets/npm_token) npm ci
+
+# Copy source code
+COPY shared ./shared
+COPY client ./client
+COPY scripts ./scripts
+
+# Build shared and client
+RUN npm run build -w shared
+RUN npm run build -w client
+
+# Generate Version file for production
+ARG APP_VERSION=unknown
+RUN APP_VERSION=${APP_VERSION} bash ./scripts/generate-version.sh ./client/dist/VERSION
+
+# Prune dev dependencies.
+# `npm prune` works on the node_modules tree that is already there -- no second
+# registry round trip and no rebuild of native modules (better-sqlite3), unlike
+# `npm ci --omit=dev`.
+RUN npm prune --omit=dev
+
+# Runner Stage
+# The agent needs nothing but Node: it reads keepalived through /proc and signals it with
+# kill(2), both of which the kernel provides. The Debian base matches the builder, so the
+# native modules pruned above still load.
+FROM node:22-bookworm-slim AS runner
+
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+# Copy artifacts from builder
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/shared/package.json ./shared/
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/client/package.json ./client/
+COPY --from=builder /app/client/dist ./client/dist
+
+# Switch to client directory so paths align with dev environment (config.json resolution)
+WORKDIR /app/client
+
+# Liveness probe against the agent's web server on port 3011. It reports on the agent
+# process, not on its connection to the server -- see /api/health in src/web/server.ts.
+# An agent configured without a web server (both pages disabled, no outbound mode) has
+# nothing to answer here; disable the check for it in compose (`healthcheck: disable: true`).
+# Docker does not restart an unhealthy container; restart policies react to exiting.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e 'fetch("http://127.0.0.1:3011/api/health").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))'
+
+CMD ["node", "dist/index.js"]

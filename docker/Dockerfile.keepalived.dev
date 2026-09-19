@@ -1,0 +1,9 @@
+# A keepalived node for compose.dev.yaml -- nothing but keepalived, so the agent next to it
+# has something real to read, signal and watch fail over.
+FROM alpine:3.20
+
+RUN apk add --no-cache keepalived
+
+# -n: stay in the foreground, -l: log to the console, -D: log state changes in detail.
+# keepalived still starts its VRRP child process, which is the one that writes the dumps.
+CMD ["keepalived", "-n", "-l", "-D", "-f", "/etc/keepalived/keepalived.conf"]
