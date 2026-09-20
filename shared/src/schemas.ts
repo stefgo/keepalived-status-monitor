@@ -403,6 +403,11 @@ export const AppConfigSchema = z.looseObject({
     logLevel: z
         .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
         .optional(),
+    /**
+     * Optional like `logLevel`, and for the same reason: left out it stays DEFAULT_SERVER_PORT,
+     * and nothing writes the number into a file the operator never put it in.
+     */
+    port: z.number().int().min(1).max(65535).optional(),
     oidc: blockOrMissing(OidcConfigSchema.optional()),
     settings: blockOrMissing(AppSettingsSchema),
     security: blockOrMissing(SecurityConfigSchema),

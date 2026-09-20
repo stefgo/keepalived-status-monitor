@@ -57,6 +57,11 @@ const getVersion = () => {
 
 const APP_VERSION = getVersion();
 
+// The dev proxy has to reach the backend wherever it listens, so it reads the same variable
+// the server does. `npm run dev:server` and `npm run dev:frontend` are separate shells: a
+// port set only in config.yaml is invisible here and has to be given to both.
+const BACKEND_PORT = process.env.KASM_SERVER_PORT || 3010;
+
 export default defineConfig(() => ({
     plugins: [react()],
 
@@ -75,12 +80,12 @@ export default defineConfig(() => ({
         strictPort: true,
         proxy: {
             "/api": {
-                target: "http://localhost:3010",
+                target: `http://localhost:${BACKEND_PORT}`,
                 changeOrigin: true,
                 ws: false,
             },
             "/ws": {
-                target: "ws://localhost:3010",
+                target: `ws://localhost:${BACKEND_PORT}`,
                 changeOrigin: true,
                 ws: true,
                 configure: (proxy) => {

@@ -10,7 +10,7 @@ import cookie from "@fastify/cookie";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { initOIDC, appConfig } from "./config/AppConfig.js";
+import { initOIDC, appConfig, serverPort } from "./config/AppConfig.js";
 import { AuthService } from "./services/AuthService.js";
 import { NotificationCleanupService } from "./services/NotificationCleanupService.js";
 import apiRoutes from "./routes/api.js";
@@ -175,7 +175,7 @@ server.setNotFoundHandler(async (request, reply) => {
 // Start
 try {
     await server.listen({
-        port: 3010,
+        port: serverPort,
         host: "0.0.0.0",
     });
     await ClientConnector.connectAll();

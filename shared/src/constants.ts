@@ -56,6 +56,13 @@ export const AGENT_CAPABILITIES = {
 export const DEFAULT_AGENT_PORT = 3011;
 
 /**
+ * The port the server listens on unless config.yaml or the PORT environment variable names
+ * another. It is the published one: the container exposes it and the compose files map it,
+ * so an operator who moves the server has to move those with it.
+ */
+export const DEFAULT_SERVER_PORT = 3010;
+
+/**
  * Whether the server currently holds a WebSocket to the agent. Deliberately binary:
  * ProxyService derives it from its map of open connections on every broadcast, and there
  * is no third state it could report. `busy` used to be listed here without anything ever

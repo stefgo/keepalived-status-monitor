@@ -123,6 +123,7 @@ An image is tagged only after CI has started it and it answered its health check
 | :------------ | :------------------------------- | :------------ | :---------------------------------------------------------------------------- |
 | `LOG_LEVEL`   | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` | `info` | Controls log verbosity. Wins over `logLevel` in `config.yaml`. |
 | `LOG_FORMAT`  | `pretty`, `json`                 | _auto_        | `pretty` for colored single-line logs (default in dev), `json` for prod.      |
+| `KASM_SERVER_PORT` | `1`–`65535`                 | `3010`        | Port the server listens on; wins over `port` in `config.yaml`. An unusable value ends the start. The container's health check reads it too. |
 | `NODE_ENV`    | `development`, `production`      | `development` | Picks the log format when `LOG_FORMAT` is unset (`production` → JSON).        |
 | `KASM_CLIENT_PORT` | `1`–`65535`                  | `3011`        | _(Client only)_ Port of the local web server; wins over `listenPort` in `config.yaml`. An unusable value ends the start. |
 | `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. |
@@ -185,6 +186,7 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 | `settings`                 | `retention_invalid_tokens_days` / `_count` | Retention policy for used/expired registration tokens. |
 |                            | `notification_retention_days` / `_count` / `notification_cleanup_interval_hours` | Retention of the activity list (defaults 90 days, at least 500 kept, every 24 h). |
 | `logLevel`                 | —               | pino log level; `LOG_LEVEL` wins when set.               |
+| `port`                     | —               | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set. The published port: `EXPOSE`, the compose port mapping and every agent's `serverUrl` have to follow it. |
 | `security`                 | `allowed_networks` | IPv4 addresses or CIDR networks an agent may open `/ws/agent` from, for all agents alike. Empty (default) allows every address. |
 |                            | `hsts`          | Send `Strict-Transport-Security` (default `false`). Enable only when the dashboard is served exclusively over HTTPS — browsers remember the header for months. Requires a restart. |
 

@@ -7,6 +7,12 @@
 # Can be overridden by the LOG_LEVEL environment variable
 logLevel: info
 
+# Port the server listens on. Defaults to 3010 when left out.
+# Can be overridden by the KASM_SERVER_PORT environment variable; an unusable value ends
+# the start. This is the published port: the container exposes it and compose.yaml maps it,
+# so moving it here means moving it there too.
+#port: 3010
+
 # OpenID Connect (OIDC) authentication settings
 oidc:
     enabled: false
