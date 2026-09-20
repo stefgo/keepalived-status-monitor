@@ -4,7 +4,6 @@ import fastifyStatic from "@fastify/static";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import crypto from "crypto";
 import { fileURLToPath } from "url";
 import {
     config,
@@ -19,6 +18,7 @@ import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
 import { isCertificateError, serverRequest } from "../core/ServerHttp.js";
 import { logger } from "@kasm/shared/node";
 import { initSetupPin, rotateSetupPin, verifySetupPin } from "../core/SetupPin.js";
+import { secretEquals } from "../core/secrets.js";
 import {
     WS_EVENTS,
     AgentWebRegisterSchema,
@@ -38,16 +38,10 @@ const __dirname = path.dirname(__filename);
 
 let fastifyInstance: any = null;
 
-/**
- * Whether the request carries `Authorization: Bearer <expected>`. Both sides are hashed
- * first, so timingSafeEqual gets two buffers of one length and the comparison says nothing
- * about how much of the token was right.
- */
+/** Whether the request carries `Authorization: Bearer <expected>`. */
 function hasBearerToken(request: FastifyRequest, expected: string): boolean {
     const match = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "");
-    if (!match) return false;
-    const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
-    return crypto.timingSafeEqual(digest(match[1]), digest(expected));
+    return match !== null && secretEquals(match[1], expected);
 }
 
 /**
@@ -462,7 +456,7 @@ export async function startWebServer() {
                         }
                         const { secret, authToken, clientId } = parsed.data;
 
-                        if (secret !== config.registrationSecret) {
+                        if (!secretEquals(secret, config.registrationSecret)) {
                             clearTimeout(timeout);
                             logger.warn("Registration rejected: secret mismatch");
                             socket.send(JSON.stringify({
@@ -514,7 +508,7 @@ export async function startWebServer() {
 
             const { token, clientId } = (req.query as AgentQuery) ?? {};
 
-            if (!token || !config.authToken || token !== config.authToken) {
+            if (!secretEquals(token, config.authToken)) {
                 logger.warn("Agent connection from the server rejected: invalid token");
                 socket.close(4001, "Unauthorized");
                 return;
