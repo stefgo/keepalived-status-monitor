@@ -383,3 +383,34 @@ reverse proxy injects scripts or other resources into the dashboard, those are b
 `Strict-Transport-Security` is **off** unless `security.hsts: true` is set, because many
 installations run on plain HTTP. Behind TLS, either enable it here or let the reverse proxy
 send it.
+
+## TLS to an Outbound Agent
+
+An outbound agent is dialled by the server, and the agent's auth token travels in the
+`/ws/agent` query string. Over plain `ws://` that token is readable by anything on the path,
+which matters as soon as the agent sits somewhere the operator does not control end to end.
+
+Two settings, one on each side:
+
+1. The agent serves TLS — a `tls` block naming a certificate and key in its `config.yaml`
+   (see [client.md](client.md)), or a reverse proxy terminating TLS in front of it.
+2. The client's **target address** says so: `wss://host:port` instead of `host:port`, set in
+   the client editor or when the client is added.
+
+They have to agree. An address written `wss://` against an agent serving plain HTTP fails to
+connect, and so does a bare address against an agent serving TLS. Addresses stored before
+this existed keep working unchanged — a bare `host:port` still means `ws://`.
+
+By default the server verifies the agent's certificate, so a wrong or expired one is a failed
+connection rather than a silent one. An agent on a home network usually carries a self-signed
+certificate, and running a CA for a handful of hosts is more than that warrants:
+
+```yaml
+security:
+    allow_self_signed_agent_certificates: true
+```
+
+It applies to every outbound agent alike and only where the address is `wss://` — a plaintext
+target has no certificate to check. This is the mirror image of `allowSelfSignedCertificates`
+in the agent's own configuration, which is the same decision for the other direction of the
+same link.
