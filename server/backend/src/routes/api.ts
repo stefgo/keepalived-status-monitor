@@ -6,7 +6,7 @@ import { TokenController } from "../controllers/TokenController.js";
 import { SettingsController } from "../controllers/SettingsController.js";
 import { KeepalivedController } from "../controllers/KeepalivedController.js";
 import { ActivityController } from "../controllers/ActivityController.js";
-import db from "../core/Database.js";
+import { HealthRepository } from "../repositories/HealthRepository.js";
 
 export default async function apiRoutes(fastify: FastifyInstance) {
     /**
@@ -23,7 +23,7 @@ export default async function apiRoutes(fastify: FastifyInstance) {
      */
     fastify.get("/health", async (request, reply) => {
         try {
-            db.prepare("SELECT 1").get();
+            HealthRepository.check();
             return { status: "ok" };
         } catch (err) {
             request.log.error({ err }, "Health check failed: database unreachable");
