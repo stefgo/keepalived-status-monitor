@@ -27,7 +27,7 @@ import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { activityDetail, activityMessage } from "../lib/activityText";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
-import { clientName, formatDate } from "../../../utils";
+import { clientName, describeFailure, formatDate } from "../../../utils";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 
 function SubjectBadges({ event }: { event: ActivityRecord }) {
@@ -95,7 +95,7 @@ export function ActivityView() {
     const { events, currentUserId, markSeen, markAllSeen, removeEvent, clearAll } =
         useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    const { confirm } = useConfirm();
+    const { confirm, alert } = useConfirm();
     const clients = useClientStore((s) => s.clients);
     // A minimum, not an exact match: "info" shows everything but the trace level.
     const [levelFilter, setLevelFilter] = useState<ActivityLevel>("info");
@@ -147,9 +147,18 @@ export function ActivityView() {
         for (const member of group.members) markSeen(member.id);
     };
 
-    const handleDelete = (group: ActivityGroup) => {
-        removeEvent(group.head.id);
-        for (const member of group.members) removeEvent(member.id);
+    /**
+     * Deleting a group is one request per event, run one after another: the store rolls its
+     * optimistic removal back on failure, and parallel calls would each roll back to the list
+     * as it stood before them -- the first failure would undo the deletions that succeeded.
+     */
+    const handleDelete = async (group: ActivityGroup) => {
+        try {
+            await removeEvent(group.head.id);
+            for (const member of group.members) await removeEvent(member.id);
+        } catch (e: unknown) {
+            alert(describeFailure("The activity entry was not deleted", e));
+        }
     };
 
     const tableDef: DataTableDef<ActivityGroup>[] = [
