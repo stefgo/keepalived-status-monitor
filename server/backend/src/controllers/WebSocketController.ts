@@ -2,8 +2,6 @@ import { FastifyInstance, FastifyRequest } from "fastify";
 import { WebSocket } from "ws";
 import {
     WS_EVENTS,
-    WsMessage,
-    AuthPayloadSchema,
     CONNECTION_MODE,
     isIpAllowed,
     isIpInNetworks,
@@ -16,7 +14,7 @@ import { appConfig } from "../config/AppConfig.js";
 import { ClientRepository } from "../repositories/ClientRepository.js";
 import { logger } from "@kasm/shared/node";
 import { attachHeartbeat } from "./websocket/Heartbeat.js";
-import { routeAgentMessage } from "./websocket/AgentMessageRouter.js";
+import { attachAgentSession } from "./websocket/AgentSession.js";
 import { SESSION_COOKIE } from "../services/SessionCookie.js";
 
 /** The identity the agent route accepts in its query string. */
@@ -24,15 +22,6 @@ export type AgentQuery = { token?: string; clientId?: string };
 
 /** The agent route's request, with its query string named rather than read out of `any`. */
 type AgentRequest = FastifyRequest<{ Querystring: AgentQuery }>;
-
-/**
- * The name a connection event is shown under. Stored with the event, so the line still names
- * the host after it has been renamed or removed.
- */
-function clientName(clientId: string): string {
-    const client = ClientRepository.findById(clientId);
-    return client?.display_name || client?.hostname || clientId;
-}
 
 export class WebSocketController {
     static async handleDashboardConnection(
@@ -113,8 +102,6 @@ export class WebSocketController {
 
         attachHeartbeat(socket);
 
-        let isAuthenticated = false;
-
         // Ensures onAuthResult is called exactly once regardless of failure mode.
         let authResultSent = false;
         const notifyAuthResult = (success: boolean) => {
@@ -124,87 +111,24 @@ export class WebSocketController {
             }
         };
 
-        const authTimeout = setTimeout(() => {
-            if (!isAuthenticated) {
-                logger.warn({ clientId }, "Outbound agent authentication timed out");
-                notifyAuthResult(false);
-                socket.close(4001, "Authentication timed out");
-            }
-        }, 5000);
-
-        socket.on("message", (message: Buffer) => {
-            try {
-                const data = JSON.parse(message.toString()) as WsMessage;
-
-                if (!isAuthenticated) {
-                    if (data.type === WS_EVENTS.AUTH) {
-                        const parsed = AuthPayloadSchema.safeParse(data.payload);
-                        if (!parsed.success) {
-                            notifyAuthResult(false);
-                            socket.close(4000, "Invalid payload");
-                            return;
-                        }
-
-                        isAuthenticated = true;
-                        clearTimeout(authTimeout);
-
-                        const version = parsed.data.version || null;
-
-                        // onPersist creates the DB entry for new clients (first-time connection).
-                        // For reconnects the entry already exists; updateAuthSuccess updates it.
-                        // No address to record: the server dialled this agent, so the only
-                        // address involved is the one it was dialled at, already stored as
-                        // outbound_target_address.
-                        onPersist?.(version);
-                        ClientRepository.updateAuthSuccess(clientId, version, null);
-
-                        logger.info({ clientId }, "Outbound agent authenticated");
-                        ProxyService.registerClient(clientId, socket, parsed.data.capabilities);
-                        ActivityService.record({
-                            kind: "client.connected",
-                            level: "trace",
-                            clientId,
-                            data: {
-                                connectionMode: CONNECTION_MODE.OUTBOUND,
-                                version,
-                                clientName: clientName(clientId),
-                            },
-                        });
-                        notifyAuthResult(true);
-
-                        socket.send(JSON.stringify({
-                            type: WS_EVENTS.AUTH_SUCCESS,
-                            payload: { lastSyncTime: null },
-                        }));
-                        ProxyService.broadcastClientUpdate();
-
-                        socket.on("close", () => {
-                            ClientRepository.updateLastSeen(clientId);
-                            ProxyService.unregisterClient(clientId, socket);
-                            logger.info({ clientId }, "Outbound agent disconnected");
-                            ActivityService.record({
-                                kind: "client.disconnected",
-                                level: "trace",
-                                clientId,
-                                data: {
-                                    connectionMode: CONNECTION_MODE.OUTBOUND,
-                                    clientName: clientName(clientId),
-                                },
-                            });
-                            ProxyService.broadcastClientUpdate();
-                            onClose();
-                        });
-                    } else {
-                        notifyAuthResult(false);
-                        socket.close(4003, "Forbidden");
-                    }
-                    return;
-                }
-
-                routeAgentMessage(clientId, data);
-            } catch (err) {
-                logger.error({ msg: "Error processing outbound agent message", err });
-            }
+        attachAgentSession({
+            clientId,
+            socket,
+            connectionMode: CONNECTION_MODE.OUTBOUND,
+            // No address to record: the server dialled this agent, so the only address
+            // involved is the one it was dialled at, already stored as
+            // outbound_target_address.
+            ip: null,
+            log: logger,
+            onAuthenticated: (version) => {
+                // onPersist creates the DB entry for new clients (first-time connection).
+                // For reconnects the entry already exists and the session's own
+                // updateAuthSuccess refreshes it.
+                onPersist?.(version);
+                notifyAuthResult(true);
+            },
+            onAuthFailed: () => notifyAuthResult(false),
+            onClose,
         });
 
         socket.on("error", (err) => {
@@ -215,9 +139,6 @@ export class WebSocketController {
         // Covers all remaining failure paths: socket closed before AUTH completed,
         // or after an error — notifyAuthResult is a no-op if already called.
         socket.on("close", () => {
-            // The heartbeat clears itself — attachHeartbeat registers its own close
-            // handler for exactly that.
-            clearTimeout(authTimeout);
             notifyAuthResult(false);
         });
     }
@@ -231,6 +152,9 @@ export class WebSocketController {
         const clientIp = req.ip;
         fastify.log.info({ msg: "Client connected", ip: clientIp });
 
+        // Read by the timeout log below, which fires long after this line: null while the
+        // peer is still anonymous, the resolved id once the credentials below named a row.
+        let clientId: string | null = null;
         attachHeartbeat(socket, () =>
             fastify.log.warn({
                 msg: "Agent client connection timed out (no pong). Terminating.",
@@ -238,8 +162,6 @@ export class WebSocketController {
                 clientId,
             }),
         );
-        let isAuthenticated = false;
-        let clientId: string | null = null;
 
         // AUTHENTICATION LOGIC (Identity + IP)
         // 1. Extract the identity: query params first, then Authorization header for the
@@ -315,115 +237,31 @@ export class WebSocketController {
             return;
         }
 
-        // The agent must send { type: 'AUTH' } as its first message to confirm readiness.
-        // We enforce a 5-second timeout to prevent zombie connections.
+        clientId = client.id;
 
-        const authTimeout = setTimeout(() => {
-            if (!isAuthenticated && socket.readyState === socket.OPEN) {
-                fastify.log.warn({
-                    msg: "Client authentication timed out",
-                    ip: clientIp,
-                });
-                socket.close(4001, "Authentication timed out");
-            }
-        }, 5000);
-
-        socket.on("message", (message: Buffer) => {
-            try {
-                const data = JSON.parse(message.toString()) as WsMessage;
-
-                if (!isAuthenticated) {
-                    if (data.type === WS_EVENTS.AUTH) {
-                        const parsed = AuthPayloadSchema.safeParse(
-                            data.payload,
-                        );
-                        if (!parsed.success) {
-                            socket.close(4000, "Invalid payload");
-                            return;
-                        }
-
-                        isAuthenticated = true;
-                        clientId = client.id;
-                        clearTimeout(authTimeout);
-
-                        const authPayload = parsed.data;
-                        // clientIp is recorded only here, past the allowed-address check
-                        // above: the stored value is then always an address that was let in,
-                        // which is what makes it a useful reference in the client editor.
-                        ClientRepository.updateAuthSuccess(
-                            clientId!,
-                            authPayload.version || null,
-                            clientIp,
-                        );
-
-                        fastify.log.info({
-                            msg: "Client authenticated",
-                            clientId,
-                        });
-                        ProxyService.registerClient(
-                            clientId!,
-                            socket,
-                            authPayload.capabilities,
-                        );
-                        ActivityService.record({
-                            kind: "client.connected",
-                            level: "trace",
-                            clientId: clientId!,
-                            data: {
-                                connectionMode: CONNECTION_MODE.INBOUND,
-                                version: authPayload.version || null,
-                                ip: clientIp,
-                                clientName: clientName(clientId!),
-                            },
-                        });
-
-                        socket.send(
-                            JSON.stringify({
-                                type: WS_EVENTS.AUTH_SUCCESS,
-                                payload: { lastSyncTime: null },
-                            }),
-                        );
-                        ProxyService.broadcastClientUpdate();
-
-                        socket.on("close", () => {
-                            if (clientId) {
-                                ClientRepository.updateLastSeen(clientId);
-                                ProxyService.unregisterClient(clientId, socket);
-                                fastify.log.info({
-                                    msg: "Client disconnected",
-                                    clientId,
-                                });
-                                ActivityService.record({
-                                    kind: "client.disconnected",
-                                    level: "trace",
-                                    clientId,
-                                    data: {
-                                        connectionMode: CONNECTION_MODE.INBOUND,
-                                        clientName: clientName(clientId),
-                                    },
-                                });
-                                ProxyService.broadcastClientUpdate();
-                            }
-                        });
-                    } else {
-                        socket.send(
-                            JSON.stringify({
-                                type: WS_EVENTS.AUTH_FAILURE,
-                                payload: {},
-                            }),
-                        );
-                        socket.close(4003, "Forbidden");
-                    }
-                    return;
+        // From here the connection is an ordinary agent session: the agent sends
+        // { type: 'AUTH' } as its first message, and everything after that is the same
+        // in both directions.
+        attachAgentSession({
+            clientId,
+            socket,
+            connectionMode: CONNECTION_MODE.INBOUND,
+            ip: clientIp,
+            log: fastify.log,
+            // The agent is told it was turned away only when it sent something other than
+            // AUTH: a malformed AUTH payload gets the close code alone, which is what
+            // names the problem. An unexpected first message is the case where the peer
+            // may simply be out of step with the handshake.
+            onAuthFailed: (reason) => {
+                if (reason === "unexpected-message") {
+                    socket.send(
+                        JSON.stringify({
+                            type: WS_EVENTS.AUTH_FAILURE,
+                            payload: {},
+                        }),
+                    );
                 }
-
-                routeAgentMessage(clientId!, data);
-            } catch (err) {
-                fastify.log.error({
-                    msg: "Error processing WebSocket message",
-                    err,
-                });
-            }
+            },
         });
     }
 }
