@@ -1,18 +1,24 @@
-import Fastify, { FastifyRequest, FastifyReply } from "fastify";
-import fastifyWebSocket from "@fastify/websocket";
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import fastifyWebSocket, { type WebSocket } from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { config, persistIdentity, persistServerUrl, deleteRegistrationSecret } from "../core/Config.js";
+import {
+    config,
+    persistIdentity,
+    persistServerUrl,
+    deleteRegistrationSecret,
+    readTlsMaterial,
+} from "../core/Config.js";
 import { Connection } from "../core/Connection.js";
 import { KeepalivedService } from "../services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
 import { isCertificateError, serverRequest } from "../core/ServerHttp.js";
 import { logger } from "@kasm/shared/node";
 import { initSetupPin, rotateSetupPin, verifySetupPin } from "../core/SetupPin.js";
+import { secretEquals } from "../core/secrets.js";
 import {
     WS_EVENTS,
     AgentWebRegisterSchema,
@@ -30,18 +36,12 @@ type AgentQuery = { token?: string; clientId?: string };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let fastifyInstance: any = null;
+let fastifyInstance: FastifyInstance | null = null;
 
-/**
- * Whether the request carries `Authorization: Bearer <expected>`. Both sides are hashed
- * first, so timingSafeEqual gets two buffers of one length and the comparison says nothing
- * about how much of the token was right.
- */
+/** Whether the request carries `Authorization: Bearer <expected>`. */
 function hasBearerToken(request: FastifyRequest, expected: string): boolean {
     const match = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "");
-    if (!match) return false;
-    const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
-    return crypto.timingSafeEqual(digest(match[1]), digest(expected));
+    return match !== null && secretEquals(match[1], expected);
 }
 
 /**
@@ -63,7 +63,17 @@ export function isWebServerNeeded(): boolean {
 }
 
 export async function startWebServer() {
-    fastifyInstance = Fastify({ logger: false });
+    // The certificate and key were read and validated in Config.ts, so a tls block that is
+    // present here is one that works. Without it the server stays plain HTTP, which is
+    // what every installation had before this option existed.
+    // Two calls rather than one conditional options object: `https` is what picks Fastify's
+    // server type, so a ternary inside the argument leaves it with no overload to match.
+    // The certificate and key were validated in Config.ts, so material that is present
+    // here is material that works.
+    const tls = readTlsMaterial();
+    fastifyInstance = tls
+        ? Fastify({ logger: false, https: { cert: tls.cert, key: tls.key } })
+        : Fastify({ logger: false });
     const fastify = fastifyInstance;
 
     await fastify.register(fastifyWebSocket);
@@ -107,8 +117,8 @@ export async function startWebServer() {
     });
 
     const sendFileSafe = async (reply: FastifyReply, file: string) => {
-        if (typeof (reply as any).sendFile === "function") {
-            return (reply as any).sendFile(file);
+        if (typeof reply.sendFile === "function") {
+            return reply.sendFile(file);
         }
 
         logger.error(
@@ -145,7 +155,7 @@ export async function startWebServer() {
     // Check server reachability
     fastify.get(
         "/api/status/server",
-        async (request: FastifyRequest, reply: FastifyReply) => {
+        async (request: FastifyRequest, _reply: FastifyReply) => {
             const query = request.query as StatusQuery;
             const checkUrl = query.url || config.serverUrl;
             let serverReachable = false;
@@ -161,7 +171,7 @@ export async function startWebServer() {
                     if (checkRes.ok) {
                         serverReachable = true;
                     }
-                } catch (e) {
+                } catch {
                     // Server not reachable
                 }
             }
@@ -176,7 +186,7 @@ export async function startWebServer() {
     // Check auth token existence
     fastify.get(
         "/api/status/auth",
-        async (request: FastifyRequest, reply: FastifyReply) => {
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
                 hasAuthToken:
                     !!config.authToken && config.authToken.trim().length > 0,
@@ -187,7 +197,7 @@ export async function startWebServer() {
     // Check current connection status
     fastify.get(
         "/api/status/connection",
-        async (request: FastifyRequest, reply: FastifyReply) => {
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
                 connected: Connection.isConnected(),
             };
@@ -197,7 +207,7 @@ export async function startWebServer() {
     // Return config-derived mode info for the status page
     fastify.get(
         "/api/status/config",
-        async (request: FastifyRequest, reply: FastifyReply) => {
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
                 hasRegistrationSecret: !!config.registrationSecret,
                 hasAuthToken: !!config.authToken && config.authToken.trim().length > 0,
@@ -272,7 +282,7 @@ export async function startWebServer() {
     // Attempt to establish connection
     fastify.post(
         "/api/connect",
-        async (request: FastifyRequest, reply: FastifyReply) => {
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
             const result = await Connection.connect();
             return {
                 connected: result.connected,
@@ -396,7 +406,7 @@ export async function startWebServer() {
     fastify.get(
         "/ws/register",
         { websocket: true },
-        (socket: any, req: FastifyRequest) => {
+        (socket: WebSocket, req: FastifyRequest) => {
             if (!isFromAllowedNetwork(req)) {
                 logger.warn(
                     { ip: req.ip },
@@ -446,7 +456,7 @@ export async function startWebServer() {
                         }
                         const { secret, authToken, clientId } = parsed.data;
 
-                        if (secret !== config.registrationSecret) {
+                        if (!secretEquals(secret, config.registrationSecret)) {
                             clearTimeout(timeout);
                             logger.warn("Registration rejected: secret mismatch");
                             socket.send(JSON.stringify({
@@ -486,7 +496,7 @@ export async function startWebServer() {
     fastify.get(
         "/ws/agent",
         { websocket: true },
-        (socket: any, req: FastifyRequest) => {
+        (socket: WebSocket, req: FastifyRequest) => {
             if (!isFromAllowedNetwork(req)) {
                 logger.warn(
                     { ip: req.ip },
@@ -498,7 +508,7 @@ export async function startWebServer() {
 
             const { token, clientId } = (req.query as AgentQuery) ?? {};
 
-            if (!token || !config.authToken || token !== config.authToken) {
+            if (!secretEquals(token, config.authToken)) {
                 logger.warn("Agent connection from the server rejected: invalid token");
                 socket.close(4001, "Unauthorized");
                 return;
@@ -524,7 +534,9 @@ export async function startWebServer() {
     try {
         const port = config.listenPort;
         await fastify.listen({ port, host: "0.0.0.0" });
-        logger.info(`Client Web UI listening on port ${port}`);
+        logger.info(
+            `Client Web UI listening on port ${port} (${config.tls ? "https" : "http"})`,
+        );
         // Logged after the "listening" line, where an operator is already looking.
         if (config.enableRegisterPage !== false) {
             initSetupPin(port);

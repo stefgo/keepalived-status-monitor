@@ -135,7 +135,7 @@ export class AuthService {
             claims.sub) as string;
 
         // Find user
-        let user = UserRepository.findByUsername(username);
+        const user = UserRepository.findByUsername(username);
         if (!user) {
             throw new Error("User not found");
         }

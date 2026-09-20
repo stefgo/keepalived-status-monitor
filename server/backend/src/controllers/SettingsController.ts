@@ -4,8 +4,8 @@ import { SettingsService } from "../services/SettingsService.js";
 import { TokenCleanupService } from "../services/TokenCleanupService.js";
 import { NotificationCleanupService } from "../services/NotificationCleanupService.js";
 
-export const SettingsController = {
-    async getSettings(request: FastifyRequest, reply: FastifyReply) {
+export class SettingsController {
+    static async getSettings(request: FastifyRequest, reply: FastifyReply) {
         try {
             const settings = SettingsService.getAllSettings();
             return reply.send(settings);
@@ -15,9 +15,9 @@ export const SettingsController = {
                 .code(500)
                 .send({ error: "Failed to fetch settings" });
         }
-    },
+    }
 
-    async updateSettings(request: FastifyRequest, reply: FastifyReply) {
+    static async updateSettings(request: FastifyRequest, reply: FastifyReply) {
         // This body is written into config.yaml. The schema checks the known keys and lets
         // unknown ones through -- see CleanupSettingsSchema for why.
         const parsed = CleanupSettingsSchema.safeParse(request.body);
@@ -34,9 +34,9 @@ export const SettingsController = {
                 .code(500)
                 .send({ error: "Failed to update settings" });
         }
-    },
+    }
 
-    async runInvalidTokenCleanup(request: FastifyRequest, reply: FastifyReply) {
+    static async runInvalidTokenCleanup(request: FastifyRequest, reply: FastifyReply) {
         try {
             const result = TokenCleanupService.run();
             return reply.send({ success: true, ...result });
@@ -46,16 +46,16 @@ export const SettingsController = {
                 .code(500)
                 .send({ error: "Failed to run token cleanup" });
         }
-    },
+    }
 
     /** The schedulers the server runs. */
-    async getSchedulerStatus(_request: FastifyRequest, reply: FastifyReply) {
+    static async getSchedulerStatus(_request: FastifyRequest, reply: FastifyReply) {
         return reply.send({
             notificationCleanupLastRun: NotificationCleanupService.getLastRun(),
         });
-    },
+    }
 
-    async runNotificationCleanup(_request: FastifyRequest, reply: FastifyReply) {
+    static async runNotificationCleanup(_request: FastifyRequest, reply: FastifyReply) {
         try {
             const result = NotificationCleanupService.run();
             return reply.send({ success: true, ...result });
@@ -63,5 +63,5 @@ export const SettingsController = {
             _request.log.error(e);
             return reply.code(500).send({ error: "Failed to run notification cleanup" });
         }
-    },
-};
+    }
+}

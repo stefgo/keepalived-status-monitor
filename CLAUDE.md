@@ -47,6 +47,8 @@ npm run dev:frontend     # Frontend dev server (Vite)
 npm run dev:client       # Client in watch mode
 npm run build            # Build all workspaces
 npm run clean            # Clean build artifacts
+npm run lint             # ESLint over shared, client and server/backend
+npm run lint:frontend    # ESLint over server/frontend (its own config)
 
 # Frontend only (server/frontend)
 npm run lint                 # ESLint
@@ -117,9 +119,14 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 
 - **Indentation**: 4 spaces in all workspaces and config files, no tabs. No formatter is
   configured — match the surrounding file.
-- **Linting**: ESLint for the frontend, covering `src/**/*.{ts,tsx}` via typescript-eslint
-  (recommended, no type information) plus react-hooks and react-refresh. Errors fail
-  the run; no rule is downgraded to a warning.
+- **Linting**: two configs, one per kind of code, because a file must not be matched by
+  both. `eslint.config.mjs` at the root covers `shared`, `client` and `server/backend`
+  (js, mjs, ts; Node globals; typescript-eslint recommended, no type information) and
+  ignores `server/frontend`; `server/frontend/eslint.config.js` covers the frontend's
+  `src/**/*.{ts,tsx}` and adds react-hooks and react-refresh. A new Node workspace is
+  covered by the root config without another file. Errors fail the run; no rule is
+  downgraded to a warning. `prefer-const` runs with `ignoreReadBeforeAssign`, for the
+  `let` a closure reads before anything assigns it.
   A context is split into a JSX-free `XContext.ts` (context object and hook) and an
   `XProvider.tsx`, so `react-refresh/only-export-components` stays an error.
   `react-hooks/set-state-in-effect` is an error too: a loader lives inside its effect and
@@ -177,9 +184,10 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
 ## Testing
 
 No test framework is configured. TypeScript and ESLint are the primary quality gates.
-CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm run typecheck -w server/frontend`
-and `npm run lint -w server/frontend` on every branch and pull request; `build.yml` calls
-the same workflow and only builds images once it passes. Run the three locally before pushing.
+CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm run typecheck -w server/frontend`,
+`npm run lint -w server/frontend` and `npm run lint` on every branch and pull request;
+`build.yml` calls the same workflow and only builds images once it passes. Run the four
+locally before pushing.
 
 ## Docs
 

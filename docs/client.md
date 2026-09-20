@@ -113,6 +113,24 @@ What makes the capability mechanism one-directional is an assumption about who i
 
 A local Fastify HTTP server, used for initial setup and status monitoring. It listens on `listenPort` from `config.yaml` (default **3011**), which `KASM_CLIENT_PORT` overrides. The port matters beyond the web UI: in outbound mode the server dials `/ws/register` and `/ws/agent` on it, so a moved port has to be reflected in the client's target address on the server side.
 
+#### Serving it over TLS
+
+Plain HTTP unless `config.yaml` carries a `tls` block:
+
+```yaml
+tls:
+    cert: /etc/kasm/agent.crt
+    key: /etc/kasm/agent.key
+```
+
+Relative paths resolve against the agent's directory. Both files are read and checked at startup, and **a `tls` block that cannot be read ends the start** rather than falling back to HTTP — an agent configured for TLS that quietly served plaintext would hand its auth token out on `/ws/register` while looking perfectly healthy. The log line after `listen()` names the scheme actually in use, as does the setup PIN block.
+
+With TLS on, the client's target address on the server has to say so: `wss://host:port`. The two are set separately and have to agree — an address written `wss://` against an agent serving HTTP fails to connect, and a bare address against a TLS agent does too.
+
+A reverse proxy terminating TLS in front of the agent works just as well; leave `tls` unset, point the proxy at the plain port and write the client's target address as `wss://`. Note that `allowedNetworks` then sees the proxy's address, not the server's, because this Fastify runs without `trustProxy` (see [Security Notes](#-security-notes)).
+
+Self-signed certificates are the normal case here. The server verifies the agent's certificate unless `security.allow_self_signed_agent_certificates` is set in its own `config.yaml` — see [install.md](install.md).
+
 **Pages:**
 
 | Route       | Description                                                                   |
@@ -322,6 +340,8 @@ There is no local database.
 - The server's TLS certificate is verified for registration and for the WebSocket connection. For a server with a self-signed certificate set `allowSelfSignedCertificates: true`; it then applies to both. The reachability check on the status and register pages always tolerates such a certificate — it sends nothing and only answers whether a KASM server responds. The decision is passed per request (`core/ServerHttp.ts`, the WebSocket options) and never through the process-wide `NODE_TLS_REJECT_UNAUTHORIZED`, which the agent used to set on its first request and never reset.
 - Agent connections are validated server-side against `security.allowed_networks` and the client's own allowed address or network, which can be edited or switched off in the client editor.
 - `allowedNetworks` in the agent's `config.yaml` restricts where the server may dial `/ws/register` and `/ws/agent` from (empty: no restriction). Refused connections are closed with `4003 Access denied` and logged with the peer address; the local web UI is not restricted.
+- In outbound mode the agent's own certificate is what protects the session: the auth token travels in the `/ws/agent` query string, so without TLS it is readable by anything on the path. Set a `tls` block (see [Serving it over TLS](#serving-it-over-tls)) for any agent the server does not reach over a network you control.
+- The `authToken` and the `registrationSecret` are compared in constant time (`core/secrets.ts`), so a wrong value reveals nothing through how long the check took. The `clientId` beside the token is compared normally — it is not a secret and appears in every dashboard URL.
 
 ---
 

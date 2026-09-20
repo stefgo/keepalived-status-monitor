@@ -13,8 +13,8 @@ import { ClientRepository } from "../repositories/ClientRepository.js";
 import { ProxyService } from "../services/ProxyService.js";
 import { ActivityService } from "../services/ActivityService.js";
 
-export const TokenController = {
-    list: async (request: FastifyRequest, reply: FastifyReply) => {
+export class TokenController {
+    static async list(_request: FastifyRequest, _reply: FastifyReply) {
         const tokens = TokenRepository.findAll();
         return tokens.map((t) => ({
             ...t,
@@ -24,14 +24,14 @@ export const TokenController = {
             displayName: t.display_name,
             inboundAllowedIp: t.allowed_ip,
         }));
-    },
+    }
 
     /**
      * Issues a registration token, optionally carrying what the agent cannot tell the
      * server about itself: the name to show it under and the address it may connect from.
      * A request without a body keeps the previous behaviour.
      */
-    create: async (request: FastifyRequest, reply: FastifyReply) => {
+    static async create(request: FastifyRequest, reply: FastifyReply) {
         // An absent body is a valid call, not a malformed one -- scripts that only ask for
         // a token predate the fields below.
         const parsed = CreateTokenSchema.safeParse(request.body ?? {});
@@ -45,15 +45,20 @@ export const TokenController = {
         const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
         TokenRepository.create(token, expiresAt, displayName, inboundAllowedIp);
         return { token, expiresAt, displayName, inboundAllowedIp };
-    },
+    }
 
-    delete: async (request: FastifyRequest, reply: FastifyReply) => {
+    static async delete(request: FastifyRequest, reply: FastifyReply) {
         const { token } = request.params as { token: string };
-        TokenRepository.delete(token);
+        // A token that was not there is a 404, like every other delete: reporting "deleted"
+        // for a token nobody holds hides a typo in the path as a success.
+        const { changes } = TokenRepository.delete(token);
+        if (changes === 0) {
+            return reply.code(404).send({ error: "Token not found" });
+        }
         return { status: "deleted" };
-    },
+    }
 
-    register: async (request: FastifyRequest, reply: FastifyReply) => {
+    static async register(request: FastifyRequest, reply: FastifyReply) {
         // The one unauthenticated endpoint with a body, so its shape is checked first -- and
         // ahead of the token lookup, so a malformed request learns nothing from the status
         // code about whether the token it sent exists.
@@ -109,5 +114,5 @@ export const TokenController = {
             request.log.error({ err: e }, "Registration failed");
             return reply.code(500).send({ error: "Registration failed" });
         }
-    },
-};
+    }
+}

@@ -35,7 +35,7 @@ export class AuthController {
         return { success: true };
     }
 
-    static async getConfig(request: FastifyRequest, reply: FastifyReply) {
+    static async getConfig(_request: FastifyRequest, _reply: FastifyReply) {
         return AuthService.getAuthConfig();
     }
 
@@ -47,7 +47,7 @@ export class AuthController {
      * With the token in an httpOnly cookie it cannot, and the answer belongs to the server
      * that issued the session anyway.
      */
-    static async me(request: FastifyRequest, reply: FastifyReply) {
+    static async me(request: FastifyRequest, _reply: FastifyReply) {
         const { id, username, exp } = request.user;
         return {
             id,

@@ -201,7 +201,7 @@ export class Connection {
      */
     static handleIncoming(ws: WebSocket): void {
         if (this.wsInstance) {
-            try { this.wsInstance.close(4000, "Replaced by new connection"); } catch (_) {}
+            try { this.wsInstance.close(4000, "Replaced by new connection"); } catch { /* already closing */ }
             this.wsInstance = null;
         }
 
@@ -300,7 +300,7 @@ export class Connection {
 
         // Close any stale instance before retrying
         if (this.wsInstance) {
-            try { this.wsInstance.close(); } catch (_) {}
+            try { this.wsInstance.close(); } catch { /* already closing */ }
             this.wsInstance = null;
         }
 

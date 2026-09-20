@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { logger } from "@kasm/shared/node";
 import { DEFAULT_AGENT_PORT } from "@kasm/shared";
+import { config } from "./Config.js";
 
 /**
  * The PIN that guards `POST /api/register` on the agent's own web server.
@@ -62,7 +63,10 @@ function logPin(pin: string): void {
     const rule = "─".repeat(46);
     logger.info(rule);
     logger.info(`  Setup PIN:  ${pin}`);
-    logger.info(`  Web UI:     http://<this-host>:${webUiPort}/register`);
+    // The scheme follows what the web server was actually started with; an operator sent to
+    // http:// on a TLS agent would get a connection reset and no idea why.
+    const scheme = config.tls ? "https" : "http";
+    logger.info(`  Web UI:     ${scheme}://<this-host>:${webUiPort}/register`);
     logger.info("  The PIN is required to register this agent.");
     logger.info(rule);
 }

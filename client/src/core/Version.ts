@@ -43,7 +43,7 @@ export const getClientVersion = (): string => {
                 : "";
             return `${branch}-${hash}${dirty}`;
         }
-    } catch (e) {
+    } catch {
         return "unknown";
     }
 };

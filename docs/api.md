@@ -356,13 +356,13 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 
 `POST /api/v1/clients/outbound`
 
-**Description:** Adds a client that the **server** connects to (outbound mode), instead of the agent dialling in. The server opens `ws://<outboundTargetAddress>/ws/register`, hands over the registration secret together with a newly generated auth token and the client's server-issued `clientId` (stored by the agent in its `config.yaml`), and then opens the regular agent session on `/ws/agent`, presenting both halves of that identity in the query string — the agent refuses a caller that does not name the id it was registered under. The client is written to the database only after that session has authenticated.
+**Description:** Adds a client that the **server** connects to (outbound mode), instead of the agent dialling in. The server opens `<scheme>://<outboundTargetAddress>/ws/register` — `wss://` when the stored address carries that prefix, `ws://` otherwise — hands over the registration secret together with a newly generated auth token and the client's server-issued `clientId` (stored by the agent in its `config.yaml`), and then opens the regular agent session on `/ws/agent`, presenting both halves of that identity in the query string — the agent refuses a caller that does not name the id it was registered under. The client is written to the database only after that session has authenticated.
 
 #### Request Body
 
 | Field                   | Type   | Required | Description                                                          |
 | :---------------------- | :----- | :------- | :------------------------------------------------------------------- |
-| `outboundTargetAddress` | string | **Yes**  | `host` or `host:port` of the agent's web server. Without a port, `:3011` is appended. A scheme, path, query or credentials are refused — the value is interpolated into a `ws://` URL. |
+| `outboundTargetAddress` | string | **Yes**  | `host`, `host:port` or `wss://host:port` of the agent's web server. Without a port, `:3011` is appended. `wss://` dials the agent over TLS, which requires the agent to serve it (see [client.md](client.md)); a bare address, or one written `ws://`, is stored and dialled as plaintext. Any other scheme, and a path, query or credentials, are refused — the value is interpolated into a WebSocket URL. |
 | `registrationSecret`    | string | **Yes**  | Must match `registrationSecret` in the agent's `config.yaml`.        |
 | `hostname`              | string | No       | Name shown for the client. Defaults to `outboundTargetAddress`.      |
 
@@ -545,6 +545,8 @@ Both defaults are stored with the token and applied by `POST /api/v1/register`. 
 ```json
 { "status": "deleted" }
 ```
+
+A token that does not exist answers `404` with `{ "error": "Token not found" }`.
 
 ### Register Client (Public)
 

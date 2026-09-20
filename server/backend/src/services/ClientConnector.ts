@@ -1,7 +1,8 @@
 import WebSocket from "ws";
 import { randomUUID } from "crypto";
-import { WS_EVENTS, CONNECTION_MODE } from "@kasm/shared";
+import { WS_EVENTS, CONNECTION_MODE, agentBaseUrl, isTlsTarget } from "@kasm/shared";
 import { logger } from "@kasm/shared/node";
+import { appConfig } from "../config/AppConfig.js";
 import { ClientRepository, type ClientRow } from "../repositories/ClientRepository.js";
 import { WebSocketController } from "../controllers/WebSocketController.js";
 
@@ -56,6 +57,35 @@ export class ClientConnector {
     }
 
     /**
+     * One of the agent's WebSocket routes, and the options the socket is opened with.
+     *
+     * The scheme is not decided here: it comes out of the stored address, so a client the
+     * operator wrote as `wss://…` is dialled over TLS and every address stored before TLS
+     * existed keeps meaning exactly what it did. The certificate is checked unless the
+     * operator switched that off for the whole installation -- an agent on a home network
+     * usually carries a self-signed one, which is a decision about the installation rather
+     * than about this connection.
+     *
+     * The returned `url` carries no query. Callers that need one append it themselves and
+     * keep logging this one: the auth token goes in that query, and a log line travels
+     * further than this process.
+     */
+    private static agentSocket(
+        address: string,
+        path: string,
+    ): { url: string; options: WebSocket.ClientOptions } {
+        return {
+            url: `${agentBaseUrl(address)}${path}`,
+            options: isTlsTarget(address)
+                ? {
+                      rejectUnauthorized:
+                          !appConfig.security.allow_self_signed_agent_certificates,
+                  }
+                : {},
+        };
+    }
+
+    /**
      * A readable message for a socket error. A refused connection to a host name that
      * resolves to both IPv4 and IPv6 (e.g. localhost) arrives as an AggregateError whose
      * own message is empty — the details are in its `errors`.
@@ -105,7 +135,7 @@ export class ClientConnector {
         outboundTargetAddress: string,
         registrationSecret: string,
     ): Promise<{ authToken: string | null; error?: string }> {
-        const wsUrl = `ws://${outboundTargetAddress}/ws/register`;
+        const { url: wsUrl, options } = this.agentSocket(outboundTargetAddress, "/ws/register");
         logger.info({ url: wsUrl }, "ClientConnector: starting registration");
 
         return new Promise((resolve) => {
@@ -120,7 +150,7 @@ export class ClientConnector {
 
             let ws: WebSocket;
             try {
-                ws = new WebSocket(wsUrl);
+                ws = new WebSocket(wsUrl, options);
             } catch (err) {
                 logger.error({ err }, "ClientConnector: failed to create registration socket");
                 finish(
@@ -199,15 +229,16 @@ export class ClientConnector {
     ): Promise<boolean> {
         // The id goes on the wire next to the token: the agent checks the pair and refuses
         // a server that dials it under someone else's identity.
-        const wsUrl = `ws://${outboundTargetAddress}/ws/agent?clientId=${encodeURIComponent(
+        const { url, options } = this.agentSocket(outboundTargetAddress, "/ws/agent");
+        const wsUrl = `${url}?clientId=${encodeURIComponent(
             id,
         )}&token=${encodeURIComponent(authToken)}`;
-        logger.info({ clientId: id, url: `ws://${outboundTargetAddress}/ws/agent` }, "ClientConnector: connecting");
+        logger.info({ clientId: id, url }, "ClientConnector: connecting");
 
         return new Promise((resolve) => {
             let ws: WebSocket;
             try {
-                ws = new WebSocket(wsUrl);
+                ws = new WebSocket(wsUrl, options);
             } catch (err) {
                 logger.error({ err, clientId: id }, "ClientConnector: failed to create socket");
                 resolve(false);
@@ -302,15 +333,16 @@ export class ClientConnector {
 
         // Same pair as in connectWithToken: the agent refuses a caller that does not name
         // the id it was registered under, so the id has to go on the wire here too.
-        const wsUrl = `ws://${client.outbound_target_address}/ws/agent?clientId=${encodeURIComponent(
+        const { url, options } = this.agentSocket(client.outbound_target_address, "/ws/agent");
+        const wsUrl = `${url}?clientId=${encodeURIComponent(
             client.id,
         )}&token=${encodeURIComponent(client.auth_token)}`;
-        logger.info({ clientId: client.id, url: `ws://${client.outbound_target_address}/ws/agent` }, "ClientConnector: connecting");
+        logger.info({ clientId: client.id, url }, "ClientConnector: connecting");
 
         return new Promise((resolve) => {
             let ws: WebSocket;
             try {
-                ws = new WebSocket(wsUrl);
+                ws = new WebSocket(wsUrl, options);
             } catch (err) {
                 logger.error({ err, clientId: client.id }, "ClientConnector: failed to create socket");
                 this.scheduleReconnect(client.id);

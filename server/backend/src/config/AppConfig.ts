@@ -7,6 +7,7 @@ import { logger } from "@kasm/shared/node";
 import {
     AppConfigSchema,
     AppSettingsSchema,
+    DEFAULT_SERVER_PORT,
     firstIssue,
     type AppConfigParsed,
 } from "@kasm/shared";
@@ -74,7 +75,7 @@ function syncDoc() {
         configDoc.contents = configDoc.createNode({});
     }
 
-    const updateRecursive = (path: string[], value: any) => {
+    const updateRecursive = (path: string[], value: unknown) => {
         if (
             value !== null &&
             typeof value === "object" &&
@@ -163,6 +164,32 @@ export const appConfig: AppConfig = validateConfig();
 if (!process.env.LOG_LEVEL && appConfig.logLevel) {
     logger.level = appConfig.logLevel;
 }
+
+/**
+ * Reads the listen port from config.yaml or KASM_SERVER_PORT. The environment wins, so a
+ * container needs one variable rather than a mounted config file just to move the port.
+ * The agent reads its own port exactly this way (see resolveListenPort in client/src/core).
+ *
+ * A value that is not a port is refused rather than silently replaced by the default: a
+ * server listening somewhere other than where its operator put it takes every agent with
+ * it. Node reads port 0 as "any free port", which is never what this setting means.
+ */
+function resolveServerPort(): number {
+    const raw = process.env.KASM_SERVER_PORT ?? appConfig.port;
+    if (raw === undefined || raw === null || raw === "") return DEFAULT_SERVER_PORT;
+
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        logger.fatal(
+            { value: raw },
+            "Invalid listen port -- expected an integer between 1 and 65535",
+        );
+        process.exit(1);
+    }
+    return port;
+}
+
+export const serverPort: number = resolveServerPort();
 
 export function updateConfig(updates: Partial<AppConfig>) {
     Object.assign(appConfig, updates);

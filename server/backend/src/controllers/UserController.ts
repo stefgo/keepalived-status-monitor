@@ -4,7 +4,7 @@ import { CreateUserSchema, UpdateUserSchema, firstIssue } from "@kasm/shared";
 import { UserRepository } from "../repositories/UserRepository.js";
 
 export class UserController {
-    static async list(request: FastifyRequest, reply: FastifyReply) {
+    static async list(_request: FastifyRequest, _reply: FastifyReply) {
         return UserRepository.findAll();
     }
 

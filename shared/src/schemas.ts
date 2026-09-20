@@ -5,6 +5,7 @@ import {
     CLIENT_STATUS,
     CONNECTION_MODE,
     VRRP_STATES,
+    WS_EVENTS,
 } from "./constants.js";
 import { normaliseTargetAddress } from "./targetAddress.js";
 
@@ -81,7 +82,12 @@ export const AgentKeepalivedConfigSchema = z
 export const ClientSchema = z.object({
     id: z.uuid(),
     hostname: z.string(),
-    displayName: z.string().optional(),
+    /**
+     * Nullish, not optional: `display_name`, `version` and `last_seen` are nullable columns,
+     * and the server hands their value through as it reads it. A client that has never
+     * connected carries `lastSeen: null`.
+     */
+    displayName: z.string().nullish(),
     /**
      * The network segment or location the operator put this client in. Part of the VRRP
      * cluster key: a VRID is unique only per segment, so hosts at two sites may use the same
@@ -89,8 +95,8 @@ export const ClientSchema = z.object({
      */
     site: z.string().nullish(),
     status: z.enum(CLIENT_STATUS),
-    lastSeen: z.string(),
-    version: z.string().optional(),
+    lastSeen: z.string().nullish(),
+    version: z.string().nullish(),
     connectionMode: z.enum(CONNECTION_MODE).optional(),
     /**
      * Inbound clients only: the address or network their connections must come from, or
@@ -107,7 +113,7 @@ export const ClientSchema = z.object({
      * server observes this, the operator does not set it.
      */
     inboundLastIp: z.string().nullish(),
-    outboundTargetAddress: z.string().optional(),
+    outboundTargetAddress: z.string().nullish(),
     /**
      * What the agent on the wire right now says it can do, as it named it in its AUTH
      * payload. `null` while the client is offline: capabilities describe the build that is
@@ -268,10 +274,6 @@ const WholeNumberSettingSchema = z
     ])
     .transform(String);
 
-const BooleanSettingSchema = z
-    .union([z.enum(["true", "false"]), z.boolean()])
-    .transform(String);
-
 /**
  * `PUT /api/v1/settings/cleanup`.
  *
@@ -369,6 +371,17 @@ export const SecurityConfigSchema = z
         allowed_networks: z.array(Ipv4OrCidrSchema).default([]),
         /** Send Strict-Transport-Security. Off unless set -- see config.example.yaml. */
         hsts: z.boolean().default(false),
+        /**
+         * Whether an outbound agent dialled over `wss://` may present a certificate this
+         * server cannot verify. Off by default, so a wrong or expired certificate is a
+         * failed connection rather than a silent one.
+         *
+         * It exists because an agent on a home network usually carries a self-signed
+         * certificate, and the alternative -- running a CA for a handful of hosts -- is
+         * more than that situation warrants. Mirrors `allowSelfSignedCertificates` on the
+         * agent, which is the same decision for the other direction of the same link.
+         */
+        allow_self_signed_agent_certificates: z.boolean().default(false),
     })
     .prefault({});
 
@@ -390,6 +403,11 @@ export const AppConfigSchema = z.looseObject({
     logLevel: z
         .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
         .optional(),
+    /**
+     * Optional like `logLevel`, and for the same reason: left out it stays DEFAULT_SERVER_PORT,
+     * and nothing writes the number into a file the operator never put it in.
+     */
+    port: z.number().int().min(1).max(65535).optional(),
     oidc: blockOrMissing(OidcConfigSchema.optional()),
     settings: blockOrMissing(AppSettingsSchema),
     security: blockOrMissing(SecurityConfigSchema),
@@ -463,6 +481,15 @@ export const KeepalivedStatusSchema = z.looseObject({
     syncGroups: z.array(VrrpSyncGroupSchema).default([]),
 });
 
+/**
+ * `KEEPALIVED_STATE_UPDATE`: a client's last reading together with when the server received
+ * it.
+ */
+export const KeepalivedStateSchema = KeepalivedStatusSchema.extend({
+    clientId: z.string().min(1),
+    receivedAt: z.string().min(1),
+});
+
 // ── Activity ─────────────────────────────────────────────────────────────────
 
 /**
@@ -532,3 +559,47 @@ export const ActivityBatchEnvelopeSchema = z.object({
 export const ActivityAckSchema = z.object({
     ids: z.array(z.string().min(1)),
 });
+
+/**
+ * An event as the server holds it.
+ *
+ * The two timestamps are the point. After an offline stretch an event from 03:00 arrives at
+ * 08:00: the list is ordered by `occurredAt`, because that is when it happened, while "new
+ * to me" rests on `seenBy`, so a late arrival cannot slip in below the entries a user has
+ * already worked through. Their difference also exposes an agent whose clock is wrong.
+ */
+export const ActivityRecordSchema = ActivityEventSchema.extend({
+    receivedAt: z.string().min(1),
+    /**
+     * Ids of the users who have seen the event. Numbers: they come from the JWT, which
+     * carries `users.id` as the INTEGER it is.
+     */
+    seenBy: z.array(z.number().int()),
+});
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+/**
+ * What the server pushes to a dashboard session. The agent side of the protocol is parsed
+ * on arrival; this is the same guarantee for the browser side, so a payload that does not
+ * match is dropped instead of reaching a store.
+ *
+ * A union over `type` rather than three separate parses: the dashboard sees one stream, and
+ * a message of an unknown type has to fail here, not somewhere downstream. The server is
+ * trusted, so this is a guard against version drift between the two halves, not against an
+ * attacker.
+ */
+export const DashboardMessageSchema = z.discriminatedUnion("type", [
+    z.object({
+        type: z.literal(WS_EVENTS.CLIENTS_UPDATE),
+        payload: z.array(ClientSchema),
+    }),
+    z.object({
+        type: z.literal(WS_EVENTS.KEEPALIVED_STATE_UPDATE),
+        payload: KeepalivedStateSchema,
+    }),
+    z.object({
+        type: z.literal(WS_EVENTS.ACTIVITY_UPDATE),
+        payload: z.array(ActivityRecordSchema),
+    }),
+]);

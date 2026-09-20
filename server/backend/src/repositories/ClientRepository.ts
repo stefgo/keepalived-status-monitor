@@ -171,9 +171,19 @@ export class ClientRepository {
         ).run(now, now, version, lastIp, id);
     }
 
+    /**
+     * Called when a connection closes, so now is the last moment the agent was seen.
+     * Without `last_seen` the field would keep the time the agent connected, and a client
+     * that held the connection for a month would read "last seen 30 days ago" the second
+     * it drops -- the one moment the field is actually looked at.
+     */
     static updateLastSeen(id: string): void {
         const now = new Date().toISOString();
-        db.prepare("UPDATE clients SET updated_at=? WHERE id = ?").run(now, id);
+        db.prepare("UPDATE clients SET last_seen=?, updated_at=? WHERE id = ?").run(
+            now,
+            now,
+            id,
+        );
     }
 
     static delete(id: string): { changes: number } {

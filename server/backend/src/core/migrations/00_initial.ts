@@ -1,3 +1,5 @@
+import type { MigrationContext } from "./context.js";
+
 /**
  * The schema kasm starts from. It is where docker-instance-manager's migrations 00-16 had
  * brought users, clients, registration tokens and the activity log, without the Docker
@@ -7,7 +9,7 @@
  * out instead of read from CONNECTION_MODE.
  */
 export const migration00 = {
-    up: async ({ context: db }: { context: any }) => {
+    up: async ({ context: db }: MigrationContext) => {
         db.exec(`
           CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +62,7 @@ export const migration00 = {
           CREATE INDEX IF NOT EXISTS activity_occurred ON activity (occurred_at DESC);
         `);
     },
-    down: async ({ context: db }: { context: any }) => {
+    down: async ({ context: db }: MigrationContext) => {
         db.exec(`
           DROP TABLE IF EXISTS activity;
           DROP TABLE IF EXISTS registration_tokens;
