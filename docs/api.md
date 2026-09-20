@@ -546,6 +546,8 @@ Both defaults are stored with the token and applied by `POST /api/v1/register`. 
 { "status": "deleted" }
 ```
 
+A token that does not exist answers `404` with `{ "error": "Token not found" }`.
+
 ### Register Client (Public)
 
 `POST /api/v1/register`

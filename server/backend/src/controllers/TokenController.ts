@@ -47,9 +47,14 @@ export const TokenController = {
         return { token, expiresAt, displayName, inboundAllowedIp };
     },
 
-    delete: async (request: FastifyRequest, _reply: FastifyReply) => {
+    delete: async (request: FastifyRequest, reply: FastifyReply) => {
         const { token } = request.params as { token: string };
-        TokenRepository.delete(token);
+        // A token that was not there is a 404, like every other delete: reporting "deleted"
+        // for a token nobody holds hides a typo in the path as a success.
+        const { changes } = TokenRepository.delete(token);
+        if (changes === 0) {
+            return reply.code(404).send({ error: "Token not found" });
+        }
         return { status: "deleted" };
     },
 
