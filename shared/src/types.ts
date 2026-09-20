@@ -21,10 +21,13 @@ import {
     UpdateClientSchema,
     CleanupSettingsSchema,
     KeepalivedStatusSchema,
+    KeepalivedStateSchema,
     VrrpInstanceSchema,
     VrrpSyncGroupSchema,
     ActivityEventSchema,
+    ActivityRecordSchema,
     ActivitySubjectSchema,
+    DashboardMessageSchema,
 } from "./schemas.js";
 
 export type RegistrationPayload = z.infer<typeof RegistrationPayloadSchema>;
@@ -93,10 +96,7 @@ export type VrrpSyncGroup = z.infer<typeof VrrpSyncGroupSchema>;
 export type KeepalivedStatus = z.infer<typeof KeepalivedStatusSchema>;
 
 /** A client's last reading together with when the server received it. */
-export interface KeepalivedState extends KeepalivedStatus {
-    clientId: string;
-    receivedAt: string;
-}
+export type KeepalivedState = z.infer<typeof KeepalivedStateSchema>;
 
 /** One host's part in a VRRP cluster. */
 export interface VrrpClusterMember {
@@ -172,19 +172,10 @@ export type ActivitySubject = z.infer<typeof ActivitySubjectSchema>;
  */
 export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 
-/**
- * An event as the server holds it.
- *
- * The two timestamps are the point. After an offline stretch an event from 03:00 arrives at
- * 08:00: the list is ordered by `occurredAt`, because that is when it happened, while "new
- * to me" rests on `seenBy`, so a late arrival cannot slip in below the entries a user has
- * already worked through. Their difference also exposes an agent whose clock is wrong.
- */
-export interface ActivityRecord extends ActivityEvent {
-    receivedAt: string;
-    /**
-     * Ids of the users who have seen the event. Numbers: they come from the JWT, which
-     * carries `users.id` as the INTEGER it is.
-     */
-    seenBy: number[];
-}
+/** An event as the server holds it. See `ActivityRecordSchema` for what the two times mean. */
+export type ActivityRecord = z.infer<typeof ActivityRecordSchema>;
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+/** One message of the server-to-dashboard stream, as `DashboardMessageSchema` parses it. */
+export type DashboardMessage = z.infer<typeof DashboardMessageSchema>;

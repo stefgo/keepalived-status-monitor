@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, ReactNode } from "react";
+import { DashboardMessageSchema, WS_EVENTS } from "@kasm/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
 import { useClientStore } from "../../../stores/useClientStore";
@@ -47,22 +48,34 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
             };
 
             socket.onmessage = (event) => {
+                let data: unknown;
                 try {
-                    const data = JSON.parse(event.data);
-
-                    if (data.type === "CLIENTS_UPDATE") {
-                        setClients(data.payload);
-                    }
-
-                    if (data.type === "KEEPALIVED_STATE_UPDATE") {
-                        setKeepalivedState(data.payload);
-                    }
-
-                    if (data.type === "ACTIVITY_UPDATE") {
-                        setEvents(data.payload);
-                    }
+                    data = JSON.parse(event.data);
                 } catch (e) {
                     console.error("Failed to parse WS message", e);
+                    return;
+                }
+
+                // The same guarantee the agent side of the protocol has had all along: a
+                // payload that does not match what `shared` says the message carries is
+                // dropped here instead of reaching a store, where a missing field would
+                // only show up as a broken render somewhere else entirely.
+                const message = DashboardMessageSchema.safeParse(data);
+                if (!message.success) {
+                    console.warn("Discarded WS message", message.error.issues);
+                    return;
+                }
+
+                switch (message.data.type) {
+                    case WS_EVENTS.CLIENTS_UPDATE:
+                        setClients(message.data.payload);
+                        break;
+                    case WS_EVENTS.KEEPALIVED_STATE_UPDATE:
+                        setKeepalivedState(message.data.payload);
+                        break;
+                    case WS_EVENTS.ACTIVITY_UPDATE:
+                        setEvents(message.data.payload);
+                        break;
                 }
             };
 

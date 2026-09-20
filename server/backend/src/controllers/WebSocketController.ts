@@ -68,7 +68,7 @@ export class WebSocketController {
         // Send initial state
         const clients = ProxyService.getClientsWithStatus();
         socket.send(
-            JSON.stringify({ type: "CLIENTS_UPDATE", payload: clients }),
+            JSON.stringify({ type: WS_EVENTS.CLIENTS_UPDATE, payload: clients }),
         );
 
         // The last keepalived reading of every known client, offline ones included: what a
