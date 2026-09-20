@@ -21,6 +21,7 @@ server/backend/src/
 │   ├── WebSocketController.ts
 │   └── websocket/
 │       ├── AgentMessageRouter.ts          # Dispatch table for messages from authenticated agents
+│       ├── AgentSession.ts                # The AUTH handshake and connection lifecycle, both directions
 │       └── Heartbeat.ts                   # Shared ping/pong heartbeat for all WebSocket kinds
 ├── core/                                  # Core infrastructure
 │   ├── Database.ts                        # SQLite initialization & migration runner
@@ -197,10 +198,22 @@ dashboard, inbound agent, outbound agent — use `attachHeartbeat(socket, onTime
 every 30 seconds, `terminate()` when the previous pong never arrived. It registers its own
 `close` handler, so a socket closed during authentication cannot leave the interval running.
 
+**Agent session (`src/controllers/websocket/AgentSession.ts`):** `attachAgentSession()` runs
+an agent connection from the `AUTH` handshake to the close, and both connection kinds go
+through it. Each used to carry its own copy: the same timeout, the same Zod check, the same
+register/record/broadcast sequence and the same close block. That copy spanned the point
+where a client is marked online, so a difference between the two would have shown up as a
+host that is connected on one route and not on the other. What genuinely differs is a
+parameter — `ip` is stored and recorded inbound but `null` and omitted outbound,
+`onAuthenticated` is the hook the outbound path creates a new client from, and
+`onAuthFailed` carries the reason, so the inbound route still answers `AUTH_FAILURE` only
+for a first message that is not `AUTH`. The heartbeat stays outside: the inbound route
+attaches it before its credential checks, so a rejected connection loses its ping timer too.
+
 **Agent WebSocket (`/ws/agent`):**
 - Authentication: id + token resolved as a pair (`findByIdAndToken`; either half missing is `4001`) → `security.allowed_networks` → outbound clients refused → per-client allowed address (skipped when switched off) → 5-second AUTH handshake.
 - On success: updates `last_seen`, `version` and (inbound only) `inbound_last_ip` in the database; registers in `ProxyService` with the declared capabilities; answers `AUTH_SUCCESS`; broadcasts `CLIENTS_UPDATE` to all dashboards. The agent then pushes a fresh `KEEPALIVED_UPDATE` of its own.
-- Outbound agents go through `handleOutboundAgentConnection`, which runs the same handshake over the socket `ClientConnector` opened; there the first `AUTH` also persists a newly added client.
+- Outbound agents enter through `handleOutboundAgentConnection` over the socket `ClientConnector` opened, and from the handshake on run the same session as an inbound one. That path adds two things of its own: the first `AUTH` persists a newly added client, and a close schedules the reconnect.
 - Incoming messages go through `routeAgentMessage()` (see below): `KEEPALIVED_UPDATE` → `KeepalivedStateService.handleUpdate()` (validate, persist, rebroadcast), `ACTIVITY` → `ActivityService.handleBatch()` (store, broadcast, `ACTIVITY_ACK`).
 - Connecting, disconnecting and registering are recorded as `client.connected`, `client.disconnected` and `client.registered`. They are the events only the server can observe — an agent cannot report that it is unreachable.
 - `client.connected` and `client.disconnected` are recorded at level `trace`, because they happen routinely. Both carry `clientName` in `data` — the display name, else the hostname — so the line names its host even after the host has been renamed or removed.
