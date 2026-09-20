@@ -268,10 +268,6 @@ const WholeNumberSettingSchema = z
     ])
     .transform(String);
 
-const BooleanSettingSchema = z
-    .union([z.enum(["true", "false"]), z.boolean()])
-    .transform(String);
-
 /**
  * `PUT /api/v1/settings/cleanup`.
  *

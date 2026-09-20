@@ -52,7 +52,7 @@ export type CleanupSettings = z.infer<typeof CleanupSettingsSchema>;
 // WS Payloads
 export type AuthPayload = z.infer<typeof AuthPayloadSchema>;
 
-export interface WsMessage<T = any> {
+export interface WsMessage<T = unknown> {
     type: string;
     payload: T;
 }

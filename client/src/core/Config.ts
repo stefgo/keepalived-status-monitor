@@ -79,6 +79,26 @@ export interface AgentTlsConfig {
     key: string;
 }
 
+/**
+ * config.yaml as it comes off the parser: everything optional, because the file is written
+ * by hand. The fields a resolver or a schema validates below stay `unknown` -- naming a type
+ * for them here would claim a check that happens further down.
+ */
+type LoadedConfig = {
+    clientId?: unknown;
+    authToken?: string;
+    registrationSecret?: string;
+    serverUrl?: string;
+    logLevel?: string;
+    keepalived?: unknown;
+    enableStatusPage?: boolean;
+    enableRegisterPage?: boolean;
+    allowedNetworks?: unknown;
+    listenPort?: unknown;
+    tls?: unknown;
+    allowSelfSignedCertificates?: unknown;
+};
+
 // Global Document state to preserve comments
 let configDoc: YAML.Document = new YAML.Document({});
 
@@ -226,7 +246,7 @@ function applyServerUrl(url: string): void {
             urlObj.pathname = path.join(urlObj.pathname, "ws/agent");
         }
         config.websocketURL = urlObj.toString();
-    } catch (e) {
+    } catch {
         logger.error("Failed to parse server URL for websocket: " + url);
     }
 }
@@ -268,7 +288,7 @@ if (fs.existsSync(CONFIG_PATH)) {
     try {
         const fileContent = fs.readFileSync(CONFIG_PATH, "utf-8");
         configDoc = YAML.parseDocument(fileContent);
-        const loadedConfig = configDoc.toJS() as any;
+        const loadedConfig = (configDoc.toJS() ?? {}) as LoadedConfig;
 
         // No id is generated when the file has none: it is issued by the server on
         // registration (see persistIdentity).

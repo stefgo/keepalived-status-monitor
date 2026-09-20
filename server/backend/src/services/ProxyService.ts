@@ -119,7 +119,7 @@ export class ProxyService {
         }
     }
 
-    static broadcastToDashboard(message: any) {
+    static broadcastToDashboard(message: unknown) {
         const msgStr =
             typeof message === "string" ? message : JSON.stringify(message);
         // Multicast message to all connected dashboard sessions
@@ -134,7 +134,7 @@ export class ProxyService {
      * Sends a one-way message to a client agent without waiting for a response, such as the
      * request to read keepalived now.
      */
-    static sendFireAndForget(clientId: string, type: string, payload: any) {
+    static sendFireAndForget(clientId: string, type: string, payload: unknown) {
         const socket = this.connectedClients.get(clientId);
         if (!socket) throw new Error("Client not connected");
         socket.send(JSON.stringify({ type, payload }));

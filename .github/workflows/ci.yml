@@ -107,3 +107,8 @@ jobs:
 
             - name: Lint frontend
               run: npm run lint -w server/frontend
+
+            # The root config, which covers shared, client and server/backend -- the
+            # frontend is excluded there and linted by the step above with its own config.
+            - name: Lint backend, client and shared
+              run: npm run lint

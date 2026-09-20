@@ -151,7 +151,7 @@ export default async function apiRoutes(fastify: FastifyInstance) {
             // merged: this one checks nothing on purpose, because a server with a broken
             // database is still reachable, and "no server here" would send the operator to
             // fix the wrong thing.
-            v1.get("/ping", async (request, reply) => {
+            v1.get("/ping", async () => {
                 return { status: "ok" };
             });
         },
