@@ -185,10 +185,11 @@
 
                     loadingContainer.style.display = "none";
 
-                    const { hasRegistrationSecret, hasAuthToken, hasServerUrl } = configData;
+                    const { hasRegistrationSecret, hasAuthToken, hasServerUrl, registerPage } = configData;
 
-                    // Redirect to register page if nothing is configured
-                    if (!hasRegistrationSecret && !hasAuthToken && !hasServerUrl) {
+                    // Nothing set up yet: the register page is the likelier next step. Without
+                    // it the agent waits for the server, which this page shows below.
+                    if (registerPage && !hasRegistrationSecret && !hasAuthToken && !hasServerUrl) {
                         window.location.href = "/register";
                         return;
                     }
@@ -210,10 +211,10 @@
                     }
 
                     if (hasRegistrationSecret) {
-                        secretText.textContent = "Configured";
+                        secretText.textContent = "Set (environment)";
                         setValueColor(secretText, true);
                     } else {
-                        secretText.textContent = "Not configured";
+                        secretText.textContent = "Not set — setup PIN in the agent log";
                         setValueColor(secretText, false);
                     }
 
@@ -222,7 +223,9 @@
                     // opens -- so from here they read back to front. The label spells the
                     // direction out rather than leaving the operator to work it out.
                     const inboundComplete = hasServerUrl;
-                    const outboundComplete = !hasServerUrl && (hasRegistrationSecret || hasAuthToken);
+                    // Without a server URL the server dials in -- a secret is optional, the
+                    // setup PIN from the log registers the agent just as well.
+                    const outboundComplete = !hasServerUrl;
                     const configOk = inboundComplete || outboundComplete;
 
                     setIconState(
@@ -241,6 +244,10 @@
                         document.getElementById("secret-row").style.display = "none";
                     } else if (outboundComplete) {
                         document.getElementById("server-url-row").style.display = "none";
+                        // Registered and no secret left: the PIN hint would point at nothing.
+                        if (hasAuthToken && !hasRegistrationSecret) {
+                            document.getElementById("secret-row").style.display = "none";
+                        }
                     }
 
                     // Config box icon
@@ -258,8 +265,9 @@
                         setIconState(authIcon, authText, hasAuthToken,
                             hasAuthToken ? "Authentication Token exists" : "No Token. Register first.");
                     } else if (hasAuthToken && hasRegistrationSecret) {
-                        // Outbound: already registered but secret still present — warn
-                        setWarningState(authIcon, authText, "Client already registered");
+                        // Outbound: registered, but KASM_REGISTRATION_SECRET is still set — warn
+                        setWarningState(authIcon, authText,
+                            "Registered — remove KASM_REGISTRATION_SECRET from the environment");
                     } else {
                         // Outbound: token comes from server-initiated registration
                         setIconState(authIcon, authText, hasAuthToken,

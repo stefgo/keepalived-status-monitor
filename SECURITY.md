@@ -47,7 +47,7 @@ most:
   server or the dashboard is a defect.
 - **Agent registration** — `POST /api/register` on the agent requires the setup PIN printed
   to its log, the server issues the client ID and a registration token, and a server-initiated
-  registration uses `registrationSecret`. `allowedNetworks` on the agent and
+  registration on `/ws/register` requires the same PIN or the agent's `KASM_REGISTRATION_SECRET`. `allowedNetworks` on the agent and
   `security.allowed_networks` on the server restrict who may connect.
 - **Agent authentication** — an agent authenticates on `/ws/agent` with the `authToken` it
   received at registration.

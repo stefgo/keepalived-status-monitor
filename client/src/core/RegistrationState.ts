@@ -1,14 +1,15 @@
 import path from "path";
 import { logger } from "@kasm/shared/node";
-import { config } from "./Config.js";
-import { clearValue, setValue, save } from "./ConfigFile.js";
+import { REGISTRATION_SECRET, config } from "./Config.js";
+import { setValue, save } from "./ConfigFile.js";
 import { getIdentity } from "./Identity.js";
 
 /**
  * Which way the link to the server runs, named from the server's side.
  *
  * - `unregistered` -- no identity yet; the agent is waiting to be registered, through its own
- *   web UI or, with a registration secret set, by the server dialling `/ws/register`.
+ *   web UI or by the server dialling `/ws/register` -- with the setup PIN either way, or with
+ *   `KASM_REGISTRATION_SECRET` on `/ws/register`.
  * - `inbound` -- the agent dials the server and owns the reconnect ladder.
  * - `outbound` -- the server dials the agent, which is what an identity without a server URL
  *   means.
@@ -16,15 +17,16 @@ import { getIdentity } from "./Identity.js";
 export type AgentMode = "unregistered" | "inbound" | "outbound";
 
 /**
- * The two values registration changes, and the only ones the agent writes back into the
- * operator's config.yaml.
+ * The two values registration changes. Only the server URL is written back into the
+ * operator's config.yaml; the registration secret comes from the environment and is only
+ * dropped from memory once it has been used.
  *
- * They start as what the file said and are kept here rather than in `config`, which is
- * frozen: `config` is what the operator wrote, this is what is true now. The identity is not
- * among them -- it never belonged in that file (see Identity.ts).
+ * They are kept here rather than in `config`, which is frozen: `config` is what the operator
+ * wrote, this is what is true now. The identity is not among them -- it never belonged in
+ * that file (see Identity.ts).
  */
 let serverUrl: string | null = config.serverUrl?.trim() || null;
-let registrationSecret: string | null = config.registrationSecret ?? null;
+let registrationSecret: string | null = REGISTRATION_SECRET;
 
 export function getServerUrl(): string | null {
     return serverUrl;
@@ -75,13 +77,16 @@ export function getRegistrationSecret(): string | null {
 }
 
 /**
- * Drops the registration secret once it has been used. The key stays in config.yaml with its
- * comments and an empty value: it documents a setting the operator may want again.
+ * Drops the registration secret once it has been used. Only from memory: the environment it
+ * came from is not this process's to change, so the operator is told to remove it. It would do
+ * no harm meanwhile -- `/ws/register` refuses every caller once the agent has an identity.
  */
-export function consumeRegistrationSecret(): boolean {
+export function consumeRegistrationSecret(): void {
+    if (!registrationSecret) return;
     registrationSecret = null;
-    clearValue("registrationSecret");
-    return save();
+    logger.info(
+        "Registration secret used -- remove KASM_REGISTRATION_SECRET(_FILE) from this agent's environment",
+    );
 }
 
 export function getAgentMode(): AgentMode {

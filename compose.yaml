@@ -55,7 +55,7 @@ services:
         #   client-config.yaml only if the file belongs to root (`sudo chown root:
         #   client-config.yaml`). What that costs is small: the identity from registration
         #   goes to the data volume below, and this file is written only to store the
-        #   serverUrl of a web-UI registration or to clear a used registrationSecret.
+        #   serverUrl of a web-UI registration.
         # - no-new-privileges stops setuid binaries from raising privileges again.
         # - read_only: the agent writes config.yaml and its data volume, nothing else.
         network_mode: host
@@ -91,6 +91,12 @@ services:
             # token its notify script presents. Both unset by default.
             # - KASM_NOTIFY_FIFO=/run/kasm-notify.fifo
             # - KASM_NOTIFY_TOKEN=<contents of /etc/keepalived/kasm-notify.token>
+            # Outbound registration takes the setup PIN from `docker logs kasm-client`. For an
+            # unattended rollout give the agent a secret the Add Client wizard accepts instead
+            # (with the two `secrets:` blocks below). Remove it once the agent is registered.
+            # - KASM_REGISTRATION_SECRET_FILE=/run/secrets/kasm_registration
+        # secrets:
+        #     - kasm_registration
         # Reports on the agent, not on its server connection or on keepalived: an agent that
         # cannot reach the server, or reports keepalived as stopped, is still healthy. The route
         # is served whatever config.yaml disables, and answers loopback only -- the probe runs
@@ -106,3 +112,7 @@ services:
 volumes:
     server-data:
     client-data:
+
+# secrets:
+#     kasm_registration:
+#         file: ./kasm-registration.secret

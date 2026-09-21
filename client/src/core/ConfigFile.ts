@@ -70,20 +70,6 @@ export function setValue(key: string, value: string): void {
 }
 
 /**
- * Empties a value but keeps its key and the comments above it -- `registrationSecret:` with
- * nothing behind it. The key documents a setting the operator may want again, so it stays in
- * the file rather than disappearing once it has been used.
- */
-export function clearValue(key: string): void {
-    load();
-    if (!doc.has(key)) return;
-    const emptyScalar = new YAML.Scalar(null);
-    emptyScalar.type = "PLAIN";
-    emptyScalar.source = "";
-    doc.set(key, emptyScalar);
-}
-
-/**
  * Everything in a comment block except its last paragraph, or null when there is only one.
  *
  * The yaml library hangs every comment line preceding a key on that key, which makes the

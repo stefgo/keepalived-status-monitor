@@ -2,23 +2,28 @@ import crypto from "crypto";
 import { logger } from "@kasm/shared/node";
 import { DEFAULT_AGENT_PORT } from "@kasm/shared";
 import { config } from "./Config.js";
+import { getIdentity } from "./Identity.js";
 
 /**
- * The PIN that guards `POST /api/register` on the agent's own web server.
+ * The PIN that guards registration -- `POST /api/register` on the agent's own web server,
+ * where the agent is pointed at a server (inbound), and `/ws/register`, where a server
+ * dials in and hands the agent its identity (outbound).
  *
- * That endpoint decides which server this agent trusts from then on, and the caller supplies
- * both halves of it — server URL and registration token. It listens on every interface, and
- * whoever points the agent at a server of their choosing receives what it reports about this
- * host and can make it signal keepalived. Before this PIN, anyone who could reach the agent's
- * web port could do that, whether the agent was registered yet or not.
+ * Both decide which server this agent trusts from then on. They listen on every interface,
+ * and whoever registers the agent receives what it reports about this host and can make it
+ * signal keepalived. Before this PIN, anyone who could reach the agent's web port could do
+ * that through the register page, and outbound registration needed a secret the operator had
+ * to write into config.yaml first.
  *
  * So the check is a shared secret that is printed to the agent's log, where only someone who
- * can already read the machine's logs (`docker logs kasm-client`) can see it.
+ * can already read the machine's logs (`docker logs kasm-client`) can see it. An agent given
+ * `KASM_REGISTRATION_SECRET` for an unattended rollout accepts that on `/ws/register` as well.
  *
  * Unlike in an agent that can be registered only once, re-registering is a feature here (the
- * status page offers it), so the PIN exists whenever the register page is enabled — not only
- * while the agent has no token. It is rotated after every successful registration, which makes
- * each PIN single use without requiring a restart for the next one.
+ * status page offers it), so the PIN exists whenever the register page is enabled -- not only
+ * while the agent has no token. Without the page it exists only while the agent waits for an
+ * outbound registration and has no secret. It is rotated after every successful registration,
+ * which makes each PIN single use without requiring a restart for the next one.
  *
  * Deliberately never persisted to config.yaml: it is regenerated on every start, and what is
  * never written never has to be cleaned up.
@@ -38,6 +43,16 @@ const MAX_ATTEMPTS = 5;
 let currentPin: string | null = null;
 let failedAttempts = 0;
 let webUiPort = DEFAULT_AGENT_PORT;
+
+/** Where the PIN can be used, so the log names only the ways that are open. */
+export interface SetupPinUses {
+    /** The register page is served. */
+    registerPage: boolean;
+    /** The agent serves `/ws/register`; named in the log only while it is unregistered. */
+    outbound: boolean;
+}
+
+let uses: SetupPinUses = { registerPage: true, outbound: false };
 
 function generate(): string {
     const groups: string[] = [];
@@ -63,17 +78,23 @@ function logPin(pin: string): void {
     const rule = "─".repeat(46);
     logger.info(rule);
     logger.info(`  Setup PIN:  ${pin}`);
-    // The scheme follows what the web server was actually started with; an operator sent to
-    // http:// on a TLS agent would get a connection reset and no idea why.
-    const scheme = config.tls ? "https" : "http";
-    logger.info(`  Web UI:     ${scheme}://<this-host>:${webUiPort}/register`);
+    if (uses.registerPage) {
+        // The scheme follows what the web server was actually started with; an operator sent
+        // to http:// on a TLS agent would get a connection reset and no idea why.
+        const scheme = config.tls ? "https" : "http";
+        logger.info(`  Web UI:     ${scheme}://<this-host>:${webUiPort}/register`);
+    }
+    if (uses.outbound && !getIdentity()) {
+        logger.info("  Outbound:   enter it in the server's Add Client wizard");
+    }
     logger.info("  The PIN is required to register this agent.");
     logger.info(rule);
 }
 
 /** Creates the PIN for this process and logs it. Called once the web server listens. */
-export function initSetupPin(port: number): void {
+export function initSetupPin(port: number, pinUses: SetupPinUses): void {
     webUiPort = port;
+    uses = pinUses;
     rotateSetupPin();
 }
 
@@ -82,6 +103,15 @@ export function rotateSetupPin(): void {
     currentPin = generate();
     failedAttempts = 0;
     logPin(currentPin);
+}
+
+/**
+ * Drops the PIN without a successor: an outbound registration has used it, and without the
+ * register page there is nothing left it could open.
+ */
+export function retireSetupPin(): void {
+    currentPin = null;
+    failedAttempts = 0;
 }
 
 /**

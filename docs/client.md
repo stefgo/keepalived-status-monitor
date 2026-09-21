@@ -11,7 +11,7 @@ column, in the REST API and in the dashboard:
 | Mode | Who dials | What the agent needs |
 | :--- | :--- | :--- |
 | `inbound` | The agent dials the server (`/ws/agent` on the server) | `serverUrl` in `config.yaml` and an identity in `identity.json`; the agent owns the reconnect ladder. The server checks the source address against `clients.inbound_allowed_ip`. |
-| `outbound` | The server dials the agent (`/ws/register` and `/ws/agent` on the agent's own web server) | A reachable `listenPort` (default 3011) and a `registrationSecret` for the first contact; the server owns the reconnect ladder and stores the agent's address as `outboundTargetAddress`. |
+| `outbound` | The server dials the agent (`/ws/register` and `/ws/agent` on the agent's own web server) | A reachable `listenPort` (default 3011) and, for the first contact, the [setup PIN](#setup-pin-srccoresetuppints) from the agent's log or `KASM_REGISTRATION_SECRET`; the server owns the reconnect ladder and stores the agent's address as `outboundTargetAddress`. |
 
 Read from the agent's side the words invert — an `outbound` client is the one that receives a
 connection — so agent-side code and logs name the **mode**, not the local direction.
@@ -30,11 +30,11 @@ client/src/
 │   ├── Config.ts              # What the operator wrote: read once, validated, frozen
 │   ├── ConfigFile.ts          # config.yaml itself: YAML document, comment-preserving writes
 │   ├── Identity.ts            # The clientId and authToken the server issued (data directory)
-│   ├── RegistrationState.ts   # What registration changes: serverUrl, registrationSecret, mode
+│   ├── RegistrationState.ts   # What registration changes: serverUrl, registration secret, mode
 │   ├── Connection.ts          # Persistent WebSocket connection & message routing
 │   ├── DataStore.ts           # The agent's data directory: atomic JSON read/write
 │   ├── ServerHttp.ts          # HTTP(S) requests to the server, certificate check decided per call
-│   ├── SetupPin.ts            # The PIN that guards registration through the web UI
+│   ├── SetupPin.ts            # The PIN that guards registration, inbound and outbound
 │   └── Version.ts             # Agent version detection (VERSION file, git tags, git hash)
 ├── services/
 │   ├── ActivityService.ts     # Activity events: queue, at-least-once delivery
@@ -69,7 +69,7 @@ agent was given.**
 | `Config.ts` | The settings from `config.yaml`, validated against `AgentConfigSchema` and **frozen** — nothing writes to them at runtime. | `config.yaml` (read only) |
 | `ConfigFile.ts` | The YAML document itself, so an edit keeps the operator's comments, order and spelling. | `config.yaml` |
 | `Identity.ts` | The `clientId` and `authToken` the server issued. Never in `config.yaml`: the operator does not write them, and the write has to be atomic. | `identity.json` in the data directory |
-| `RegistrationState.ts` | What a registration changes — the server URL, the registration secret once it is used — plus the agent mode derived from them. | written back to `config.yaml` |
+| `RegistrationState.ts` | What a registration changes — the server URL, the registration secret once it is used — plus the agent mode derived from them. | server URL written back to `config.yaml`; the secret comes from the environment and is only dropped from memory |
 
 A `config.yaml` from an older version that still holds `clientId` and `authToken` is migrated
 at the next start: the pair is written to `identity.json`, and only once that worked are the
@@ -86,7 +86,6 @@ identity with a `serverUrl` is `inbound` (the agent dials), an identity without 
 | `logLevel`     | Log verbosity (`trace`…`fatal`, `silent`). Default: `info`, or `LOG_LEVEL` where the file says nothing. A value that is not a level is ignored with a warning. |
 | `serverUrl`    | HTTP(S) URL of the management server (e.g., `https://manager:3010`). Set it by hand, or let a registration through the web UI write it. Absent in outbound mode. |
 | `keepalived` | How keepalived is read: `pollInterval` (s, default `5`, `0` switches the timer off), `notifyFifo` and `notifyToken` (see [Triggers](#triggers); `KASM_NOTIFY_FIFO` and `KASM_NOTIFY_TOKEN` win over them), `dataFile`, `statsFile`, `jsonFile` (as keepalived sees them), `jsonSignal` (unset: text dump), `dumpTimeoutMs` (default `3000`). Validated on start; an invalid value — or all three triggers off — stops the agent with a log line naming it. |
-| `registrationSecret` | Outbound mode only: the secret the server presents on `/ws/register`. Must match the value entered in the dashboard's Add Client wizard; removed from the file after a successful registration. |
 | `allowSelfSignedCertificates` | Accept a server certificate that does not validate, for registration and the WebSocket connection. Default `false`. A value that is not `true` or `false` is ignored with a warning. |
 | `allowedNetworks` | IPv4 addresses or CIDR networks the server may dial `/ws/register` and `/ws/agent` from. Empty (default) allows every address. |
 | `listenPort` | Port of the local web server (default `3011`). `KASM_CLIENT_PORT` wins over it. |
@@ -157,13 +156,14 @@ Settled at startup from `config.yaml` (`getWebRoutes()`):
 | `/status`, `/api/status/connection`, `/api/status/config`, `/api/status/keepalived`, `POST /api/connect` | `enableStatusPage` (default `true`) |
 | `/register`, `POST /api/register` | `enableRegisterPage` (default `true`) |
 | `/`, `/api/status/server`, `/api/status/auth`, the static files | either page is enabled |
-| `/ws/register`, `/ws/agent` | outbound mode: no `serverUrl`, and a `registrationSecret` **or** an identity |
+| `/ws/register`, `/ws/agent` | outbound mode: no `serverUrl` |
 | `/api/keepalived/notify` | `keepalived.notifyToken` is set |
 | `/api/health` | the agent runs in its container image (`KASM_CONTAINER=true`); answers loopback only |
 
 A `serverUrl` means inbound mode, which needs no route here — the agent dials the server.
-The identity counts for outbound because registering consumes the secret: a registered
-outbound agent has only its identity left and still needs `/ws/agent`. Since the routes are
+Without one, an unregistered agent waits on `/ws/register` for the server to register it
+with the setup PIN (or `KASM_REGISTRATION_SECRET`), and a registered one needs `/ws/agent`.
+`/ws/register` refuses every caller once the agent has an identity. Since the routes are
 fixed at startup while the mode is not, `/ws/agent` also refuses a connection once the agent
 has been registered inbound through its register page.
 
@@ -311,25 +311,43 @@ Registration is a one-time setup step performed via the local web UI:
 6. The client saves the identity to `identity.json` in its data directory, and the server URL to `config.yaml` — the latter only if it differs from what is already there. If either write fails, the register page says so: the agent is connected, but it would come back unregistered.
 7. The client connects via WebSocket straight away.
 
+### Outbound registration
+
+The server registers the agent itself when it cannot be reached from the agent:
+
+1. The operator opens **Add Client → the server connects to the agent** in the dashboard and enters the agent's address and its **Setup PIN** from the log.
+2. The server dials `/ws/register` and sends `REGISTRATION_REQUEST` with the PIN, a fresh `authToken` and the `clientId` it issued.
+3. The agent accepts `KASM_REGISTRATION_SECRET` if one is set, otherwise the current setup PIN, stores the identity in `identity.json` and answers `REGISTRATION_SUCCESS`.
+4. The server opens `/ws/agent` with that identity.
+
+Nothing has to be written into `config.yaml` for this. For an unattended rollout, where nobody
+reads the agent's log, set `KASM_REGISTRATION_SECRET` — or `KASM_REGISTRATION_SECRET_FILE`
+naming a file that holds it, such as a Docker secret — and enter that value in the wizard
+instead. It is read from the environment only; setting both variables, or a file that cannot be
+read or is empty, stops the agent. Once used it is dropped from memory and the log asks for it to
+be removed from the environment. A `registrationSecret` left in `config.yaml` by an earlier
+version is ignored with a warning.
+
 ### Setup PIN (`src/core/SetupPin.ts`)
 
-`POST /api/register` decides which server the agent obeys from then on — and with it, who
-receives what it reports about the host. The endpoint listens on every interface, so it is guarded by
-a PIN that is printed to the agent's log once the web server listens:
+`POST /api/register` and `/ws/register` decide which server the agent obeys from then on —
+and with it, who receives what it reports about the host. Both listen on every interface, so
+they are guarded by a PIN that is printed to the agent's log once the web server listens:
 
 ```
 ──────────────────────────────────────────────
   Setup PIN:  K7QM-3XRD
   Web UI:     http://<this-host>:3011/register
+  Outbound:   enter it in the server's Add Client wizard
   The PIN is required to register this agent.
 ──────────────────────────────────────────────
 ```
 
 - Read it with `docker logs kasm-client` (or wherever the agent logs to). Case and the hyphen do not matter.
-- It is generated at every start and never written to `config.yaml`.
+- It is generated at every start and never written to `config.yaml`. The `Web UI` line appears only with the register page, the `Outbound` line only while an agent without `serverUrl` is unregistered.
 - It stays required after the first registration, because re-registering from the status page is supported. After every successful registration a new PIN is generated and logged, so each PIN works once.
-- After 5 wrong attempts the PIN is replaced by a new one (also logged), which ends online guessing without locking the operator out.
-- With `enableRegisterPage: false` neither the page nor `POST /api/register` exists, and no PIN is generated.
+- After 5 wrong attempts — on either route — the PIN is replaced by a new one (also logged), which ends online guessing without locking the operator out.
+- With `enableRegisterPage: false` neither the page nor `POST /api/register` exists. A PIN is then generated only while the agent is unregistered, has no `serverUrl` and no `KASM_REGISTRATION_SECRET`, and it is discarded once the server has registered the agent.
 
 ---
 
@@ -378,12 +396,12 @@ There is no local database.
 
 - The `authToken` is stored in plain text in `identity.json` in the agent's data directory. Secure the directory using appropriate filesystem permissions. The token is masked in the agent's log and never written to `config.yaml`.
 - The agent needs `pid: host`, `KILL` and `SYS_PTRACE` — see [Agent Permissions](install.md#agent-permissions). It gets no Docker socket and no host file system mount, and it sends keepalived nothing but `SIGUSR1`, `SIGUSR2` and, if configured, the JSON signal. It is nonetheless root on the host in all but name, since `SYS_PTRACE` reaches every host process — see [What These Permissions Amount To](install.md#what-these-permissions-amount-to).
-- Registration through the local web UI requires the setup PIN from the agent's log (see [Setup PIN](#setup-pin-srccoresetuppints)). Set `enableRegisterPage: false` once no re-registration is expected.
+- Registration — through the local web UI or by the server on `/ws/register` — requires the setup PIN from the agent's log (see [Setup PIN](#setup-pin-srccoresetuppints)), or on `/ws/register` alternatively `KASM_REGISTRATION_SECRET`. Set `enableRegisterPage: false` once no re-registration is expected.
 - The server's TLS certificate is verified for registration and for the WebSocket connection. For a server with a self-signed certificate set `allowSelfSignedCertificates: true`; it then applies to both. The reachability check on the status and register pages always tolerates such a certificate — it sends nothing and only answers whether a KASM server responds. The decision is passed per request (`core/ServerHttp.ts`, the WebSocket options) and never through the process-wide `NODE_TLS_REJECT_UNAUTHORIZED`, which the agent used to set on its first request and never reset.
 - Agent connections are validated server-side against `security.allowed_networks` and the client's own allowed address or network, which can be edited or switched off in the client editor.
 - `allowedNetworks` in the agent's `config.yaml` restricts where the server may dial `/ws/register` and `/ws/agent` from (empty: no restriction). Refused connections are closed with `4003 Access denied` and logged with the peer address; the local web UI is not restricted.
 - In outbound mode the agent's own certificate is what protects the session: the auth token travels in the `/ws/agent` query string, so without TLS it is readable by anything on the path. Set a `tls` block (see [Serving it over TLS](#serving-it-over-tls)) for any agent the server does not reach over a network you control.
-- The `authToken` and the `registrationSecret` are compared in constant time (`core/secrets.ts`), so a wrong value reveals nothing through how long the check took. The `clientId` beside the token is compared normally — it is not a secret and appears in every dashboard URL.
+- The `authToken` and `KASM_REGISTRATION_SECRET` are compared in constant time (`core/secrets.ts`), so a wrong value reveals nothing through how long the check took. The `clientId` beside the token is compared normally — it is not a secret and appears in every dashboard URL.
 
 ---
 

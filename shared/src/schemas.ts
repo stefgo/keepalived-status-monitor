@@ -118,8 +118,6 @@ export const AgentConfigSchema = z.looseObject({
      * operator would fix it in -- so it is a warning at derivation, not a refusal to start.
      */
     serverUrl: z.string().trim().min(1).nullish(),
-    /** Outbound mode: the secret the server presents on `/ws/register`, consumed once. */
-    registrationSecret: z.string().min(1).nullish(),
     logLevel: LogLevelSchema.default("info"),
     /** Where and how often keepalived is read. */
     keepalived: blockOrMissing(AgentKeepalivedConfigSchema),
@@ -321,6 +319,10 @@ export const CreateTokenSchema = z.object({
 /** `POST /api/v1/clients/outbound`. */
 export const CreateOutboundClientSchema = z.object({
     outboundTargetAddress: TargetAddressSchema,
+    /**
+     * What the server presents on the agent's `/ws/register`: the setup PIN from the agent's
+     * log, or the agent's `KASM_REGISTRATION_SECRET`. The agent tells the two apart itself.
+     */
     registrationSecret: z.string().min(1),
     hostname: z.string().optional(),
 });
@@ -503,6 +505,7 @@ export type AppConfigParsed = z.output<typeof AppConfigSchema>;
 
 /** `REGISTRATION_REQUEST` on the agent's /ws/register (server dials the agent). */
 export const RegistrationRequestSchema = z.object({
+    /** The agent's setup PIN or its `KASM_REGISTRATION_SECRET`. */
     secret: z.string(),
     authToken: z.string().min(1),
     /**

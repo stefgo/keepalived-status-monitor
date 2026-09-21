@@ -14,8 +14,9 @@ export { CONFIG_PATH };
 /**
  * What the operator wrote, read once at startup and frozen: `config` is the file, not the
  * agent's state. Everything the agent itself changes has its own owner -- the identity the
- * server issued lives in Identity.ts, the server URL and the registration secret in
- * RegistrationState.ts, both of which know how to persist what they hold.
+ * server issued lives in Identity.ts, the server URL in RegistrationState.ts, both of which
+ * know how to persist what they hold. The registration secret is not in `config` either: it
+ * comes from the environment only (`REGISTRATION_SECRET` below).
  *
  * The separation is the point. A value that can be written into `config` at runtime reads
  * afterwards as though the operator had put it there, and that is how the auth token ended
@@ -85,6 +86,17 @@ function prepare(raw: unknown): Record<string, unknown> {
         delete out.allowSelfSignedCertificates;
     }
 
+    // Read by earlier versions for outbound registration. Dropped with a warning rather than
+    // ignored silently: an operator who set it expects it to work, and the wizard will now
+    // ask for the setup PIN instead.
+    if (out.registrationSecret !== undefined && out.registrationSecret !== null) {
+        logger.warn(
+            "Ignoring registrationSecret in config.yaml: it is no longer read. Register with the " +
+                "setup PIN from this log, or set KASM_REGISTRATION_SECRET instead.",
+        );
+    }
+    delete out.registrationSecret;
+
     return out;
 }
 
@@ -131,6 +143,43 @@ function loadConfig(): ClientConfig {
 export const config: ClientConfig = loadConfig();
 
 logger.level = config.logLevel;
+
+/**
+ * The secret the server may present on `/ws/register` instead of the setup PIN, for a rollout
+ * where nobody reads the agent's log. Environment only -- `KASM_REGISTRATION_SECRET`, or
+ * `KASM_REGISTRATION_SECRET_FILE` naming a file that holds it (a Docker or Podman secret).
+ *
+ * Fatal when both are set or the file cannot be read or is empty: an agent that started
+ * without the secret it was given would wait for a registration that can never succeed, and
+ * say nothing about why.
+ */
+function readRegistrationSecret(): string | null {
+    const value = process.env.KASM_REGISTRATION_SECRET?.trim() || null;
+    const file = process.env.KASM_REGISTRATION_SECRET_FILE?.trim() || null;
+    if (value && file) {
+        logger.fatal(
+            "Set KASM_REGISTRATION_SECRET or KASM_REGISTRATION_SECRET_FILE, not both",
+        );
+        process.exit(1);
+    }
+    if (!file) return value;
+
+    let content: string;
+    try {
+        content = fs.readFileSync(path.resolve(ROOT_DIR, file), "utf8").trim();
+    } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        logger.fatal(`KASM_REGISTRATION_SECRET_FILE cannot be read at ${file}${code ? ` (${code})` : ""}`);
+        process.exit(1);
+    }
+    if (!content) {
+        logger.fatal(`KASM_REGISTRATION_SECRET_FILE is empty: ${file}`);
+        process.exit(1);
+    }
+    return content;
+}
+
+export const REGISTRATION_SECRET: string | null = readRegistrationSecret();
 
 /**
  * The certificate and key as Fastify wants them, or undefined for a plain HTTP agent.

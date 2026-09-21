@@ -131,6 +131,8 @@ An image is tagged only after CI has started it and it answered its health check
 | `KASM_PROC_DIR` | path                              | `/proc`       | _(Client only)_ Where the agent looks for keepalived's process. Only for tests against a copied process tree. |
 | `KASM_NOTIFY_FIFO` | path                           | _unset_       | _(Client only)_ keepalived's `vrrp_notify_fifo`; wins over `keepalived.notifyFifo`. See [Faster Failover Detection](#faster-failover-detection). |
 | `KASM_NOTIFY_TOKEN` | string, ≥ 16 characters       | _unset_       | _(Client only)_ Token of the notify endpoint; wins over `keepalived.notifyToken`. See [Faster Failover Detection](#faster-failover-detection). |
+| `KASM_REGISTRATION_SECRET` | string                 | _unset_       | _(Client only)_ Outbound mode: a secret the **Add Client** wizard accepts in place of the setup PIN from the agent's log, for a rollout where nobody reads that log. Remove it once the agent is registered. |
+| `KASM_REGISTRATION_SECRET_FILE` | path              | _unset_       | _(Client only)_ The same, read from a file (e.g. `/run/secrets/…`). Setting both variables, or a file that cannot be read or is empty, ends the start. |
 
 **Example:**
 
@@ -144,11 +146,16 @@ LOG_LEVEL=debug LOG_FORMAT=json npm run dev -w server/backend
 
 Created automatically during registration, or can be set up manually using `client/config.example.yaml` as a template. The identity the server issues — the client id and the auth token — is **not** in this file: it lives in `identity.json` in the agent's data directory (`KASM_CLIENT_DATA_DIR`).
 
+An agent the server dials (outbound mode) needs no entry here to be registered: enter the
+**Setup PIN** from `docker logs kasm-client` in the dashboard's **Add Client** wizard, or give
+the agent `KASM_REGISTRATION_SECRET` and enter that instead (see
+[Outbound registration](client.md#outbound-registration)). A `registrationSecret` in this
+file is no longer read.
+
 | Key          | Description                                                                    |
 | :----------- | :----------------------------------------------------------------------------- |
 | `logLevel`   | Log verbosity for the client agent.                                            |
 | `serverUrl`  | HTTP(S) URL of the management server (e.g., `https://manager.example.com`). Set it here, or let a registration through the agent's web UI write it. |
-| `registrationSecret` | Outbound mode: the secret the server presents when it first dials the agent. Enter the same value in the **Add Client** wizard; it is removed from the file after registration. |
 | `keepalived.pollInterval` | Seconds between two readings (default `5`); `0` switches the timer off, which needs one of the two below. |
 | `keepalived.notifyFifo` | keepalived's `vrrp_notify_fifo` as keepalived sees the path; every line in it triggers a reading. Unset by default. See [Faster Failover Detection](#faster-failover-detection). |
 | `keepalived.notifyToken` | Token for `POST /api/keepalived/notify`, which a keepalived notify script calls; at least 16 characters. Unset by default: the endpoint does not exist. |
