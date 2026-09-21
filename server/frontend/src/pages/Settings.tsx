@@ -209,18 +209,18 @@ export default function Settings() {
                     })}
                 </TabList>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex flex-col">
                     {SECTIONS.map((section) => (
                         <TabPanel
                             key={section.id}
                             tabs={tabs}
                             value={section.id}
-                            className="p-8 animate-in fade-in slide-in-from-right-2 duration-300"
+                            className="flex-1 flex flex-col px-8 pt-8 pb-4 animate-in fade-in slide-in-from-right-2 duration-300"
                         >
-                            <div className="space-y-8">
+                            <div className="flex-1 flex flex-col gap-8">
                                 {renderSection(section.id)}
 
-                                <div className="flex justify-end border-t border-border pt-4">
+                                <div className="mt-auto flex justify-end border-t border-border pt-4">
                                     <Button
                                         variant="primary"
                                         icon={Save}
