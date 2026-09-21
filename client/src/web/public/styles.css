@@ -8,7 +8,30 @@
     --primary-color: #11bc25;
     --primary-hover: #10982d;
     --error-color: #ef4444;
+    --warning-color: #eab308;
     --success-color: #11bc25;
+}
+
+/*
+ * The line under the form. Empty and invisible until something has to be said, and coloured
+ * by the second class: `error` for a request that failed, `warning` for one that worked but
+ * left something for the operator to do -- a registration nobody could write to disk.
+ */
+.message {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.message:empty {
+    display: none;
+}
+
+.message.error {
+    color: var(--error-color);
+}
+
+.message.warning {
+    color: var(--warning-color);
 }
 
 body {

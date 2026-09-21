@@ -316,6 +316,13 @@
                                 "success",
                                 "Registered successfully",
                             );
+                            // The agent registered but could not store what it was given.
+                            // It is connected now and would come back unregistered, which
+                            // only the person in front of this page can do anything about.
+                            if (regData.warning) {
+                                formMessage.className = "message warning";
+                                formMessage.textContent = regData.warning;
+                            }
                         } else {
                             setStepState(
                                 stepRegister,
