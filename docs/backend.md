@@ -136,8 +136,8 @@ The central hub for all real-time communication.
 #### `ClientConnector`
 The server's side of **outbound** clients, the ones the server dials.
 
-- `connectAll()` — At startup, after `listen()`: dials every stored outbound client that has an auth token. One without a token cannot be retried here, because registering needs the secret from the dashboard.
-- `firstConnect(id, address, secret, onPersist)` — Adding a client: registers on the agent's `/ws/register` (handing over the secret, a fresh auth token and the server-issued id), then opens `/ws/agent`. `onPersist` writes the client only once `AUTH` has succeeded; on failure nothing is stored and the reason from the handshake is returned.
+- `connectAll()` — At startup, after `listen()`: dials every stored outbound client that has an auth token. One without a token cannot be retried here, because registering needs the agent's setup PIN (or secret) from the dashboard.
+- `firstConnect(id, address, secret, onPersist)` — Adding a client: registers on the agent's `/ws/register` (handing over the setup PIN or secret, a fresh auth token and the server-issued id), then opens `/ws/agent`. `onPersist` writes the client only once `AUTH` has succeeded; on failure nothing is stored and the reason from the handshake is returned.
 - `connectClient(client)` — A regular session on `<scheme>://<outboundTargetAddress>/ws/agent?clientId=…&token=…`, with a 10-second connect timeout. The scheme comes from the stored address: an address written `wss://host:port` is dialled over TLS, a bare `host:port` over plaintext. One helper decides scheme and certificate handling for all three dial sites, so the query — which carries the auth token — is also what keeps it out of the log line. After an open socket the session is handed to `WebSocketController.handleOutboundAgentConnection`.
 - `scheduleReconnect(clientId)` — Reconnects after 5, 10, 30 and then every 60 seconds, the same delays the agent uses for inbound connections. The ladder restarts once a socket opens.
 - `disconnectClient(clientId)` — Cancels a pending reconnect and resets the ladder; used before deleting, reconnecting or re-addressing a client.

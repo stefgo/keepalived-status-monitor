@@ -218,7 +218,7 @@ One flow for both connection modes, built on `Wizard` from `@stefgo/react-ui-com
 It lives in the workspace rather than in a modal, because the two branches end in different things: a token to carry to another machine, or a connection attempt that may fail with a reason worth reading.
 
 - **Inbound branch**: display name and allowed address for the client the token will create. Both optional — without them the agent's hostname names the client and the address it registers from becomes its allowed address. Ends in a `TokenModal`, which shows the token once.
-- **Outbound branch**: hostname, target address and registration secret; finishing dials the agent straight away, and a refusal is shown on the step with the agent's own reason.
+- **Outbound branch**: hostname, target address and the agent's setup PIN (or its `KASM_REGISTRATION_SECRET`); finishing dials the agent straight away, and a refusal is shown on the step with the agent's own reason.
 - The wizard renders only the current step, so the form state lives above it in `useAddClientForm` — a step holding its inputs in its own `useState` would lose them on Back.
 - Both fields that the server validates are checked in the form with the same functions the endpoints use (`Ipv4OrCidrSchema`, `normaliseTargetAddress` from `@kasm/shared`).
 - `Escape` leaves the wizard. The listener sits on `window`, one level further out than menus and dialogs that listen on `document` and stop the event there, so an open select closes itself without taking the wizard with it. It is off while the token is on screen: that dialog is acknowledged by button, because the token is shown exactly once.

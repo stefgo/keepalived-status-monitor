@@ -8,13 +8,20 @@ import { WebSocketController } from "../controllers/WebSocketController.js";
 
 const RECONNECT_DELAYS = [5000, 10000, 30000, 60000];
 
+/** What the operator is told when the agent refused the value from the wizard. */
+const WRONG_PIN =
+    "The client rejected the setup PIN or registration secret. After 5 wrong attempts the agent replaces its PIN — read the current one from its log.";
+
+/** The agent's own wording for that refusal, current and from before the setup PIN. */
+const REJECTED_CREDENTIALS = new Set(["Wrong setup PIN or registration secret", "Secret mismatch"]);
+
 export class ClientConnector {
     private static reconnectTimers = new Map<string, NodeJS.Timeout>();
     private static reconnectAttempts = new Map<string, number>();
 
     /**
      * Connects to all outbound clients stored in the database that already have an authToken.
-     * Registration cannot be retried on startup — it requires the secret from the UI.
+     * Registration cannot be retried on startup — it requires the setup PIN (or secret) from the UI.
      */
     static async connectAll(): Promise<void> {
         const clients = ClientRepository.findOutboundClients();
@@ -52,7 +59,7 @@ export class ClientConnector {
             ? { ok: true }
             : {
                   ok: false,
-                  error: "Registration succeeded, but the agent session (AUTH) could not be established afterwards. The client has already stored its authToken and used up the secret — remove the authToken on the client host and set a new registrationSecret before trying again.",
+                  error: "Registration succeeded, but the agent session (AUTH) could not be established afterwards. The client has already stored its identity — delete identity.json in the agent's data directory and restart the agent, then add it again with the new setup PIN from its log.",
               };
     }
 
@@ -104,16 +111,17 @@ export class ClientConnector {
     /** Turns a WebSocket close code from the agent's /ws/register into a message for the operator. */
     private static describeRegistrationClose(code: number, reason: string): string {
         if (code === 4003 && reason === "Already registered") {
-            return "The client is already registered (authToken in its config.yaml). Remove the authToken on the client host and set a new registrationSecret before adding it again.";
+            return "The client is already registered (identity.json in the agent's data directory). Delete that file and restart the agent, then add it again with the new setup PIN from its log.";
         }
         if (code === 4003 && reason === "Access denied") {
             return "The client refused the connection: this server's address is not in the agent's allowedNetworks.";
         }
+        // Sent only by agents from before the setup PIN, which read the secret from config.yaml.
         if (code === 4003 && reason === "No registration secret configured") {
-            return "No registrationSecret is configured on the client host. Set one in the agent's config.yaml and restart the agent.";
+            return "The agent is an older version that needs registrationSecret in its config.yaml. Update the agent, or set that value and restart it.";
         }
         if (code === 4003) {
-            return "The client rejected the registration secret.";
+            return WRONG_PIN;
         }
         if (code === 4001) {
             return "The client closed the registration because the handshake timed out.";
@@ -184,12 +192,14 @@ export class ClientConnector {
                         finish(authToken);
                         ws.close(1000, "Registration complete");
                     } else if (message.type === WS_EVENTS.REGISTRATION_FAILURE) {
-                        logger.error("ClientConnector: client rejected registration secret");
+                        const error: unknown = message?.payload?.error;
+                        logger.error({ error }, "ClientConnector: client rejected the registration");
+                        // "Secret mismatch" is what agents from before the setup PIN send.
                         finish(
                             null,
-                            message?.payload?.error
-                                ? `The client rejected the registration: ${message.payload.error}`
-                                : "The client rejected the registration secret.",
+                            typeof error === "string" && !REJECTED_CREDENTIALS.has(error)
+                                ? `The client rejected the registration: ${error}`
+                                : WRONG_PIN,
                         );
                         ws.close();
                     }

@@ -10,10 +10,10 @@ import { AddClientForm } from "../useAddClientForm";
 export const StepOutboundDetails = ({ form }: { form: AddClientForm }) => (
     <div className="space-y-6">
         <p className="text-sm text-text-muted">
-            The server connects to the agent. Set{" "}
-            <code className="bg-hover px-1 rounded">registrationSecret</code> in the agent's{" "}
-            <code className="bg-hover px-1 rounded">config.yaml</code> and restart it before
-            finishing this step — the agent removes the value once registration succeeds.
+            The server connects to the agent and registers it with the setup PIN the agent
+            prints to its log on startup, e.g.{" "}
+            <code className="bg-hover px-1 rounded">docker logs kasm-client</code>. Each PIN
+            registers once.
         </p>
 
         <Input
@@ -42,13 +42,13 @@ export const StepOutboundDetails = ({ form }: { form: AddClientForm }) => (
         />
 
         <Input
-            label="Registration Secret"
+            label="Setup PIN"
             value={form.registrationSecret}
             onChange={(e) => form.setRegistrationSecret(e.target.value)}
             onBlur={() => form.touch("registrationSecret")}
-            error={form.missing.registrationSecret ? "Enter the registration secret" : undefined}
-            placeholder="the value of registrationSecret in the agent's config.yaml"
-            hint="Must match registrationSecret in the agent's config.yaml."
+            error={form.missing.registrationSecret ? "Enter the setup PIN" : undefined}
+            placeholder="K7QM-3XRD"
+            hint="From the agent's log — or the value of KASM_REGISTRATION_SECRET, if the agent was given one."
             required
         />
     </div>

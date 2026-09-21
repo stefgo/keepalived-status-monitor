@@ -356,14 +356,14 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 
 `POST /api/v1/clients/outbound`
 
-**Description:** Adds a client that the **server** connects to (outbound mode), instead of the agent dialling in. The server opens `<scheme>://<outboundTargetAddress>/ws/register` — `wss://` when the stored address carries that prefix, `ws://` otherwise — hands over the registration secret together with a newly generated auth token and the client's server-issued `clientId` (stored by the agent in its `config.yaml`), and then opens the regular agent session on `/ws/agent`, presenting both halves of that identity in the query string — the agent refuses a caller that does not name the id it was registered under. The client is written to the database only after that session has authenticated.
+**Description:** Adds a client that the **server** connects to (outbound mode), instead of the agent dialling in. The server opens `<scheme>://<outboundTargetAddress>/ws/register` — `wss://` when the stored address carries that prefix, `ws://` otherwise — hands over the agent's setup PIN (or its `KASM_REGISTRATION_SECRET`) together with a newly generated auth token and the client's server-issued `clientId` (stored by the agent in `identity.json` in its data directory), and then opens the regular agent session on `/ws/agent`, presenting both halves of that identity in the query string — the agent refuses a caller that does not name the id it was registered under. The client is written to the database only after that session has authenticated.
 
 #### Request Body
 
 | Field                   | Type   | Required | Description                                                          |
 | :---------------------- | :----- | :------- | :------------------------------------------------------------------- |
 | `outboundTargetAddress` | string | **Yes**  | `host`, `host:port` or `wss://host:port` of the agent's web server. Without a port, `:3011` is appended. `wss://` dials the agent over TLS, which requires the agent to serve it (see [client.md](client.md)); a bare address, or one written `ws://`, is stored and dialled as plaintext. Any other scheme, and a path, query or credentials, are refused — the value is interpolated into a WebSocket URL. |
-| `registrationSecret`    | string | **Yes**  | Must match `registrationSecret` in the agent's `config.yaml`.        |
+| `registrationSecret`    | string | **Yes**  | The setup PIN from the agent's log, or the value of `KASM_REGISTRATION_SECRET` if the agent has one. The agent tells the two apart. |
 | `hostname`              | string | No       | Name shown for the client. Defaults to `outboundTargetAddress`.      |
 
 #### Response
@@ -376,9 +376,9 @@ An empty `outboundTargetAddress` or `registrationSecret` is answered with `400` 
 
 | Agent response                                   | Reason given                                                                 |
 | :----------------------------------------------- | :--------------------------------------------------------------------------- |
-| Close `4003 Already registered`                  | The agent already holds an identity; delete its `identity.json` and set a new secret. |
-| Close `4003 No registration secret configured`   | `registrationSecret` is missing in the agent's `config.yaml`.                |
-| `REGISTRATION_FAILURE` / close `4003 Invalid secret` | The secret does not match.                                               |
+| Close `4003 Already registered`                  | The agent already holds an identity; delete its `identity.json`, restart it and use the new setup PIN. |
+| Close `4003 No registration secret configured`   | Only from agents older than the setup PIN: they need `registrationSecret` in their `config.yaml`. |
+| `REGISTRATION_FAILURE` / close `4003 Invalid secret` | Neither the setup PIN nor the secret matches. After 5 wrong attempts the agent logs a new PIN. |
 | Close `4001 Registration timed out`              | The agent gave up waiting for the registration request.                      |
 | Connection error / no answer within 10 s         | The underlying error, or a timeout message.                                  |
 | Registration succeeded, AUTH failed              | The agent has already stored its token; it must be reset before retrying.   |

@@ -24,7 +24,10 @@ export interface AddClientForm {
     setAllowedIp: (value: string) => void;
     allowedIpInvalid: boolean;
 
-    /** Outbound: where the server dials, and the secret it authenticates with. */
+    /**
+     * Outbound: where the server dials, and what it authenticates with -- the agent's setup
+     * PIN or its `KASM_REGISTRATION_SECRET`, sent as `registrationSecret` either way.
+     */
     hostname: string;
     setHostname: (value: string) => void;
     targetAddress: string;
