@@ -1,20 +1,17 @@
 import { Connection } from "./core/Connection.js";
-import { startWebServer, stopWebServer, isWebServerNeeded } from "./web/server.js";
+import { startWebServer, stopWebServer } from "./web/server.js";
 import { logger } from "@kasm/shared/node";
 import { WS_EVENTS } from "@kasm/shared";
 import { ActivityService } from "./services/ActivityService.js";
 import { KeepalivedService } from "./services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "./services/NotifyFifoWatcher.js";
 
-if (isWebServerNeeded()) {
-    // Awaited so the process handlers below are only in place once startup is
-    // done. startWebServer() already catches and logs a failed listen(); without
-    // the await, a failing plugin registration would end up in the
-    // unhandledRejection handler instead of aborting the start.
-    await startWebServer();
-} else {
-    logger.info("Web server disabled: status page, register page and outbound mode are all inactive.");
-}
+// Which routes it serves -- and whether it starts at all -- follows from config.yaml; see
+// getWebRoutes(). Awaited so the process handlers below are only in place once startup is
+// done. startWebServer() already catches and logs a failed listen(); without the await, a
+// failing plugin registration would end up in the unhandledRejection handler instead of
+// aborting the start.
+await startWebServer();
 
 // Before the connection, deliberately: the readings belong to the host, not to the link.
 // An agent that comes up while the server is unreachable still notices a failover and

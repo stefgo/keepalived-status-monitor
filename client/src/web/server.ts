@@ -26,6 +26,7 @@ import {
     AgentWebRegisterSchema,
     RegistrationRequestSchema,
     firstIssue,
+    isIpInCidr,
     isIpInNetworks,
 } from "@kasm/shared";
 
@@ -64,38 +65,122 @@ function hasBearerToken(request: FastifyRequest, expected: string): boolean {
 }
 
 /**
- * Returns true when the web server is needed:
- * - status or register page enabled, OR
- * - the notify endpoint enabled (keepalived.notifyToken set), OR
- * - `outbound` mode is applicable, so the server has to be able to dial this agent -- either
- *   because a registration secret is still waiting to be used, or because the agent is
- *   already registered in that mode.
+ * Which groups of routes this agent serves. Settled once at startup, from what the
+ * configuration says the agent is for.
+ *
+ * - `statusPage` / `registerPage` -- the operator's two pages and the endpoints they call.
+ * - `outbound` -- `/ws/register` and `/ws/agent`, the server dialling in. An agent without a
+ *   server URL is outbound when it holds a registration secret *or* an identity: the secret is
+ *   consumed by the registration, so a registered outbound agent has only its identity left,
+ *   and still needs `/ws/agent`. A server URL means inbound, which needs no route here -- the
+ *   agent dials out itself. Both set is inbound, as in `getAgentMode()`.
+ * - `notify` -- `/api/keepalived/notify`, with `keepalived.notifyToken` set.
+ * - `health` -- `/api/health`, for the container's HEALTHCHECK only.
  */
-export function isWebServerNeeded(): boolean {
-    if (config.enableStatusPage) return true;
-    if (config.enableRegisterPage) return true;
-    if (config.keepalived.notifyToken) return true;
-    if (getRegistrationSecret()) return true;
-    if (getAgentMode() === "outbound") return true;
-    return false;
+export interface WebRoutes {
+    statusPage: boolean;
+    registerPage: boolean;
+    outbound: boolean;
+    notify: boolean;
+    health: boolean;
+}
+
+/**
+ * Set by the client images. The health route exists for Docker's HEALTHCHECK, and an agent
+ * installed on the host has nothing that would call it.
+ */
+function isRunningInContainer(): boolean {
+    return process.env.KASM_CONTAINER === "true";
+}
+
+export function getWebRoutes(): WebRoutes {
+    return {
+        statusPage: config.enableStatusPage,
+        registerPage: config.enableRegisterPage,
+        outbound: !getServerUrl() && (getRegistrationSecret() !== null || getIdentity() !== null),
+        notify: !!config.keepalived.notifyToken,
+        health: isRunningInContainer(),
+    };
+}
+
+/**
+ * Whether a request comes from this machine -- or, in a container, from inside the
+ * container's own network namespace, which is where Docker runs a HEALTHCHECK.
+ *
+ * The socket's peer rather than `request.ip`, although the two agree while this Fastify runs
+ * without `trustProxy`: this check must never start trusting a forwarding header should that
+ * change. `isIpInCidr` strips the IPv4-mapped prefix and reads every other IPv6 address as 0,
+ * which lies outside 127.0.0.0/8 -- so `::1` is the one IPv6 address to name.
+ */
+function isLoopback(request: FastifyRequest): boolean {
+    const ip = request.socket.remoteAddress ?? "";
+    return ip === "::1" || isIpInCidr(ip, "127.0.0.0/8");
 }
 
 export async function startWebServer() {
-    // The certificate and key were read and validated in Config.ts, so a tls block that is
-    // present here is one that works. Without it the server stays plain HTTP, which is
-    // what every installation had before this option existed.
+    const routes = getWebRoutes();
+    const pages = routes.statusPage || routes.registerPage;
+
+    if (!pages && !routes.outbound && !routes.notify && !routes.health) {
+        logger.info(
+            "Web server not started: status page, register page and notify endpoint are disabled, and the agent is not in outbound mode.",
+        );
+        return;
+    }
+
     // Two calls rather than one conditional options object: `https` is what picks Fastify's
     // server type, so a ternary inside the argument leaves it with no overload to match.
     // The certificate and key were validated in Config.ts, so material that is present
-    // here is material that works.
+    // here is material that works. Without a tls block the server stays plain HTTP.
     const tls = readTlsMaterial();
     fastifyInstance = tls
         ? Fastify({ logger: false, https: { cert: tls.cert, key: tls.key } })
         : Fastify({ logger: false });
     const fastify = fastifyInstance;
 
-    await fastify.register(fastifyWebSocket);
+    if (routes.outbound) {
+        await fastify.register(fastifyWebSocket);
+    }
 
+    if (pages) {
+        await registerPages(fastify, routes);
+    }
+
+    if (routes.notify) {
+        registerNotify(fastify);
+    }
+
+    if (routes.health) {
+        registerHealth(fastify);
+    }
+
+    if (routes.outbound) {
+        registerOutbound(fastify);
+    }
+
+    // Without a page, the notify endpoint or the outbound routes nothing here is meant for
+    // another machine, and the health route only answers loopback anyway -- so the socket
+    // need not be reachable. The notify endpoint keeps 0.0.0.0: KASM_NOTIFY_URL may point
+    // the script at this agent from elsewhere.
+    const host = pages || routes.outbound || routes.notify ? "0.0.0.0" : "127.0.0.1";
+    try {
+        const port = config.listenPort;
+        await fastify.listen({ port, host });
+        logger.info(
+            { ...routes },
+            `Client Web UI listening on ${host}:${port} (${config.tls ? "https" : "http"})`,
+        );
+        // Logged after the "listening" line, where an operator is already looking.
+        if (routes.registerPage) {
+            initSetupPin(port);
+        }
+    } catch (err) {
+        logger.error({ err: err }, "Failed to start Client Web UI server");
+    }
+}
+
+/** The status and register pages, their static files and the endpoints they call. */
+async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
     // Serve static assets (CSS, etc.)
     // We check multiple locations to handle both dev (src) and prod (dist)
     const possiblePaths = [
@@ -113,12 +198,19 @@ export async function startWebServer() {
         }
     }
 
+    // The static handler would otherwise serve a disabled page as /status.html or
+    // /register.html, next to the route that was left out on purpose.
+    const hiddenFiles = new Set<string>();
+    if (!routes.statusPage) hiddenFiles.add("status.html");
+    if (!routes.registerPage) hiddenFiles.add("register.html");
+
     if (publicPath) {
         logger.info(`Serving static files from ${publicPath}`);
         await fastify.register(fastifyStatic, {
             root: publicPath,
             prefix: "/",
             serve: true,
+            allowedPath: (pathName) => !hiddenFiles.has(path.posix.basename(pathName)),
         });
     } else {
         logger.error("Could not find public directory for Client Web UI!");
@@ -211,102 +303,7 @@ export async function startWebServer() {
         },
     );
 
-    // Check current connection status
-    fastify.get(
-        "/api/status/connection",
-        async (_request: FastifyRequest, _reply: FastifyReply) => {
-            return {
-                connected: Connection.isConnected(),
-            };
-        },
-    );
-
-    // Return config-derived mode info for the status page
-    fastify.get(
-        "/api/status/config",
-        async (_request: FastifyRequest, _reply: FastifyReply) => {
-            return {
-                hasRegistrationSecret: !!getRegistrationSecret(),
-                hasAuthToken: !!getIdentity(),
-                hasServerUrl: !!getServerUrl(),
-            };
-        },
-    );
-
-    /**
-     * What the agent last read out of keepalived, for the status page. Only the summary:
-     * the page is not behind a login, and the instance list is the server's to show.
-     */
-    fastify.get("/api/status/keepalived", async () => {
-        const status = KeepalivedService.latest();
-        // What makes the agent read keepalived, so an operator can see a FIFO that is set
-        // but not found without going through the log.
-        const triggers = {
-            poll: config.keepalived.pollInterval,
-            fifo: NotifyFifoWatcher.state(),
-            endpoint: !!config.keepalived.notifyToken,
-        };
-        if (!status) return { collected: false, triggers };
-        return {
-            collected: true,
-            triggers,
-            running: status.running,
-            version: status.version ?? null,
-            error: status.error ?? null,
-            instances: status.instances.length,
-            master: status.instances.filter((instance) => instance.state === "MASTER").length,
-            collectedAt: status.collectedAt,
-        };
-    });
-
-    /**
-     * Liveness for the container's HEALTHCHECK and for monitoring: the process answers.
-     *
-     * The server connection is deliberately not consulted -- that question has its own
-     * endpoint above. An agent that cannot reach the server is still running and keeps
-     * reading keepalived; reporting it unhealthy would turn a network problem into "agent
-     * broken". keepalived itself is not probed either: a stopped keepalived is something the
-     * agent reports, not a fault of the agent.
-     */
-    fastify.get("/api/health", async () => ({ status: "ok" }));
-
-    /**
-     * Called by a keepalived notify script (`curl`, see client/scripts/kasm-notify.sh) when an
-     * instance or sync group changes state. It only triggers a reading: the body -- the
-     * arguments keepalived passed the script -- goes to the debug log and nowhere else.
-     *
-     * Registered only with keepalived.notifyToken set, and guarded by that token rather than
-     * by allowedNetworks: the caller is keepalived on this host, not the server. Answers
-     * before the reading is taken, so the script never holds keepalived up.
-     */
-    const notifyToken = config.keepalived.notifyToken;
-    if (notifyToken) {
-        fastify.post(
-            "/api/keepalived/notify",
-            { bodyLimit: 1024 },
-            async (request: FastifyRequest, reply: FastifyReply) => {
-                if (!hasBearerToken(request, notifyToken)) {
-                    logger.warn({ ip: request.ip }, "keepalived notify rejected: invalid token");
-                    return reply.code(401).send({ error: "Unauthorized" });
-                }
-                logger.debug({ notify: request.body ?? null }, "keepalived notify endpoint");
-                KeepalivedService.trigger("endpoint");
-                return reply.code(202).send({ status: "triggered" });
-            },
-        );
-    }
-
-    // Attempt to establish connection
-    fastify.post(
-        "/api/connect",
-        async (_request: FastifyRequest, _reply: FastifyReply) => {
-            const result = await Connection.connect();
-            return {
-                connected: result.connected,
-                error: result.error,
-            };
-        },
-    );
+    if (routes.statusPage) registerStatusApi(fastify);
 
     // API for registering this agent with the server (`inbound` mode: the agent dials in).
     // Registered only together with the register page:
@@ -416,7 +413,120 @@ export async function startWebServer() {
             },
         );
     }
+}
 
+/** The endpoints only the status page calls. */
+function registerStatusApi(fastify: FastifyInstance) {
+    // Check current connection status
+    fastify.get(
+        "/api/status/connection",
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
+            return {
+                connected: Connection.isConnected(),
+            };
+        },
+    );
+
+    // Return config-derived mode info for the status page
+    fastify.get(
+        "/api/status/config",
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
+            return {
+                hasRegistrationSecret: !!getRegistrationSecret(),
+                hasAuthToken: !!getIdentity(),
+                hasServerUrl: !!getServerUrl(),
+            };
+        },
+    );
+
+    /**
+     * What the agent last read out of keepalived, for the status page. Only the summary:
+     * the page is not behind a login, and the instance list is the server's to show.
+     */
+    fastify.get("/api/status/keepalived", async () => {
+        const status = KeepalivedService.latest();
+        // What makes the agent read keepalived, so an operator can see a FIFO that is set
+        // but not found without going through the log.
+        const triggers = {
+            poll: config.keepalived.pollInterval,
+            fifo: NotifyFifoWatcher.state(),
+            endpoint: !!config.keepalived.notifyToken,
+        };
+        if (!status) return { collected: false, triggers };
+        return {
+            collected: true,
+            triggers,
+            running: status.running,
+            version: status.version ?? null,
+            error: status.error ?? null,
+            instances: status.instances.length,
+            master: status.instances.filter((instance) => instance.state === "MASTER").length,
+            collectedAt: status.collectedAt,
+        };
+    });
+
+    // Attempt to establish connection
+    fastify.post(
+        "/api/connect",
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
+            const result = await Connection.connect();
+            return {
+                connected: result.connected,
+                error: result.error,
+            };
+        },
+    );
+}
+
+function registerHealth(fastify: FastifyInstance) {
+    /**
+     * Liveness for the container's HEALTHCHECK, and for nothing else: registered only in the
+     * container image, and answering only loopback, which is where Docker runs the check.
+     * Everyone else gets the 404 an absent route would give.
+     *
+     * The server connection is deliberately not consulted -- that question has its own
+     * endpoint, `/api/status/connection`. An agent that cannot reach the server is still
+     * running and keeps reading keepalived; reporting it unhealthy would turn a network
+     * problem into "agent broken". keepalived itself is not probed either: a stopped
+     * keepalived is something the agent reports, not a fault of the agent.
+     */
+    fastify.get("/api/health", async (request: FastifyRequest, reply: FastifyReply) => {
+        if (!isLoopback(request)) {
+            return reply.callNotFound();
+        }
+        return { status: "ok" };
+    });
+}
+
+function registerNotify(fastify: FastifyInstance) {
+    /**
+     * Called by a keepalived notify script (`curl`, see client/scripts/kasm-notify.sh) when an
+     * instance or sync group changes state. It only triggers a reading: the body -- the
+     * arguments keepalived passed the script -- goes to the debug log and nowhere else.
+     *
+     * Registered only with keepalived.notifyToken set, and guarded by that token rather than
+     * by allowedNetworks: the caller is keepalived on this host, not the server. Answers
+     * before the reading is taken, so the script never holds keepalived up.
+     */
+    const notifyToken = config.keepalived.notifyToken;
+    if (notifyToken) {
+        fastify.post(
+            "/api/keepalived/notify",
+            { bodyLimit: 1024 },
+            async (request: FastifyRequest, reply: FastifyReply) => {
+                if (!hasBearerToken(request, notifyToken)) {
+                    logger.warn({ ip: request.ip }, "keepalived notify rejected: invalid token");
+                    return reply.code(401).send({ error: "Unauthorized" });
+                }
+                logger.debug({ notify: request.body ?? null }, "keepalived notify endpoint");
+                KeepalivedService.trigger("endpoint");
+                return reply.code(202).send({ status: "triggered" });
+            },
+        );
+    }
+}
+
+function registerOutbound(fastify: FastifyInstance) {
     /**
      * The two routes below are how the server reaches this agent, and they listen on every
      * interface. /ws/register in particular takes the auth token the agent then stores from
@@ -528,8 +638,8 @@ export async function startWebServer() {
         },
     );
 
-    // Outbound mode: the server connects here for the regular agent session.
-    // Always active — server authenticates via token query param.
+    // Outbound mode: the server connects here for the regular agent session and
+    // authenticates via the token query param.
     fastify.get(
         "/ws/agent",
         { websocket: true },
@@ -540,6 +650,15 @@ export async function startWebServer() {
                     "Agent connection denied: not in allowedNetworks",
                 );
                 socket.close(4003, "Access denied");
+                return;
+            }
+
+            // The routes are settled at startup, the mode is not: an agent started for
+            // outbound can still be registered inbound through its register page, and from
+            // then on it dials the server itself.
+            if (getAgentMode() !== "outbound") {
+                logger.warn("Agent connection from the server rejected: not in outbound mode");
+                socket.close(4003, "Not in outbound mode");
                 return;
             }
 
@@ -568,21 +687,8 @@ export async function startWebServer() {
             Connection.handleIncoming(socket);
         },
     );
-
-    try {
-        const port = config.listenPort;
-        await fastify.listen({ port, host: "0.0.0.0" });
-        logger.info(
-            `Client Web UI listening on port ${port} (${config.tls ? "https" : "http"})`,
-        );
-        // Logged after the "listening" line, where an operator is already looking.
-        if (config.enableRegisterPage) {
-            initSetupPin(port);
-        }
-    } catch (err) {
-        logger.error({ err: err }, "Failed to start Client Web UI server");
-    }
 }
+
 
 export async function stopWebServer() {
     if (fastifyInstance) {

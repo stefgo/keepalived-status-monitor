@@ -222,10 +222,12 @@ jobs:
 
             - name: Wait for both to report healthy
               run: |
+                  # probe <container> <command...>: runs the command until its output
+                  # carries "status":"ok".
                   probe() {
-                    local name=$1 url=$2
+                    local name=$1; shift
                     for i in $(seq 1 60); do
-                      if curl -fsS "$url" | grep -q '"status":"ok"'; then
+                      if "$@" 2>/dev/null | grep -q '"status":"ok"'; then
                         echo "$name answered after ${i}s"
                         return 0
                       fi
@@ -239,8 +241,21 @@ jobs:
                     echo "::error::$name did not become healthy within 60s"
                     return 1
                   }
-                  probe kasm-smoke-server http://127.0.0.1:3010/api/health
-                  probe kasm-smoke-client http://127.0.0.1:3011/api/health
+                  probe kasm-smoke-server curl -fsS http://127.0.0.1:3010/api/health
+                  # The agent answers /api/health on loopback only, so it is asked from
+                  # inside its container -- where Docker's HEALTHCHECK asks it too.
+                  probe kasm-smoke-client docker exec kasm-smoke-client node -e \
+                    "fetch('http://127.0.0.1:3011/api/health').then(r => r.text()).then(t => console.log(t)).catch(() => process.exit(1))"
+
+            # The other half of that rule: from outside the container the route must not
+            # answer. Asked only now, once the agent is known to be listening, so a refusal
+            # here cannot be a server that has not started yet.
+            - name: Agent health route is not reachable from outside
+              run: |
+                  if curl -sS http://127.0.0.1:3011/api/health | grep -q '"status":"ok"'; then
+                    echo "::error::the agent answers /api/health from outside its container"
+                    exit 1
+                  fi
 
             - name: Container logs
               if: failure()

@@ -360,15 +360,20 @@ Both images declare a `HEALTHCHECK`, and `compose.yaml` repeats it, so `docker p
 
 ```bash
 curl -fsS http://localhost:3010/api/health   # server: process and database
-curl -fsS http://localhost:3011/api/health   # agent: process only
+curl -fsS http://localhost:3011/api/health   # agent: process only, on the agent's host
 ```
+
+The agent's route exists for the `HEALTHCHECK` alone: it is served only in the container
+image and answers only loopback. The agent runs with `network_mode: host`, so the host's
+loopback is its own and the `curl` above works there — from any other machine it gets a
+`404`.
 
 - **The agent's check covers neither its server connection nor keepalived.** An agent that
   cannot reach the server, or finds keepalived stopped, is still running and doing its job;
   both are shown on its status page and reported to the server.
-- An agent whose `config.yaml` disables the web server (`enableStatusPage: false`,
-  `enableRegisterPage: false`, no outbound mode) has nothing on port 3011 to answer. Set
-  `healthcheck: { disable: true }` for that service.
+- The route is there whatever `config.yaml` disables: with both pages off and no outbound
+  mode the agent still starts its web server for it, bound to `127.0.0.1`. A `404` from
+  another machine is the loopback rule, not a broken agent.
 - **Docker does not restart an unhealthy container.** `restart: unless-stopped` reacts to a
   process exiting, not to its health. The state is for monitoring and for
   `depends_on: condition: service_healthy`.

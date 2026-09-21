@@ -954,7 +954,7 @@ Every mutating endpoint broadcasts `ACTIVITY_UPDATE` with the full list.
 | `200`  | `{"status":"ok"}`    | The process serves requests and its database is reachable |
 | `503`  | `{"status":"error"}` | The database could not be queried                         |
 
-Agent connections are not consulted: one offline agent must not mark the control plane as broken. The agent's web UI has its own `GET /api/health` on port 3011, which reports only that the agent process answers — not whether it is connected to the server.
+Agent connections are not consulted: one offline agent must not mark the control plane as broken. The agent's web UI has its own `GET /api/health` on port 3011, which reports only that the agent process answers — not whether it is connected to the server. It serves the container's `HEALTHCHECK` alone: it exists only in the container image and answers only loopback, everyone else gets `404`.
 
 **Why under `/api`:** the server answers every path outside `/api` with the dashboard's `index.html` and HTTP `200`, so a probe on `/health` would report success even without the route. Under `/api`, an unknown path is a `404`.
 
