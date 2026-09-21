@@ -163,7 +163,7 @@ file is no longer read.
 | `keepalived.jsonSignal` | Read the JSON dump instead of the text dump: the number `keepalived --signum=JSON` prints on the host. Only for a keepalived built with `--enable-json`. Unset by default. |
 | `keepalived.dumpTimeoutMs` | How long to wait for keepalived to write a dump (default `3000`). |
 | `listenPort` | Port of the local web server (default `3011`); `KASM_CLIENT_PORT` wins over it. |
-| `enableStatusPage` / `enableRegisterPage` | Serve the status page and the registration page with `POST /api/register` (both default `true`). |
+| `enableStatusPage` / `enableRegisterPage` | Serve the status page and the registration page with `POST /api/register` (both default `true`). The registration page closes by itself once the agent is registered. |
 | `allowSelfSignedCertificates` | Accept a server certificate that does not validate (self-signed), for registration and the WebSocket connection. Default `false`. |
 | `allowedNetworks` | IPv4 addresses or CIDR networks the **server** may dial this agent from, checked on `/ws/register` and `/ws/agent`. Empty (default) allows every address. The local web UI is not restricted by it. An invalid entry stops the agent with a log line naming it. |
 
@@ -267,8 +267,8 @@ files are readable and writable through that path. `ptrace` itself is allowed as
 means code can be injected into host processes.
 
 Treat the agent accordingly: whoever takes it over takes over the host. What limits that is
-its attack surface — set `allowedNetworks`, and disable the register page once no
-re-registration is expected.
+its attack surface — set `allowedNetworks`, and disable the register page for an agent the
+server registers (outbound). An inbound agent's register page closes once it is registered.
 
 ### Hardening
 

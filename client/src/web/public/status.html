@@ -100,7 +100,13 @@
                 </div>
             </div>
 
-            <button type="button" id="re-register-btn" style="
+            <p id="registered-hint" class="field-hint" style="display: none; margin-top: 1.5rem">
+                This client is registered. To register it again, delete
+                <code>identity.json</code> from its data directory and restart it.
+            </p>
+
+            <button type="button" id="register-btn" style="
+                display: none;
                 margin-top: 1.5rem;
                 width: 100%;
                 background: var(--bg-secondary);
@@ -185,11 +191,11 @@
 
                     loadingContainer.style.display = "none";
 
-                    const { hasRegistrationSecret, hasAuthToken, hasServerUrl, registerPage } = configData;
+                    const { hasRegistrationSecret, hasAuthToken, hasServerUrl, registerPageOpen } = configData;
 
                     // Nothing set up yet: the register page is the likelier next step. Without
                     // it the agent waits for the server, which this page shows below.
-                    if (registerPage && !hasRegistrationSecret && !hasAuthToken && !hasServerUrl) {
+                    if (registerPageOpen && !hasRegistrationSecret && !hasServerUrl) {
                         window.location.href = "/register";
                         return;
                     }
@@ -326,9 +332,17 @@
                     }
 
                     // --- Register button ---
-                    document.getElementById("re-register-btn").addEventListener("click", () => {
-                        window.location.href = "/register";
-                    });
+                    // The register page is open only while there is no identity. A registered
+                    // client is told how to start over instead.
+                    if (registerPageOpen) {
+                        const registerBtn = document.getElementById("register-btn");
+                        registerBtn.style.display = "block";
+                        registerBtn.addEventListener("click", () => {
+                            window.location.href = "/register";
+                        });
+                    } else if (hasAuthToken) {
+                        document.getElementById("registered-hint").style.display = "block";
+                    }
 
                 } catch (err) {
                     showError("Error checking client status. Is the client running?");

@@ -19,7 +19,7 @@ import { KeepalivedService } from "../services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
 import { isCertificateError, serverRequest } from "../core/ServerHttp.js";
 import { logger } from "@kasm/shared/node";
-import { initSetupPin, retireSetupPin, rotateSetupPin, verifySetupPin } from "../core/SetupPin.js";
+import { initSetupPin, retireSetupPin, verifySetupPin } from "../core/SetupPin.js";
 import { secretEquals } from "../core/secrets.js";
 import {
     WS_EVENTS,
@@ -171,16 +171,28 @@ export async function startWebServer() {
             { ...routes },
             `Client Web UI listening on ${host}:${port} (${config.tls ? "https" : "http"})`,
         );
-        // Logged after the "listening" line, where an operator is already looking. Without the
-        // register page a PIN is needed only while the server has yet to register this agent
-        // and no secret was given for that; an agent that has one gets no second way in.
-        const outboundPin = routes.outbound && !getIdentity() && !getRegistrationSecret();
-        if (routes.registerPage || outboundPin) {
+        // Logged after the "listening" line, where an operator is already looking. Only an
+        // unregistered agent needs one: through the register page, or while the server has yet
+        // to register it and no secret was given for that -- an agent that has one gets no
+        // second way in.
+        const outboundPin = routes.outbound && !getRegistrationSecret();
+        if (!getIdentity() && (routes.registerPage || outboundPin)) {
             initSetupPin(port, { registerPage: routes.registerPage, outbound: routes.outbound });
         }
     } catch (err) {
         logger.error({ err: err }, "Failed to start Client Web UI server");
     }
+}
+
+/**
+ * Whether the register page is open right now. The route is settled at startup, the
+ * registration state is not: the page is served only until the agent has an identity, and
+ * from then on it answers like a page that does not exist. The setup PIN that guards it is
+ * dropped with the registration, so there is nothing a registered agent could do with it.
+ * Registering again means deleting identity.json and restarting the agent.
+ */
+function isRegisterPageOpen(routes: WebRoutes): boolean {
+    return routes.registerPage && !getIdentity();
 }
 
 /** The status and register pages, their static files and the endpoints they call. */
@@ -202,11 +214,15 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
         }
     }
 
-    // The static handler would otherwise serve a disabled page as /status.html or
-    // /register.html, next to the route that was left out on purpose.
-    const hiddenFiles = new Set<string>();
-    if (!routes.statusPage) hiddenFiles.add("status.html");
-    if (!routes.registerPage) hiddenFiles.add("register.html");
+    // The static handler would otherwise serve a closed page as /status.html or
+    // /register.html, next to the route that was left out on purpose. Asked per request,
+    // because the register page closes when the agent is registered at runtime.
+    const isHiddenFile = (pathName: string): boolean => {
+        const file = path.posix.basename(pathName);
+        if (file === "status.html") return !routes.statusPage;
+        if (file === "register.html") return !isRegisterPageOpen(routes);
+        return false;
+    };
 
     if (publicPath) {
         logger.info(`Serving static files from ${publicPath}`);
@@ -214,19 +230,17 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
             root: publicPath,
             prefix: "/",
             serve: true,
-            allowedPath: (pathName) => !hiddenFiles.has(path.posix.basename(pathName)),
+            allowedPath: (pathName) => !isHiddenFile(pathName),
         });
     } else {
         logger.error("Could not find public directory for Client Web UI!");
         logger.debug("Tried paths: " + possiblePaths.join(", "));
     }
 
-    // Redirect / to the first available page
+    // Redirect / to the register page while it is open, to the status page otherwise.
     fastify.get("/", async (request: FastifyRequest, reply: FastifyReply) => {
-        const registered = !!getIdentity();
-        if (config.enableStatusPage && registered) return reply.redirect("/status");
-        if (config.enableRegisterPage) return reply.redirect("/register");
-        if (config.enableStatusPage) return reply.redirect("/status");
+        if (isRegisterPageOpen(routes)) return reply.redirect("/register");
+        if (routes.statusPage) return reply.redirect("/status");
         return reply.code(404).send({ error: "No web UI available" });
     });
 
@@ -247,7 +261,7 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
     };
 
     // Serve status page
-    if (config.enableStatusPage) {
+    if (routes.statusPage) {
         fastify.get(
             "/status",
             async (_request: FastifyRequest, reply: FastifyReply) => {
@@ -257,10 +271,15 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
     }
 
     // Serve registration page
-    if (config.enableRegisterPage) {
+    if (routes.registerPage) {
         fastify.get(
             "/register",
             async (_request: FastifyRequest, reply: FastifyReply) => {
+                if (!isRegisterPageOpen(routes)) {
+                    return routes.statusPage
+                        ? reply.redirect("/status")
+                        : reply.code(404).send({ error: "No web UI available" });
+                }
                 return sendFileSafe(reply, "register.html");
             },
         );
@@ -303,20 +322,29 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
         async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
                 hasAuthToken: !!getIdentity(),
+                // Whether the register page may send the operator on to the status page.
+                statusPage: routes.statusPage,
             };
         },
     );
 
-    if (routes.statusPage) registerStatusApi(fastify);
+    if (routes.statusPage) registerStatusApi(fastify, routes);
 
     // API for registering this agent with the server (`inbound` mode: the agent dials in).
     // Registered only together with the register page:
     // with the page disabled there is no legitimate caller, and the endpoint decides which
-    // server this agent obeys.
-    if (config.enableRegisterPage) {
+    // server this agent obeys. Open exactly as long as the page is -- see isRegisterPageOpen().
+    if (routes.registerPage) {
         fastify.post(
             "/api/register",
             async (request: FastifyRequest, reply: FastifyReply) => {
+                // First, and as a 404: once the agent is registered the endpoint is closed, not
+                // refusing. Answering before the PIN check gives nothing away that
+                // /api/status/auth does not already say.
+                if (!isRegisterPageOpen(routes)) {
+                    return reply.callNotFound();
+                }
+
                 // firstIssue names the field, so the caller does not have to guess which of the
                 // three it was.
                 const parsed = AgentWebRegisterSchema.safeParse(request.body ?? {});
@@ -376,8 +404,8 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                             { clientId: data.clientId },
                             "Web Registration successful! Identity received.",
                         );
-                        // Each PIN registers once; a later re-registration needs the next one.
-                        rotateSetupPin();
+                        // The page closes with the registration, and the PIN with it.
+                        retireSetupPin();
                         // Connect straight away rather than when the status page next asks:
                         // a registration made through the API has no page to do that.
                         void Connection.connect();
@@ -420,7 +448,7 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
 }
 
 /** The endpoints only the status page calls. */
-function registerStatusApi(fastify: FastifyInstance) {
+function registerStatusApi(fastify: FastifyInstance, routes: WebRoutes) {
     // Check current connection status
     fastify.get(
         "/api/status/connection",
@@ -437,7 +465,7 @@ function registerStatusApi(fastify: FastifyInstance) {
         async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
                 hasRegistrationSecret: !!getRegistrationSecret(),
-                registerPage: config.enableRegisterPage,
+                registerPageOpen: isRegisterPageOpen(routes),
                 hasAuthToken: !!getIdentity(),
                 hasServerUrl: !!getServerUrl(),
             };
@@ -615,13 +643,9 @@ function registerOutbound(fastify: FastifyInstance) {
 
                         const identityStored = setIdentity(clientId, authToken);
                         consumeRegistrationSecret();
-                        // Each PIN registers once. With the register page there is a next
-                        // registration to guard; without it nothing is left the PIN could open.
-                        if (config.enableRegisterPage) {
-                            rotateSetupPin();
-                        } else {
-                            retireSetupPin();
-                        }
+                        // Each PIN registers once, and a registered agent has nothing left
+                        // it could open.
+                        retireSetupPin();
                         clearTimeout(timeout);
 
                         // Logged, not sent back: the caller here is the server, which has

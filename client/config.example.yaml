@@ -97,5 +97,6 @@ enableStatusPage: true
 
 # Show the registration page at /register and accept POST /api/register (default: true)
 # Registering requires the setup PIN printed to the agent's log on startup.
-# Disable once the client is registered and no re-registration is expected.
+# The page closes by itself once the client is registered. Disable it for a client that
+# should only ever be registered by the server (outbound mode).
 enableRegisterPage: true

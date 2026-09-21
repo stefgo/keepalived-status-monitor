@@ -19,11 +19,10 @@ import { getIdentity } from "./Identity.js";
  * can already read the machine's logs (`docker logs kasm-client`) can see it. An agent given
  * `KASM_REGISTRATION_SECRET` for an unattended rollout accepts that on `/ws/register` as well.
  *
- * Unlike in an agent that can be registered only once, re-registering is a feature here (the
- * status page offers it), so the PIN exists whenever the register page is enabled -- not only
- * while the agent has no token. Without the page it exists only while the agent waits for an
- * outbound registration and has no secret. It is rotated after every successful registration,
- * which makes each PIN single use without requiring a restart for the next one.
+ * The PIN exists only while the agent has no identity: with the register page enabled, or
+ * while it waits for an outbound registration and has no secret. It is dropped with the
+ * registration, and the register page closes with it -- registering again means deleting
+ * identity.json and restarting the agent, which prints a new PIN.
  *
  * Deliberately never persisted to config.yaml: it is regenerated on every start, and what is
  * never written never has to be cleaned up.
@@ -106,8 +105,8 @@ export function rotateSetupPin(): void {
 }
 
 /**
- * Drops the PIN without a successor: an outbound registration has used it, and without the
- * register page there is nothing left it could open.
+ * Drops the PIN without a successor: a registration has used it, and a registered agent has
+ * nothing left it could open.
  */
 export function retireSetupPin(): void {
     currentPin = null;

@@ -90,7 +90,7 @@ identity with a `serverUrl` is `inbound` (the agent dials), an identity without 
 | `allowedNetworks` | IPv4 addresses or CIDR networks the server may dial `/ws/register` and `/ws/agent` from. Empty (default) allows every address. |
 | `listenPort` | Port of the local web server (default `3011`). `KASM_CLIENT_PORT` wins over it. |
 | `enableStatusPage` | Serve `/status` (default `true`). |
-| `enableRegisterPage` | Serve `/register` and accept `POST /api/register` (default `true`). |
+| `enableRegisterPage` | Serve `/register` and accept `POST /api/register` while the agent is unregistered (default `true`). Both close once it has an identity. |
 
 ### 2. WebSocket Connection (`src/core/Connection.ts`)
 
@@ -154,7 +154,7 @@ Settled at startup from `config.yaml` (`getWebRoutes()`):
 | Routes | Served when |
 | :----- | :---------- |
 | `/status`, `/api/status/connection`, `/api/status/config`, `/api/status/keepalived`, `POST /api/connect` | `enableStatusPage` (default `true`) |
-| `/register`, `POST /api/register` | `enableRegisterPage` (default `true`) |
+| `/register`, `POST /api/register` | `enableRegisterPage` (default `true`); closed once the agent is registered |
 | `/`, `/api/status/server`, `/api/status/auth`, the static files | either page is enabled |
 | `/ws/register`, `/ws/agent` | outbound mode: no `serverUrl` |
 | `/api/keepalived/notify` | `keepalived.notifyToken` is set |
@@ -167,7 +167,13 @@ with the setup PIN (or `KASM_REGISTRATION_SECRET`), and a registered one needs `
 fixed at startup while the mode is not, `/ws/agent` also refuses a connection once the agent
 has been registered inbound through its register page.
 
-The static handler leaves out the HTML file of a disabled page, so `/status.html` is not a
+The register page closes the same way, per request rather than at startup: once the agent
+has an identity, `/register` redirects to `/status` (or answers `404` without a status page),
+`register.html` is no longer served and `POST /api/register` answers `404`. The setup PIN is
+dropped with the registration, so there is nothing left the page could do. The status page
+then shows how to start over instead of a link to the register page.
+
+The static handler leaves out the HTML file of a disabled or closed page, so `/status.html` is not a
 way around `enableStatusPage: false`. With no page, the notify endpoint and no outbound mode, the server
 binds `127.0.0.1` for the health route alone; outside the container it then does not start
 at all, and says so in the log.
@@ -176,8 +182,8 @@ at all, and says so in the log.
 
 | Route       | Description                                                                   |
 | :---------- | :---------------------------------------------------------------------------- |
-| `GET /`     | Redirects to `/status` if registered, otherwise to `/register`.               |
-| `GET /register` | Registration UI — form to enter Server URL and Registration Token.        |
+| `GET /`     | Redirects to `/register` while the register page is open, otherwise to `/status`. |
+| `GET /register` | Registration UI — form to enter Server URL, Registration Token and setup PIN. Only while the agent is unregistered. |
 | `GET /status`   | Status dashboard — shows server reachability, auth token, connection state, a one-line keepalived summary and which triggers are active. |
 
 **API endpoints:**
@@ -185,13 +191,13 @@ at all, and says so in the log.
 | Route                        | Method | Description                                                          |
 | :--------------------------- | :----- | :------------------------------------------------------------------- |
 | `/api/status/server?url=...` | GET    | Checks if the server is reachable via `GET {serverUrl}/api/v1/ping`. |
-| `/api/status/auth`           | GET    | Returns `{hasAuthToken: boolean}`.                                   |
+| `/api/status/auth`           | GET    | Returns `{hasAuthToken, statusPage}` — whether the agent is registered, and whether the register page may link on to the status page. |
 | `/api/status/connection`     | GET    | Returns `{connected: boolean}` (live WebSocket state).               |
 | `/api/status/keepalived`     | GET    | The last reading in summary: `{collected, running, version, error, instances, master, collectedAt}`, plus `triggers: {poll, fifo, endpoint}` — the poll interval, `off`/`open`/`missing` for the FIFO, and whether the notify endpoint exists. No instance details — the page has no login. |
 | `/api/keepalived/notify`     | POST   | Triggers a reading; called by a keepalived notify script. Exists only with `keepalived.notifyToken` set and requires `Authorization: Bearer <notifyToken>` (`401` otherwise). The body — at most 1 KB, plain text or JSON — is logged at debug level and not otherwise read. Answers `202` before the reading is taken. Not covered by `allowedNetworks`: the caller is keepalived on the same host, not the server. |
 | `/api/health`                | GET    | Liveness for the image's `HEALTHCHECK`: `{status: "ok"}` while the agent process answers. Independent of the server connection. Served only in the container image and only to loopback; `404` for everyone else. |
 | `/api/connect`               | POST   | Attempts to establish a WebSocket connection.                        |
-| `/api/register`              | POST   | Performs registration: checks the setup PIN, then calls `POST {serverUrl}/api/v1/register`. Body `{url, token, pin}`; `400` names the invalid field (`url` must be http or https), `403` on a wrong PIN. Only available while `enableRegisterPage` is not `false`. |
+| `/api/register`              | POST   | Performs registration: checks the setup PIN, then calls `POST {serverUrl}/api/v1/register`. Body `{url, token, pin}`; `400` names the invalid field (`url` must be http or https), `403` on a wrong PIN. Only available while `enableRegisterPage` is not `false`, and `404` once the agent is registered. |
 
 **WebSocket routes (server dials the agent):** `/ws/register` and `/ws/agent` first check the peer address against `allowedNetworks`. An empty list allows every address. `/ws/agent` then checks both halves of the identity from the query string — the `token` against the stored `authToken` and the `clientId` against the stored one, each mismatch closing with `4001 Unauthorized`. The id is checked as well as the token because a target address pointed at the wrong host would otherwise report that host under somebody else's name.
 
@@ -344,10 +350,10 @@ they are guarded by a PIN that is printed to the agent's log once the web server
 ```
 
 - Read it with `docker logs kasm-client` (or wherever the agent logs to). Case and the hyphen do not matter.
-- It is generated at every start and never written to `config.yaml`. The `Web UI` line appears only with the register page, the `Outbound` line only while an agent without `serverUrl` is unregistered.
-- It stays required after the first registration, because re-registering from the status page is supported. After every successful registration a new PIN is generated and logged, so each PIN works once.
+- It is generated at every start of an unregistered agent and never written to `config.yaml`. The `Web UI` line appears only with the register page, the `Outbound` line only while an agent without `serverUrl` is unregistered.
+- It is dropped with the first successful registration, and the register page closes with it. To register an agent again, delete `identity.json` from its data directory and restart it — it then prints a new PIN — and delete the client's old entry on the server.
 - After 5 wrong attempts — on either route — the PIN is replaced by a new one (also logged), which ends online guessing without locking the operator out.
-- With `enableRegisterPage: false` neither the page nor `POST /api/register` exists. A PIN is then generated only while the agent is unregistered, has no `serverUrl` and no `KASM_REGISTRATION_SECRET`, and it is discarded once the server has registered the agent.
+- With `enableRegisterPage: false` neither the page nor `POST /api/register` exists. A PIN is then generated only while the agent also has no `serverUrl` and no `KASM_REGISTRATION_SECRET`.
 
 ---
 

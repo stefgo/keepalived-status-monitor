@@ -142,7 +142,7 @@
                     transition: all 0.2s ease;
                 "
             >
-                Back to Status
+                Go to Status
             </button>
 
             <div
@@ -178,7 +178,9 @@
                 const ICON_ERROR =
                     '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728"></path>';
 
-                // Pre-fill URL and determine button text
+                // The agent serves this page only while it is unregistered, so the page
+                // only has to know whether there is a status page to send the operator on to.
+                let hasStatusPage = false;
                 try {
                     const [authRes, serverRes] = await Promise.all([
                         fetch("/api/status/auth"),
@@ -188,15 +190,10 @@
                     const authData = await authRes.json();
                     const serverData = await serverRes.json();
 
+                    hasStatusPage = !!authData.statusPage;
                     if (serverData.serverUrl) {
                         document.getElementById("url").value =
                             serverData.serverUrl;
-                    }
-
-                    // Show "Back to Status" button only when already registered
-                    if (authData.hasAuthToken) {
-                        backToStatusBtn.style.display = "block";
-                        btnText.textContent = "Re-Register";
                     }
                 } catch (e) {
                     // Ignore — just don't pre-fill
@@ -319,6 +316,10 @@
                                 "success",
                                 "Registered successfully",
                             );
+                            // The page closes with the registration: the form has nothing
+                            // left to do.
+                            form.style.display = "none";
+                            if (hasStatusPage) backToStatusBtn.style.display = "block";
                             // The agent registered but could not store what it was given.
                             // It is connected now and would come back unregistered, which
                             // only the person in front of this page can do anything about.
