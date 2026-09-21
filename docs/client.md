@@ -10,7 +10,7 @@ column, in the REST API and in the dashboard:
 
 | Mode | Who dials | What the agent needs |
 | :--- | :--- | :--- |
-| `inbound` | The agent dials the server (`/ws/agent` on the server) | `serverUrl` and an `authToken`; the agent owns the reconnect ladder. The server checks the source address against `clients.inbound_allowed_ip`. |
+| `inbound` | The agent dials the server (`/ws/agent` on the server) | `serverUrl` in `config.yaml` and an identity in `identity.json`; the agent owns the reconnect ladder. The server checks the source address against `clients.inbound_allowed_ip`. |
 | `outbound` | The server dials the agent (`/ws/register` and `/ws/agent` on the agent's own web server) | A reachable `listenPort` (default 3011) and a `registrationSecret` for the first contact; the server owns the reconnect ladder and stores the agent's address as `outboundTargetAddress`. |
 
 Read from the agent's side the words invert — an `outbound` client is the one that receives a
@@ -27,7 +27,10 @@ The client is a lightweight, headless Node.js process designed to run as a daemo
 ```
 client/src/
 ├── core/
-│   ├── Config.ts              # Configuration management (YAML-based, with authToken storage)
+│   ├── Config.ts              # What the operator wrote: read once, validated, frozen
+│   ├── ConfigFile.ts          # config.yaml itself: YAML document, comment-preserving writes
+│   ├── Identity.ts            # The clientId and authToken the server issued (data directory)
+│   ├── RegistrationState.ts   # What registration changes: serverUrl, registrationSecret, mode
 │   ├── Connection.ts          # Persistent WebSocket connection & message routing
 │   ├── DataStore.ts           # The agent's data directory: atomic JSON read/write
 │   ├── ServerHttp.ts          # HTTP(S) requests to the server, certificate check decided per call
@@ -56,21 +59,35 @@ client/src/
 
 ## 🏗️ Core Components
 
-### 1. Configuration (`src/core/Config.ts`)
+### 1. Configuration (`src/core/Config.ts`, `ConfigFile.ts`, `Identity.ts`, `RegistrationState.ts`)
 
-Manages the client's YAML configuration file (`config.yaml`). Supports reading, updating, and persisting configuration while preserving YAML comments.
+Four modules, along one line: **configuration is what the operator wrote, state is what the
+agent was given.**
+
+| Module | Owns | Persisted in |
+| :--- | :--- | :--- |
+| `Config.ts` | The settings from `config.yaml`, validated against `AgentConfigSchema` and **frozen** — nothing writes to them at runtime. | `config.yaml` (read only) |
+| `ConfigFile.ts` | The YAML document itself, so an edit keeps the operator's comments, order and spelling. | `config.yaml` |
+| `Identity.ts` | The `clientId` and `authToken` the server issued. Never in `config.yaml`: the operator does not write them, and the write has to be atomic. | `identity.json` in the data directory |
+| `RegistrationState.ts` | What a registration changes — the server URL, the registration secret once it is used — plus the agent mode derived from them. | written back to `config.yaml` |
+
+A `config.yaml` from an older version that still holds `clientId` and `authToken` is migrated
+at the next start: the pair is written to `identity.json`, and only once that worked are the
+two keys removed from `config.yaml` together with their comments.
+
+**Agent mode** (`getAgentMode()`) is derived in one place: no identity is `unregistered`, an
+identity with a `serverUrl` is `inbound` (the agent dials), an identity without one is
+`outbound` (the server dials). It is logged once at startup.
 
 **Config keys:**
 
 | Key            | Description                                                                 |
 | :------------- | :-------------------------------------------------------------------------- |
-| `clientId`     | Client UUID issued by the server at registration. Empty until then; never set by hand. |
-| `logLevel`     | Log verbosity (`debug`, `info`, `warn`, `error`). Default: `info`.          |
-| `serverUrl`    | HTTP(S) URL of the management server (e.g., `https://manager:3010`).        |
-| `authToken`    | Permanent authentication token. Populated automatically after registration. |
+| `logLevel`     | Log verbosity (`trace`…`fatal`, `silent`). Default: `info`, or `LOG_LEVEL` where the file says nothing. A value that is not a level is ignored with a warning. |
+| `serverUrl`    | HTTP(S) URL of the management server (e.g., `https://manager:3010`). Set it by hand, or let a registration through the web UI write it. Absent in outbound mode. |
 | `keepalived` | How keepalived is read: `pollInterval` (s, default `5`, `0` switches the timer off), `notifyFifo` and `notifyToken` (see [Triggers](#triggers); `KASM_NOTIFY_FIFO` and `KASM_NOTIFY_TOKEN` win over them), `dataFile`, `statsFile`, `jsonFile` (as keepalived sees them), `jsonSignal` (unset: text dump), `dumpTimeoutMs` (default `3000`). Validated on start; an invalid value — or all three triggers off — stops the agent with a log line naming it. |
 | `registrationSecret` | Outbound mode only: the secret the server presents on `/ws/register`. Must match the value entered in the dashboard's Add Client wizard; removed from the file after a successful registration. |
-| `allowSelfSignedCertificates` | Accept a server certificate that does not validate, for registration and the WebSocket connection. Default `false`. |
+| `allowSelfSignedCertificates` | Accept a server certificate that does not validate, for registration and the WebSocket connection. Default `false`. A value that is not `true` or `false` is ignored with a warning. |
 | `allowedNetworks` | IPv4 addresses or CIDR networks the server may dial `/ws/register` and `/ws/agent` from. Empty (default) allows every address. |
 | `listenPort` | Port of the local web server (default `3011`). `KASM_CLIENT_PORT` wins over it. |
 | `enableStatusPage` | Serve `/status` (default `true`). |
@@ -267,7 +284,7 @@ Registration is a one-time setup step performed via the local web UI:
 3. The UI checks server reachability (`GET /api/v1/ping`).
 4. The agent verifies the setup PIN before it contacts the server, then calls `POST /api/v1/register` with `{token, hostname}`.
 5. The server responds with the client's identity: a `clientId` and a permanent `authToken`, both issued by the server.
-6. The client saves `clientId`, `authToken` and `serverUrl` to `config.yaml`.
+6. The client saves the identity to `identity.json` in its data directory, and the server URL to `config.yaml` — the latter only if it differs from what is already there. If either write fails, the register page says so: the agent is connected, but it would come back unregistered.
 7. The client connects via WebSocket straight away.
 
 ### Setup PIN (`src/core/SetupPin.ts`)
@@ -304,11 +321,12 @@ a PIN that is printed to the agent's log once the web server listens:
 
 ## 🗄️ Data Storage
 
-Identity and connection settings live in `config.yaml`, as they always have. Everything else
-the agent has to survive a restart lives in its **data directory** (`src/core/DataStore.ts`):
+Everything the agent has to survive a restart lives in its **data directory**
+(`src/core/DataStore.ts`). `config.yaml` holds what the operator wrote, and nothing else:
 
 | File | Owner | Contents |
 | :--- | :---- | :------- |
+| `identity.json` | the server | The `clientId` and `authToken` issued at registration. Lose it and the agent has to be registered again. |
 | `keepalived-last.json` | the agent | The last reading, so a restart can still tell what changed while the agent was away. |
 | `queue.json`  | the agent  | Activity events the server has not acknowledged yet. |
 
@@ -334,7 +352,7 @@ There is no local database.
 
 ## 🔐 Security Notes
 
-- The `authToken` is stored in plain text in `config.yaml`. Secure the file using appropriate filesystem permissions. It is masked in the agent's log.
+- The `authToken` is stored in plain text in `identity.json` in the agent's data directory. Secure the directory using appropriate filesystem permissions. The token is masked in the agent's log and never written to `config.yaml`.
 - The agent needs `pid: host`, `KILL` and `SYS_PTRACE` — see [Agent Permissions](install.md#agent-permissions). It gets no Docker socket and no host file system mount, and it sends keepalived nothing but `SIGUSR1`, `SIGUSR2` and, if configured, the JSON signal. It is nonetheless root on the host in all but name, since `SYS_PTRACE` reaches every host process — see [What These Permissions Amount To](install.md#what-these-permissions-amount-to).
 - Registration through the local web UI requires the setup PIN from the agent's log (see [Setup PIN](#setup-pin-srccoresetuppints)). Set `enableRegisterPage: false` once no re-registration is expected.
 - The server's TLS certificate is verified for registration and for the WebSocket connection. For a server with a self-signed certificate set `allowSelfSignedCertificates: true`; it then applies to both. The reachability check on the status and register pages always tolerates such a certificate — it sends nothing and only answers whether a KASM server responds. The decision is passed per request (`core/ServerHttp.ts`, the WebSocket options) and never through the process-wide `NODE_TLS_REJECT_UNAUTHORIZED`, which the agent used to set on its first request and never reset.

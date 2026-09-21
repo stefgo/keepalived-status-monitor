@@ -376,7 +376,7 @@ An empty `outboundTargetAddress` or `registrationSecret` is answered with `400` 
 
 | Agent response                                   | Reason given                                                                 |
 | :----------------------------------------------- | :--------------------------------------------------------------------------- |
-| Close `4003 Already registered`                  | The agent already holds an `authToken`; remove it and set a new secret.      |
+| Close `4003 Already registered`                  | The agent already holds an identity; delete its `identity.json` and set a new secret. |
 | Close `4003 No registration secret configured`   | `registrationSecret` is missing in the agent's `config.yaml`.                |
 | `REGISTRATION_FAILURE` / close `4003 Invalid secret` | The secret does not match.                                               |
 | Close `4001 Registration timed out`              | The agent gave up waiting for the registration request.                      |
@@ -585,7 +585,7 @@ auth token.
 }
 ```
 
-> The returned `token` is the permanent `authToken` and `clientId` the id the server knows the client by. The agent saves both in its `config.yaml`; the `token` is used for all future WebSocket connections.
+> The returned `token` is the permanent `authToken` and `clientId` the id the server knows the client by. The agent saves both in `identity.json` in its data directory; the `token` is used for all future WebSocket connections.
 >
 > Registering an agent again creates a **new** client entry; the previous one stays behind offline and can be deleted in the UI.
 >
@@ -1011,7 +1011,7 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 | Parameter  | Type   | Required | Description                                                  |
 | :--------- | :----- | :------- | :----------------------------------------------------------- |
 | `clientId` | string | **Yes**  | The server-issued `clientId` from the client's `config.yaml`. |
-| `token`    | string | **Yes**  | The permanent `authToken` from the client's `config.yaml`.    |
+| `token`    | string | **Yes**  | The permanent `authToken` from the client's `identity.json`.  |
 
 A request missing either half is closed with `4001 Authentication required`. The token may
 also be sent as `Authorization: Bearer <token>`; the id has no header form.

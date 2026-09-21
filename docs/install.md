@@ -126,7 +126,7 @@ An image is tagged only after CI has started it and it answered its health check
 | `KASM_SERVER_PORT` | `1`–`65535`                 | `3010`        | Port the server listens on; wins over `port` in `config.yaml`. An unusable value ends the start. The container's health check reads it too. |
 | `NODE_ENV`    | `development`, `production`      | `development` | Picks the log format when `LOG_FORMAT` is unset (`production` → JSON).        |
 | `KASM_CLIENT_PORT` | `1`–`65535`                  | `3011`        | _(Client only)_ Port of the local web server; wins over `listenPort` in `config.yaml`. An unusable value ends the start. |
-| `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. |
+| `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: the identity it was issued at registration (`identity.json`), its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. **Losing this directory means registering the agent again.** |
 | `KASM_CLIENT_CONFIG` | path                       | `/app/client/config.yaml` | _(Client only)_ The agent's `config.yaml`. Lets several agents run from one checkout, as in `compose.dev.yaml`. |
 | `KASM_PROC_DIR` | path                              | `/proc`       | _(Client only)_ Where the agent looks for keepalived's process. Only for tests against a copied process tree. |
 | `KASM_NOTIFY_FIFO` | path                           | _unset_       | _(Client only)_ keepalived's `vrrp_notify_fifo`; wins over `keepalived.notifyFifo`. See [Faster Failover Detection](#faster-failover-detection). |
@@ -142,14 +142,12 @@ LOG_LEVEL=debug LOG_FORMAT=json npm run dev -w server/backend
 
 #### Client Config (`client/config.yaml`)
 
-Created automatically during registration, or can be set up manually using `client/config.example.yaml` as a template.
+Created automatically during registration, or can be set up manually using `client/config.example.yaml` as a template. The identity the server issues — the client id and the auth token — is **not** in this file: it lives in `identity.json` in the agent's data directory (`KASM_CLIENT_DATA_DIR`).
 
 | Key          | Description                                                                    |
 | :----------- | :----------------------------------------------------------------------------- |
-| `clientId`   | UUID of this client, issued by the server at registration. Leave empty.        |
 | `logLevel`   | Log verbosity for the client agent.                                            |
-| `serverUrl`  | HTTP(S) URL of the management server (e.g., `https://manager.example.com`).   |
-| `authToken`  | Permanent authentication token. Populated automatically after registration.    |
+| `serverUrl`  | HTTP(S) URL of the management server (e.g., `https://manager.example.com`). Set it here, or let a registration through the agent's web UI write it. |
 | `registrationSecret` | Outbound mode: the secret the server presents when it first dials the agent. Enter the same value in the **Add Client** wizard; it is removed from the file after registration. |
 | `keepalived.pollInterval` | Seconds between two readings (default `5`); `0` switches the timer off, which needs one of the two below. |
 | `keepalived.notifyFifo` | keepalived's `vrrp_notify_fifo` as keepalived sees the path; every line in it triggers a reading. Unset by default. See [Faster Failover Detection](#faster-failover-detection). |

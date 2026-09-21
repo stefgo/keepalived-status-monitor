@@ -1,18 +1,21 @@
 # Keepalived Status Monitor - Client Configuration
-
-# Identifier of this client. Issued by the server during registration and written here
-# together with authToken — leave empty, do not set manually.
-clientId:
+#
+# This file holds what you set. What the server issues at registration -- this agent's client
+# id and its auth token -- is not in here: it lives in identity.json in the agent's data
+# directory (KASM_CLIENT_DATA_DIR, a named volume in compose.yaml). Lose that directory and
+# the agent has to be registered again.
+#
+# Checked on every start: a value of the wrong type or format stops the agent with a log line
+# naming the field. The agent writes back to this file in two cases only -- the serverUrl of a
+# registration made through the web UI, and the registrationSecret once it has been used.
 
 # Log level for the client (debug, info, warn, error)
 logLevel: "info"
 
-# URL of the KASM Server (e.g., http://your-server:3010)
+# URL of the KASM Server (e.g., http://your-server:3010). Set it here and the register page
+# is filled in for you; leave it empty and a registration through that page writes it back.
+# An agent the server dials instead (outbound mode) has no serverUrl at all.
 serverUrl:
-
-# Authentication token for server communication
-# Provided during initial registration and stored locally — do not set manually.
-authToken:
 
 # Secret for server-initiated registration -- `outbound` mode, named from the server's
 # side, which is where the mode names come from.

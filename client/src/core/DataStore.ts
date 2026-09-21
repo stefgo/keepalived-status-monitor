@@ -44,14 +44,19 @@ export function readJsonFile(name: string): unknown | null {
  * A plain write that is cut short -- the host losing power mid-update is exactly the
  * situation this state exists for -- would leave half a file behind, and rename is the one
  * operation the filesystem gives us that cannot.
+ *
+ * Answers whether it worked. The two callers that write scratch state ignore that -- a lost
+ * reading is taken again -- while the identity has to know, because a registration nobody
+ * could save is one the operator has to be told about.
  */
-export function writeJsonFile(name: string, value: unknown): void {
+export function writeJsonFile(name: string, value: unknown): boolean {
     const file = pathOf(name);
     const temp = `${file}.tmp`;
     try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
         fs.writeFileSync(temp, JSON.stringify(value, null, 4));
         fs.renameSync(temp, file);
+        return true;
     } catch (err) {
         logger.error({ err, file }, "Failed to write a data file");
         try {
@@ -59,5 +64,6 @@ export function writeJsonFile(name: string, value: unknown): void {
         } catch {
             // Nothing left to do about it; the next write overwrites the leftover.
         }
+        return false;
     }
 }

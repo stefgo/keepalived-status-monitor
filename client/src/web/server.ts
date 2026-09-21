@@ -5,13 +5,15 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { fileURLToPath } from "url";
+import { config, readTlsMaterial } from "../core/Config.js";
+import { getIdentity, setIdentity } from "../core/Identity.js";
 import {
-    config,
-    persistIdentity,
-    persistServerUrl,
-    deleteRegistrationSecret,
-    readTlsMaterial,
-} from "../core/Config.js";
+    consumeRegistrationSecret,
+    getAgentMode,
+    getRegistrationSecret,
+    getServerUrl,
+    setServerUrl,
+} from "../core/RegistrationState.js";
 import { Connection } from "../core/Connection.js";
 import { KeepalivedService } from "../services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
@@ -48,17 +50,16 @@ function hasBearerToken(request: FastifyRequest, expected: string): boolean {
  * Returns true when the web server is needed:
  * - status or register page enabled, OR
  * - the notify endpoint enabled (keepalived.notifyToken set), OR
- * - `outbound` mode is applicable, so the server has to be able to dial this agent
- *   (registrationSecret set, or authToken present without serverUrl)
- *
- * The mode names are the server's: `outbound` is the server dialling out to this agent.
+ * - `outbound` mode is applicable, so the server has to be able to dial this agent -- either
+ *   because a registration secret is still waiting to be used, or because the agent is
+ *   already registered in that mode.
  */
 export function isWebServerNeeded(): boolean {
-    if (config.enableStatusPage !== false) return true;
-    if (config.enableRegisterPage !== false) return true;
+    if (config.enableStatusPage) return true;
+    if (config.enableRegisterPage) return true;
     if (config.keepalived.notifyToken) return true;
-    if (config.registrationSecret) return true;
-    if (config.authToken && !config.serverUrl) return true;
+    if (getRegistrationSecret()) return true;
+    if (getAgentMode() === "outbound") return true;
     return false;
 }
 
@@ -109,10 +110,10 @@ export async function startWebServer() {
 
     // Redirect / to the first available page
     fastify.get("/", async (request: FastifyRequest, reply: FastifyReply) => {
-        const hasToken = !!config.authToken?.trim();
-        if (config.enableStatusPage !== false && hasToken) return reply.redirect("/status");
-        if (config.enableRegisterPage !== false) return reply.redirect("/register");
-        if (config.enableStatusPage !== false) return reply.redirect("/status");
+        const registered = !!getIdentity();
+        if (config.enableStatusPage && registered) return reply.redirect("/status");
+        if (config.enableRegisterPage) return reply.redirect("/register");
+        if (config.enableStatusPage) return reply.redirect("/status");
         return reply.code(404).send({ error: "No web UI available" });
     });
 
@@ -133,7 +134,7 @@ export async function startWebServer() {
     };
 
     // Serve status page
-    if (config.enableStatusPage !== false) {
+    if (config.enableStatusPage) {
         fastify.get(
             "/status",
             async (_request: FastifyRequest, reply: FastifyReply) => {
@@ -143,7 +144,7 @@ export async function startWebServer() {
     }
 
     // Serve registration page
-    if (config.enableRegisterPage !== false) {
+    if (config.enableRegisterPage) {
         fastify.get(
             "/register",
             async (_request: FastifyRequest, reply: FastifyReply) => {
@@ -157,7 +158,7 @@ export async function startWebServer() {
         "/api/status/server",
         async (request: FastifyRequest, _reply: FastifyReply) => {
             const query = request.query as StatusQuery;
-            const checkUrl = query.url || config.serverUrl;
+            const checkUrl = query.url || getServerUrl();
             let serverReachable = false;
 
             if (checkUrl) {
@@ -188,8 +189,7 @@ export async function startWebServer() {
         "/api/status/auth",
         async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
-                hasAuthToken:
-                    !!config.authToken && config.authToken.trim().length > 0,
+                hasAuthToken: !!getIdentity(),
             };
         },
     );
@@ -209,9 +209,9 @@ export async function startWebServer() {
         "/api/status/config",
         async (_request: FastifyRequest, _reply: FastifyReply) => {
             return {
-                hasRegistrationSecret: !!config.registrationSecret,
-                hasAuthToken: !!config.authToken && config.authToken.trim().length > 0,
-                hasServerUrl: !!config.serverUrl && config.serverUrl.trim().length > 0,
+                hasRegistrationSecret: !!getRegistrationSecret(),
+                hasAuthToken: !!getIdentity(),
+                hasServerUrl: !!getServerUrl(),
             };
         },
     );
@@ -295,7 +295,7 @@ export async function startWebServer() {
     // Registered only together with the register page:
     // with the page disabled there is no legitimate caller, and the endpoint decides which
     // server this agent obeys.
-    if (config.enableRegisterPage !== false) {
+    if (config.enableRegisterPage) {
         fastify.post(
             "/api/register",
             async (request: FastifyRequest, reply: FastifyReply) => {
@@ -349,8 +349,8 @@ export async function startWebServer() {
                     const data = JSON.parse(response.text);
 
                     if (data.token && data.clientId) {
-                        persistIdentity(data.token, data.clientId);
-                        persistServerUrl(url);
+                        setIdentity(data.clientId, data.token);
+                        setServerUrl(url);
                         logger.info(
                             { clientId: data.clientId },
                             "Web Registration successful! Identity received.",
@@ -415,12 +415,12 @@ export async function startWebServer() {
                 socket.close(4003, "Access denied");
                 return;
             }
-            if (config.authToken) {
+            if (getIdentity()) {
                 socket.close(4003, "Already registered");
                 return;
             }
 
-            if (!config.registrationSecret) {
+            if (!getRegistrationSecret()) {
                 socket.close(4003, "No registration secret configured");
                 return;
             }
@@ -456,7 +456,7 @@ export async function startWebServer() {
                         }
                         const { secret, authToken, clientId } = parsed.data;
 
-                        if (!secretEquals(secret, config.registrationSecret)) {
+                        if (!secretEquals(secret, getRegistrationSecret())) {
                             clearTimeout(timeout);
                             logger.warn("Registration rejected: secret mismatch");
                             socket.send(JSON.stringify({
@@ -467,8 +467,8 @@ export async function startWebServer() {
                             return;
                         }
 
-                        persistIdentity(authToken, clientId);
-                        deleteRegistrationSecret();
+                        setIdentity(clientId, authToken);
+                        consumeRegistrationSecret();
                         clearTimeout(timeout);
 
                         logger.info({ clientId }, "Registration successful, identity stored");
@@ -507,8 +507,9 @@ export async function startWebServer() {
             }
 
             const { token, clientId } = (req.query as AgentQuery) ?? {};
+            const identity = getIdentity();
 
-            if (!secretEquals(token, config.authToken)) {
+            if (!secretEquals(token, identity?.authToken)) {
                 logger.warn("Agent connection from the server rejected: invalid token");
                 socket.close(4001, "Unauthorized");
                 return;
@@ -517,7 +518,7 @@ export async function startWebServer() {
             // The id is checked as well as the token: the server has to be dialling the
             // client it thinks it is, or a target address pointed at the wrong host would
             // report that host's keepalived under somebody else's name.
-            if (!clientId || clientId !== config.clientId) {
+            if (!clientId || clientId !== identity?.clientId) {
                 logger.warn(
                     { presented: clientId },
                     "Agent connection from the server rejected: client id mismatch",
@@ -538,7 +539,7 @@ export async function startWebServer() {
             `Client Web UI listening on port ${port} (${config.tls ? "https" : "http"})`,
         );
         // Logged after the "listening" line, where an operator is already looking.
-        if (config.enableRegisterPage !== false) {
+        if (config.enableRegisterPage) {
             initSetupPin(port);
         }
     } catch (err) {

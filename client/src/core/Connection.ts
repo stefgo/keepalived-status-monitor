@@ -2,6 +2,8 @@ import WebSocket from "ws";
 
 import os from "os";
 import { config } from "./Config.js";
+import { getIdentity } from "./Identity.js";
+import { getWebSocketUrl } from "./RegistrationState.js";
 import {
     AGENT_CAPABILITIES,
     WS_EVENTS,
@@ -280,7 +282,8 @@ export class Connection {
             return Promise.resolve({ connected: true });
         }
 
-        if (!config.websocketURL) {
+        const websocketURL = getWebSocketUrl();
+        if (!websocketURL) {
             logger.warn("No Websocket URL configured. Connection skipped.");
             return Promise.resolve({
                 connected: false,
@@ -288,9 +291,10 @@ export class Connection {
             });
         }
 
-        // Both halves, because both go on the wire below: the server resolves the pair and
-        // refuses a connection that presents only one of them.
-        if (!config.authToken || !config.clientId) {
+        // Both halves go on the wire below: the server resolves the pair and refuses a
+        // connection that presents only one of them.
+        const identity = getIdentity();
+        if (!identity) {
             logger.warn("No identity. Please register first. Connection skipped.");
             return Promise.resolve({
                 connected: false,
@@ -304,9 +308,9 @@ export class Connection {
             this.wsInstance = null;
         }
 
-        const wsUrl = new URL(config.websocketURL);
-        wsUrl.searchParams.set("clientId", config.clientId);
-        wsUrl.searchParams.set("token", config.authToken);
+        const wsUrl = new URL(websocketURL);
+        wsUrl.searchParams.set("clientId", identity.clientId);
+        wsUrl.searchParams.set("token", identity.authToken);
 
         // The URL carries the auth token; the log gets it without, since logs travel further
         // than this host (`docker logs`, a collector).

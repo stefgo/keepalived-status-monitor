@@ -4,6 +4,7 @@ import {
     ACTIVITY_SOURCES,
     CLIENT_STATUS,
     CONNECTION_MODE,
+    DEFAULT_AGENT_PORT,
     VRRP_STATES,
     WS_EVENTS,
 } from "./constants.js";
@@ -17,13 +18,20 @@ export const Ipv4OrCidrSchema = z.union([z.ipv4(), z.cidrv4()], {
     error: "Must be an IPv4 address or an IPv4 network in CIDR notation",
 });
 
-/**
- * The agent's `allowedNetworks` in its config.yaml. An object rather than the bare list so a
- * failure names the key and the entry (`allowedNetworks.1: ...`).
- */
-export const AgentNetworkConfigSchema = z.object({
-    allowedNetworks: z.array(Ipv4OrCidrSchema).default([]),
-});
+/** YAML turns an empty block (`settings:` with nothing below it) into null. */
+const blockOrMissing = <T extends z.ZodType>(schema: T) =>
+    z.preprocess((value) => value ?? undefined, schema);
+
+/** The levels pino accepts, for both config files. */
+export const LogLevelSchema = z.enum([
+    "trace",
+    "debug",
+    "info",
+    "warn",
+    "error",
+    "fatal",
+    "silent",
+]);
 
 /**
  * The agent's `keepalived` block in its config.yaml: what makes it read keepalived and where
@@ -78,6 +86,88 @@ export const AgentKeepalivedConfigSchema = z
         }
     })
     .prefault({});
+
+/**
+ * Where the certificate and its private key are, for an agent that terminates TLS. The
+ * paths stay exactly as the operator wrote them -- the agent resolves them against its own
+ * directory and checks at startup that both files can be read.
+ */
+export const AgentTlsConfigSchema = z.object({
+    cert: z.string().trim().min(1, { error: "Must be the path to a certificate file" }),
+    key: z.string().trim().min(1, { error: "Must be the path to a private key file" }),
+});
+
+/**
+ * The whole of the agent's config.yaml -- everything the operator writes, and nothing the
+ * agent writes back: `clientId` and `authToken` are issued by the server and live in the
+ * agent's data directory (see client/src/core/Identity.ts).
+ *
+ * Loose at the top level, so a key this version does not know stays a key it ignores rather
+ * than a reason not to start. The agent edits the file through its YAML document, never by
+ * writing this object back, so nothing here can delete what it did not parse.
+ *
+ * Every field carries its default, which makes this schema the one place that says what an
+ * agent without a config.yaml does. Two settings are deliberately *not* validated here --
+ * `logLevel` and `allowSelfSignedCertificates` are tolerated rather than fatal, and Config.ts
+ * drops a wrong value with a warning before it reaches this schema.
+ */
+export const AgentConfigSchema = z.looseObject({
+    /**
+     * Where the server is, for an agent that dials in. Left unvalidated beyond "a
+     * non-empty string": a URL nobody can parse costs the WebSocket, not the web UI the
+     * operator would fix it in -- so it is a warning at derivation, not a refusal to start.
+     */
+    serverUrl: z.string().trim().min(1).nullish(),
+    /** Outbound mode: the secret the server presents on `/ws/register`, consumed once. */
+    registrationSecret: z.string().min(1).nullish(),
+    logLevel: LogLevelSchema.default("info"),
+    /** Where and how often keepalived is read. */
+    keepalived: blockOrMissing(AgentKeepalivedConfigSchema),
+    enableStatusPage: z.boolean().default(true),
+    enableRegisterPage: z.boolean().default(true),
+    /**
+     * Networks the server may dial `/ws/register` and `/ws/agent` from. Empty means no
+     * restriction, as before the setting existed. The local web UI on the same port is
+     * deliberately not covered: it is where an operator registers the agent, and a list
+     * holding only the server's address would shut them out of it.
+     */
+    allowedNetworks: z.array(Ipv4OrCidrSchema).default([]),
+    /**
+     * The port the local web server listens on. Coerced, because `KASM_CLIENT_PORT` is laid
+     * over this field as a string. A value that is not a port is refused rather than
+     * silently replaced by the default: an agent listening somewhere other than where its
+     * operator put it is the harder fault to find. Port 0 -- "any free port" to Node -- is
+     * never what this setting means, and the minimum rules it out.
+     */
+    listenPort: z.coerce
+        .number({ error: "Must be an integer between 1 and 65535" })
+        .int({ error: "Must be an integer between 1 and 65535" })
+        .min(1)
+        .max(65535)
+        .default(DEFAULT_AGENT_PORT),
+    /**
+     * Accept a server certificate that does not validate, for registration and for the
+     * WebSocket alike. Off by default: that WebSocket carries the auth token, and a
+     * certificate nobody checks is one anybody in between can present.
+     */
+    allowSelfSignedCertificates: z.boolean().default(false),
+    /**
+     * Serve the agent's own web server over TLS. Absent means plain HTTP, which is what
+     * every installation had before this existed. The other half of
+     * `allowSelfSignedCertificates`: that one is about the certificate this agent checks
+     * when it dials the server, this one about the certificate it presents when the server
+     * dials it.
+     */
+    tls: blockOrMissing(AgentTlsConfigSchema.optional()),
+});
+
+export type AgentConfigParsed = z.output<typeof AgentConfigSchema>;
+
+/** The identity the server issues at registration, as the agent stores it. */
+export const AgentIdentitySchema = z.object({
+    clientId: z.string().min(1),
+    authToken: z.string().min(1),
+});
 
 export const ClientSchema = z.object({
     id: z.uuid(),
@@ -312,10 +402,6 @@ export const AgentWebRegisterSchema = z.object({
 
 // Server configuration (config.yaml)
 
-/** YAML turns an empty block (`settings:` with nothing below it) into null. */
-const blockOrMissing = <T extends z.ZodType>(schema: T) =>
-    z.preprocess((value) => value ?? undefined, schema);
-
 /**
  * The `settings` block, with every default the server falls back to. Loose for the same
  * reason CleanupSettingsSchema is: the settings page writes the block back whole, so a key
@@ -400,9 +486,7 @@ export const AppConfigSchema = z.looseObject({
     jwtSecret: z.string().min(1),
     /** Any span @fastify/jwt accepts. There is no way to switch expiry off. */
     jwtExpiresIn: z.string().min(1).default("12h"),
-    logLevel: z
-        .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
-        .optional(),
+    logLevel: LogLevelSchema.optional(),
     /**
      * Optional like `logLevel`, and for the same reason: left out it stays DEFAULT_SERVER_PORT,
      * and nothing writes the number into a file the operator never put it in.
