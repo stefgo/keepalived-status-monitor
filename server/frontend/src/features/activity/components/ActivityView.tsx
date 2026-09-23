@@ -18,7 +18,7 @@ import {
     useConfirm,
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord } from "@kasm/shared";
-import { useActivityStore } from "../../../stores/useActivityStore";
+import { unseenTone, useActivityStore } from "../../../stores/useActivityStore";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
@@ -100,12 +100,7 @@ export function ActivityView() {
     // warning is, else "info". That start is fixed once the list is known, so marking a row
     // seen does not pull the filter out from under the reader; until then it follows the list.
     const [chosenLevel, setChosenLevel] = useState<ActivityLevel | null>(null);
-    const unseen = currentUserId ? events.filter((e) => !e.seenBy.includes(currentUserId)) : [];
-    const startLevel: ActivityLevel = unseen.some((e) => e.level === "error")
-        ? "error"
-        : unseen.some((e) => e.level === "warning")
-            ? "warning"
-            : "info";
+    const startLevel: ActivityLevel = unseenTone(events, currentUserId) ?? "info";
     if (chosenLevel === null && currentUserId && events.length > 0) {
         setChosenLevel(startLevel);
     }

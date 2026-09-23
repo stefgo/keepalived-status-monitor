@@ -5,6 +5,28 @@ import { apiFetch } from "../lib/apiFetch";
 
 export type { ActivityLevel, ActivityRecord };
 
+/** The most severe level among the events the user has not seen, if it is one that asks for a look. */
+export type UnseenTone = "error" | "warning" | null;
+
+/**
+ * Info and trace events never ask for a look. Until /me has answered nobody is known to have
+ * seen anything, so nothing counts as unseen either: counting everything would flash a dot
+ * for events already looked at.
+ *
+ * Returns a string rather than a list, so a component selecting it re-renders only when the
+ * tone changes, not on every update of the list.
+ */
+export function unseenTone(events: ActivityRecord[], userId: number | null): UnseenTone {
+    if (!userId) return null;
+    let tone: UnseenTone = null;
+    for (const e of events) {
+        if (e.seenBy.includes(userId)) continue;
+        if (e.level === "error") return "error";
+        if (e.level === "warning") tone = "warning";
+    }
+    return tone;
+}
+
 interface ActivityState {
     events: ActivityRecord[];
     /** From /api/v1/me, where `id` is a number -- and so are the entries of `seenBy`. */

@@ -31,7 +31,7 @@ import { WebSocketProvider } from "./context/WebSocketProvider";
 // Hooks & Stores
 import { useClientStore } from "../../stores/useClientStore";
 import { useUIStore } from "../../stores/useUIStore";
-import { useActivityStore } from "../../stores/useActivityStore";
+import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
 import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
 import { LoadingIndicator } from "../../components/LoadingIndicator";
 import { NotFoundCard } from "../../components/NotFoundCard";
@@ -214,19 +214,9 @@ function AppLayout() {
     const { isSidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
 
     // Activity. The badge only signals that something needs a look: red for an unseen error,
-    // yellow for an unseen warning, nothing otherwise. Info and trace events never raise it.
-    // Until /me has answered nobody is known to have seen anything, so nothing counts as
-    // unseen either: counting everything would flash a dot for events already looked at.
-    const activity = useActivityStore((s) => s.events);
-    const currentUserId = useActivityStore((s) => s.currentUserId);
-    const unseen = currentUserId
-        ? activity.filter((e) => !e.seenBy.includes(currentUserId))
-        : [];
-    const notificationsTone = unseen.some((e) => e.level === "error")
-        ? "error"
-        : unseen.some((e) => e.level === "warning")
-            ? "warning"
-            : undefined;
+    // yellow for an unseen warning, nothing otherwise.
+    const notificationsTone =
+        useActivityStore((s) => unseenTone(s.events, s.currentUserId)) ?? undefined;
 
     // Routing Helpers
     const path = location.pathname;
