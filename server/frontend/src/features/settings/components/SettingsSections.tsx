@@ -47,11 +47,11 @@ export const TokenRetentionSection = ({ values, onChange }: SectionProps) => (
     </section>
 );
 
-export const NotificationSection = ({ values, onChange }: SectionProps) => (
+export const ActivitySection = ({ values, onChange }: SectionProps) => (
     <section>
-        <SectionHeader title="Notification History">
-            Controls how long notifications are kept in the database. Old entries are removed
-            automatically while always preserving a minimum number of the most recent notifications.
+        <SectionHeader title="Activity History">
+            Controls how long activity events are kept in the database. Old entries are removed
+            automatically while always preserving a minimum number of the most recent events.
         </SectionHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -61,14 +61,14 @@ export const NotificationSection = ({ values, onChange }: SectionProps) => (
                 onChange={(v) => onChange("notification_retention_days", v)}
                 min={1}
                 placeholder="90"
-                hint="Notifications older than this are eligible for removal."
+                hint="Events older than this are eligible for removal."
             />
             <NumberField
                 label="Minimum Keep Count"
                 value={values.notification_retention_count}
                 onChange={(v) => onChange("notification_retention_count", v)}
                 placeholder="500"
-                hint="Always keep at least this many of the most recent notifications, regardless of age."
+                hint="Always keep at least this many of the most recent events, regardless of age."
             />
             <NumberField
                 label="Cleanup Interval (Hours)"
@@ -81,8 +81,8 @@ export const NotificationSection = ({ values, onChange }: SectionProps) => (
 
         <SchedulerBox scheduler="notification-cleanup">
             <ManualRun
-                description="Immediately remove notifications that exceed the saved retention settings."
-                failureTitle="Could not clean up the notifications"
+                description="Immediately remove activity events that exceed the saved retention settings."
+                failureTitle="Could not clean up the activity history"
                 onRun={async () => {
                     const data = await runJob<{ removed?: number }>("/api/v1/settings/cleanup/notifications");
                     return typeof data.removed === "number" ? `Removed ${data.removed}` : "Done";

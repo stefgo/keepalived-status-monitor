@@ -336,7 +336,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 action={
                     instanceNames.length === 1 && (
                         <Link
-                            to={`/notifications?search=${encodeURIComponent(instanceNames[0])}`}
+                            to={`/activity?search=${encodeURIComponent(instanceNames[0])}`}
                             className="text-sm text-text-secondary hover:text-primary"
                         >
                             Show all

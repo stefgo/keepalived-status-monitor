@@ -65,7 +65,7 @@ export const KeepalivedDashboard = () => {
                     label="Warnings"
                     value={String(warnings)}
                     icon={AlertTriangle}
-                    onClick={() => navigate("/notifications")}
+                    onClick={() => navigate("/activity")}
                 />
             </div>
 

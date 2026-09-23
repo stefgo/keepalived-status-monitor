@@ -45,14 +45,17 @@ export class WebSocketController {
             return;
         }
 
+        // The user is kept with the socket, so what concerns one user alone -- the seen state
+        // of the activity -- can go to that user's sessions only.
+        let userId: number;
         try {
-            fastify.jwt.verify(token);
+            userId = fastify.jwt.verify<{ id: number }>(token).id;
         } catch {
             socket.close(4001, "Invalid Token");
             return;
         }
 
-        ProxyService.addDashboardClient(socket);
+        ProxyService.addDashboardClient(socket, userId);
 
         // Send initial state
         const clients = ProxyService.getClientsWithStatus();
@@ -74,7 +77,7 @@ export class WebSocketController {
         // Send the initial activity list
         socket.send(JSON.stringify({
             type: WS_EVENTS.ACTIVITY_UPDATE,
-            payload: ActivityService.list(),
+            payload: ActivityService.list(userId),
         }));
 
         socket.on("close", () => {

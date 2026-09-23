@@ -9,7 +9,7 @@ import {
     useParams,
     useSearchParams,
 } from "react-router-dom";
-import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Bell } from "lucide-react";
+import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Activity } from "lucide-react";
 
 // Library Components
 import {
@@ -31,7 +31,7 @@ import { WebSocketProvider } from "./context/WebSocketProvider";
 // Hooks & Stores
 import { useClientStore } from "../../stores/useClientStore";
 import { useUIStore } from "../../stores/useUIStore";
-import { useActivityStore } from "../../stores/useActivityStore";
+import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
 import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
 import { LoadingIndicator } from "../../components/LoadingIndicator";
 import { NotFoundCard } from "../../components/NotFoundCard";
@@ -214,19 +214,9 @@ function AppLayout() {
     const { isSidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
 
     // Activity. The badge only signals that something needs a look: red for an unseen error,
-    // yellow for an unseen warning, nothing otherwise. Info and trace events never raise it.
-    // Until /me has answered nobody is known to have seen anything, so nothing counts as
-    // unseen either: counting everything would flash a dot for events already looked at.
-    const activity = useActivityStore((s) => s.events);
-    const currentUserId = useActivityStore((s) => s.currentUserId);
-    const unseen = currentUserId
-        ? activity.filter((e) => !e.seenBy.includes(currentUserId))
-        : [];
-    const notificationsTone = unseen.some((e) => e.level === "error")
-        ? "error"
-        : unseen.some((e) => e.level === "warning")
-            ? "warning"
-            : undefined;
+    // yellow for an unseen warning, nothing otherwise.
+    const activityTone =
+        useActivityStore((s) => unseenTone(s.events)) ?? undefined;
 
     // Routing Helpers
     const path = location.pathname;
@@ -293,7 +283,7 @@ function AppLayout() {
     const navGroups: DashboardNavGroup[] = [
         { id: "overview" },
         { id: "resources", title: "Monitoring" },
-        { id: "notification" },
+        { id: "activity" },
         { id: "admin", title: "Administration" },
     ];
 
@@ -333,15 +323,15 @@ function AppLayout() {
                 },
             },
             {
-                id: "notifications",
-                path: "/notifications",
+                id: "activity",
+                path: "/activity",
                 nav: {
-                    groupId: "notification",
-                    label: "Notifications",
-                    icon: Bell,
-                    badgeDot: notificationsTone !== undefined,
-                    badgeTone: notificationsTone,
-                    onClick: () => navigate("/notifications"),
+                    groupId: "activity",
+                    label: "Activity",
+                    icon: Activity,
+                    badgeDot: activityTone !== undefined,
+                    badgeTone: activityTone,
+                    onClick: () => navigate("/activity"),
                 },
             },
             {
@@ -378,7 +368,7 @@ function AppLayout() {
                 },
             },
         ],
-        [stats, navigate, notificationsTone],
+        [stats, navigate, activityTone],
     );
 
     return (
@@ -406,7 +396,7 @@ function AppLayout() {
                     <Route path="/client/:clientId" element={<ClientDetailRoute />} />
                     <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
                     <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
-                    <Route path="/notifications" element={<ActivityView />} />
+                    <Route path="/activity" element={<ActivityView />} />
                     <Route path="/users" element={<UserOverview />} />
                     <Route path="/tokens" element={<TokenOverview />} />
                     <Route path="/settings" element={<Settings />} />

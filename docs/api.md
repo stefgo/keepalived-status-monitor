@@ -125,7 +125,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 
 `GET /api/v1/me`
 
-**Description:** Who the current session belongs to and when it expires. The dashboard reads the username, the user id (for the seen state of notifications) and the expiry (for its automatic logout) from here, because it cannot read the httpOnly cookie. Protected like every `/api/v1` endpoint: without a valid session it answers `401`.
+**Description:** Who the current session belongs to and when it expires. The dashboard reads the username, the user id and the expiry (for its automatic logout) from here, because it cannot read the httpOnly cookie. Protected like every `/api/v1` endpoint: without a valid session it answers `401`.
 
 #### Response
 
@@ -778,7 +778,7 @@ The defaults:
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
 
-The `notification_*` names are kept from the project KASM started from, because the settings page still calls the list "Notification History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
+The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
 
 ### Update Settings
 
@@ -829,7 +829,7 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 `POST /api/v1/settings/cleanup/notifications`
 
-**Description:** Runs `NotificationCleanupService` now, applying the retention policy to the activity table. Recorded as a `manual` run of `notification-cleanup`. The path keeps the old name, as the dashboard page does; what it prunes is the activity list.
+**Description:** Runs `NotificationCleanupService` now, applying the retention policy to the activity table. Recorded as a `manual` run of `notification-cleanup`. The path keeps the old name; what it prunes is the activity list.
 
 #### Response
 
@@ -873,8 +873,7 @@ Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`
 
 ## 📣 Activity
 
-Everything that happened, as its originator reported it. The dashboard still calls the page
-"Notifications"; the domain does not.
+Everything that happened, as its originator reported it.
 
 An event carries no message. It carries a `kind`, a `level`, what it is about and the facts
 of that kind — the old and the new VRRP state, a priority, an error — and the text is composed in
@@ -915,6 +914,8 @@ the agent happened to read it.
 
 `GET /api/v1/activity`
 
+`seen` is that of the calling user; who else has seen an event is not part of the answer.
+
 **Response:**
 
 ```json
@@ -934,7 +935,7 @@ the agent happened to read it.
             "interface": "eth0"
         },
         "data": { "from": "MASTER", "to": "BACKUP", "priority": 100, "effectivePriority": 100 },
-        "seenBy": [1]
+        "seen": false
     }
 ]
 ```
@@ -943,19 +944,23 @@ Newest first by `occurredAt`.
 
 ### Mark Seen
 
-`POST /api/v1/activity/:id/seen` marks one event seen by the calling user;
-`POST /api/v1/activity/seen-all` marks every event seen. Both answer `{ "ok": true }`;
-the first answers `404` for an id that is not there.
+`POST /api/v1/activity/seen` with `{ "ids": ["…"] }` marks the listed events seen by the
+calling user in one request (ids that are not there are skipped; an empty or missing list is a
+`400`) and answers `{ "ok": true }`. There is no endpoint for a single event: the dashboard
+marks a whole group, or everything the filters leave, with this one.
 
 ### Delete Activity
 
-`DELETE /api/v1/activity/:id` removes one event, `DELETE /api/v1/activity` removes all of
-them. Both answer `{ "ok": true }`; the first answers `404` for an id that is not there.
+`DELETE /api/v1/activity` removes all events and answers `{ "ok": true }`. Single events
+cannot be deleted; retention and "Delete all" are the only ways an event goes.
 
 Retention runs on its own through `notification_retention_days` and
-`notification_retention_count` — the page they are set on is called "Notification History".
+`notification_retention_count` — the page they are set on is called "Activity History".
 
-Every mutating endpoint broadcasts `ACTIVITY_UPDATE` with the full list.
+Over the dashboard WebSocket: a new event goes out as `ACTIVITY_APPENDED` with only the events
+stored for the first time (a repeat from the at-least-once delivery is not sent again); marking
+sends `ACTIVITY_SEEN` with the ids that turned seen, to the sessions of the calling user only;
+"Delete all" broadcasts `ACTIVITY_UPDATE` with an empty list.
 
 ---
 
@@ -1014,7 +1019,9 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 | :-------------------- | :------------------------------------------ | :---------------------------------------------------------------- |
 | `CLIENTS_UPDATE`      | `Client[]`                                  | Full list of all clients and their statuses.                      |
 | `KEEPALIVED_STATE_UPDATE` | `KeepalivedState`                       | One client's reading, as in [List Readings](#list-readings). The dashboard recomputes the clusters from these. |
-| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The activity list, after an event arrived or the seen state changed. |
+| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The whole activity list: on connect, with the seen state of the session's user, and empty after "Delete all". |
+| `ACTIVITY_APPENDED`   | `ActivityRecord[]`                          | Events stored for the first time, to be merged into the list by id. |
+| `ACTIVITY_SEEN`       | `{ ids: string[] }`                         | Events the session's user has just marked seen. Sent to that user's sessions only. |
 | `SCHEDULER_STATUS_UPDATE` | `{ scheduler, status }`                 | One scheduler's status, in the shape of [Scheduler Status](#scheduler-status), whenever a run starts or ends or its timer is set. |
 
 ---

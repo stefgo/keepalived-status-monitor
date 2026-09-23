@@ -48,7 +48,7 @@ src/
 │   │   ├── components/
 │   │   │   ├── ActivityGroupSteps.tsx    # The members of one correlated group
 │   │   │   ├── ActivityLevelIcon.tsx     # One icon per level, wherever an event is listed
-│   │   │   └── ActivityView.tsx          # The page, still reached as "Notifications"
+│   │   │   └── ActivityView.tsx          # The page at /activity
 │   │   └── lib/
 │   │       ├── activityText.ts           # kind + data -> the sentence a reader sees
 │   │       └── groupActivity.ts          # Folds the flat list into rows by correlationId
@@ -109,14 +109,14 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
 | `/client/:clientId/edit` | `AppLayout` | The `ClientEditor` for that client.                               |
 | `/client/:clientId/instance/:instanceName` | `AppLayout` | Redirects to the cluster of that instance; kept for old links. |
-| `/notifications`    | `AppLayout`     | The activity list. The path and the menu entry keep the old name.   |
+| `/activity`         | `AppLayout`     | The activity list.                                                  |
 | `/users`            | `AppLayout`     | User management.                                                    |
 | `/tokens`           | `AppLayout`     | Registration token management.                                      |
 | `/settings`         | `AppLayout`     | System settings (retention of tokens and activity).                 |
 
 All routes except `/login` are wrapped in a `ProtectedRoute` component that redirects unauthenticated users to `/login`.
 
-The `AppLayout` uses the `Dashboard` component from `@stefgo/react-ui-components`. Since library 3.0 it renders **only the navigation** and highlights the entry whose `path` matches; the page content is a `<Routes>` element passed to it as `children`. A `DashboardPage` entry is therefore `{ id, path, nav }` — path (with `:param` segments), plus label, icon and an optional badge. Navigation is organised into `navGroups` (`overview` with the dashboard, `resources` titled "Monitoring" with clusters and clients, `notification`, `admin`).
+The `AppLayout` uses the `Dashboard` component from `@stefgo/react-ui-components`. Since library 3.0 it renders **only the navigation** and highlights the entry whose `path` matches; the page content is a `<Routes>` element passed to it as `children`. A `DashboardPage` entry is therefore `{ id, path, nav }` — path (with `:param` segments), plus label, icon and an optional badge. Navigation is organised into `navGroups` (`overview` with the dashboard, `resources` titled "Monitoring" with clusters and clients, `activity`, `admin`).
 
 A path no entry claims reaches the catch-all route and renders a **404 card** that names the path and leads back to the clients view. The Dashboard used to fall back to its first page silently, so an unknown URL looked like the clients page.
 
@@ -152,19 +152,21 @@ We use **Zustand** split into specialized stores to maintain a clean, reactive s
 
 - **`useClientStore`**: Holds the master list of registered clients and their real-time online/offline status. Provides `fetchClients`, `deleteClient`, `updateClient`, and `setClients` (used by WebSocket updates).
 - **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
-- **`useActivityStore`**: The activity list (`ActivityRecord[]`) and `currentUserId`, which the per-event seen state is kept against. Fed by `ACTIVITY_UPDATE` and by `fetchEvents` on connect; `markSeen`, `markAllSeen`, `removeEvent` and `clearAll` update optimistically and then call the API.
+- **`useActivityStore`**: The activity list (`ActivityRecord[]`) as the server reads it for the session's user, so `seen` needs no user id on this side. Fed by `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` (`applySeen`) and by `fetchEvents` on connect; `unseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes; `markManySeen` and `clearAll` update optimistically and then call the API.
 - **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
 - **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`kasm-ui-storage`).
 
 ### Real-time Updates (WebSocket)
 
-The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake. It also hands `user.id` to `useActivityStore.setCurrentUserId`. Incoming messages are dispatched to the stores:
+The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake. Incoming messages are dispatched to the stores:
 
 | Event                  | Handler                                          |
 | :--------------------- | :----------------------------------------------- |
 | `CLIENTS_UPDATE`       | `useClientStore.setClients`                      |
 | `KEEPALIVED_STATE_UPDATE` | `useKeepalivedStore.setState(state)`          |
 | `ACTIVITY_UPDATE`      | `useActivityStore` — replaces the activity list  |
+| `ACTIVITY_APPENDED`    | `useActivityStore.appendEvents` — merges new events by id, newest first |
+| `ACTIVITY_SEEN`        | `useActivityStore.applySeen` — marks the ids seen, also from another tab |
 | `SCHEDULER_STATUS_UPDATE` | `useSchedulerStore.applyUpdate`               |
 
 On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading and the activity list by itself, so the first screen fills without a REST call.
@@ -334,9 +336,8 @@ MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the res
 
 ### ActivityView (`features/activity`)
 
-The page at `/notifications` — the menu entry keeps the name, what it shows does not. Its
-entries are structured events: a `kind`, a `level`, what the event is about and the facts of
-that kind.
+The page at `/activity`. Its entries are structured events: a `kind`, a `level`, what the
+event is about and the facts of that kind.
 
 **The text is written here.** `activityText.ts` is the one place a wording exists: an agent
 reports `vrrp.state_changed` with the two states and nothing else, and the sentence —
@@ -356,8 +357,21 @@ one. Grouping is a lookup, not a guess — whoever caused the group put its id o
 in its group hours later. A group with no head yet (an action still running) is stood in for
 by its earliest member, so no event can go missing.
 
-**The level filter is a minimum.** It sits at the right end of the search bar (`searchActions`) and starts at `info`, so `trace` events — agents connecting
-and disconnecting — are hidden until `trace` is chosen. The sidebar badge does not
+**The level filter is a minimum.** It sits at the right end of the search bar (`searchActions`)
+and opens on what needs a look: `error` while an error is unseen, else `warning` while a
+warning is, else `info` — the same rule as the sidebar badge. The start is fixed once the list
+is known, so marking rows seen does not move the filter. `trace` events — agents connecting
+and disconnecting — are hidden until `trace` is chosen.
+
+**A second filter hides what has been seen.** Next to the level filter, `all` / `unseen`
+switches between the whole list and the rows with something unseen in them; under `unseen` a
+row leaves the list once it is marked seen. It starts at `all`.
+
+**"Mark as seen" follows the filter.** It marks the unseen events of every row the level
+filter and the search leave, across all pages, and nothing the reader has not been shown.
+
+**Entries are not deleted one by one.** A row can be marked seen; the history goes as a whole
+("Delete all") or through retention. The sidebar badge does not
 count them either. An event that names a host but carries no `clientName` (recorded before
 the server stored it) gets the name from `useClientStore` by `clientId`.
 
@@ -378,7 +392,7 @@ Lists registration tokens via `TokenList` — a `DataMultiView` with search over
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 
-System settings page, one section per tab: Client Tokens and Notification History. The tabs are the library's `useTabs`/`TabList`/`TabPanel`, and the open one is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
+System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel`, and the open one is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
 

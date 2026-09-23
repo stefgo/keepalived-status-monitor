@@ -1,9 +1,9 @@
-import { Bell, Sliders, type LucideIcon } from "lucide-react";
+import { Activity, Sliders, type LucideIcon } from "lucide-react";
 
 /** The settings block as the API sends it: every value a string, whatever it means. */
 export type SettingsValues = Record<string, string>;
 
-export type SectionId = "tokens" | "notifications";
+export type SectionId = "tokens" | "activity";
 
 export interface SectionDef {
     id: SectionId;
@@ -24,9 +24,9 @@ export const SECTIONS: readonly SectionDef[] = [
         keys: ["token_retention_days", "token_cleanup_interval_hours"],
     },
     {
-        id: "notifications",
-        label: "Notification History",
-        icon: Bell,
+        id: "activity",
+        label: "Activity History",
+        icon: Activity,
         keys: [
             "notification_retention_days",
             "notification_retention_count",

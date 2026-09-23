@@ -27,7 +27,7 @@ import {
     type SettingsValues,
 } from "../features/settings/sections";
 import {
-    NotificationSection,
+    ActivitySection,
     TokenRetentionSection,
 } from "../features/settings/components/SettingsSections";
 
@@ -158,8 +158,8 @@ export default function Settings() {
         switch (id) {
             case "tokens":
                 return <TokenRetentionSection values={draft} onChange={change} />;
-            case "notifications":
-                return <NotificationSection values={draft} onChange={change} />;
+            case "activity":
+                return <ActivitySection values={draft} onChange={change} />;
         }
     };
 

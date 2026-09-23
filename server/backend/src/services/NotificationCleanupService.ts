@@ -22,7 +22,7 @@ function readConfig() {
 /**
  * Retention for the activity list. Named after the notifications it used to clean, and
  * deliberately left that way: the settings it reads (`notification_retention_*`) are stored
- * values, and the page the user sets them on is still called "Notification History".
+ * values.
  */
 const job = new ScheduledJob({
     id: "notification-cleanup",
