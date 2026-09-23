@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import {
     ChevronRight,
     ChevronDown,
-    History,
+    Activity,
     MoreVertical,
     Trash2,
     Eye,
@@ -330,7 +330,7 @@ export function ActivityView() {
         <DataMultiView<ActivityGroup>
             title={
                 <>
-                    <History size={18} className="text-text-muted" /> Activity
+                    <Activity size={18} className="text-text-muted" /> Activity
                 </>
             }
             viewMode={{ persist: { key: "activityView", scope: "local" } }}

@@ -9,7 +9,7 @@ import {
     useParams,
     useSearchParams,
 } from "react-router-dom";
-import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, History } from "lucide-react";
+import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Activity } from "lucide-react";
 
 // Library Components
 import {
@@ -328,7 +328,7 @@ function AppLayout() {
                 nav: {
                     groupId: "activity",
                     label: "Activity",
-                    icon: History,
+                    icon: Activity,
                     badgeDot: activityTone !== undefined,
                     badgeTone: activityTone,
                     onClick: () => navigate("/activity"),
