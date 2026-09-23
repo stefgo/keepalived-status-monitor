@@ -98,7 +98,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
             tableItemRender: (t) => <TokenValue token={t} />,
         },
         {
-            tableHeader: "Client Defaults",
+            tableHeader: "Client",
             tableItemRender: (t) => <ClientDefaults token={t} />,
         },
         {
@@ -135,7 +135,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
                     ),
                 },
                 {
-                    listLabel: "Client Defaults",
+                    listLabel: "Client",
                     listItemRender: (t) => <ClientDefaults token={t} />,
                 },
                 {
