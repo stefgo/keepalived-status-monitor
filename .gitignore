@@ -3,6 +3,7 @@ dist
 .env
 .DS_Store
 client/data
+plans
 *.db
 *.db-shm
 *.db-wal
