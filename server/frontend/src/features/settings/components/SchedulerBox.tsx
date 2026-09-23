@@ -30,6 +30,7 @@ export const SchedulerBox = ({ scheduler, children }: { scheduler: SchedulerId; 
                 items={[
                     {
                         label: "Status",
+                        span: "full",
                         value: status?.isRunning ? (
                             <span className="inline-flex items-center gap-1.5 text-primary">
                                 <RefreshCw size={14} className="animate-spin" />
@@ -55,7 +56,6 @@ export const SchedulerBox = ({ scheduler, children }: { scheduler: SchedulerId; 
                     { label: "Next Run", value: status?.nextRun ? formatDate(status.nextRun) : "Disabled" },
                     {
                         label: "Result",
-                        span: "full",
                         value: lastRun ? (
                             <span className={resultClass}>{describeRunResult(scheduler, lastRun)}</span>
                         ) : (
