@@ -5,6 +5,7 @@ import { WebSocketContext } from "./WebSocketContext";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { useActivityStore } from "../../../stores/useActivityStore";
+import { useSchedulerStore } from "../../../stores/useSchedulerStore";
 
 interface WebSocketProviderProps {
     children: ReactNode;
@@ -15,6 +16,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { setClients } = useClientStore();
     const { setState: setKeepalivedState } = useKeepalivedStore();
     const { setEvents, setCurrentUserId, fetchEvents } = useActivityStore();
+    const applySchedulerUpdate = useSchedulerStore((s) => s.applyUpdate);
     const [isConnected, setIsConnected] = useState(false);
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,6 +78,9 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                     case WS_EVENTS.ACTIVITY_UPDATE:
                         setEvents(message.data.payload);
                         break;
+                    case WS_EVENTS.SCHEDULER_STATUS_UPDATE:
+                        applySchedulerUpdate(message.data.payload);
+                        break;
                 }
             };
 
@@ -122,7 +127,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, fetchEvents]);
+    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, fetchEvents, applySchedulerUpdate]);
 
     // Who has seen which event is kept per user id, which comes from /api/v1/me instead of
     // being decoded out of the JWT.

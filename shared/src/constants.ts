@@ -22,6 +22,10 @@ export const WS_EVENTS = {
     /** Server → Dashboard: the current activity list. */
     ACTIVITY_UPDATE: "ACTIVITY_UPDATE",
 
+    // Scheduler events
+    /** Server → Dashboard: one scheduler's status, whenever a run starts or ends. */
+    SCHEDULER_STATUS_UPDATE: "SCHEDULER_STATUS_UPDATE",
+
     // Inbound registration (Server → Client via /ws/register)
     REGISTRATION_REQUEST: "REGISTRATION_REQUEST",   // Server → Client: send secret + authToken
     REGISTRATION_SUCCESS: "REGISTRATION_SUCCESS",   // Client → Server: registration accepted
@@ -121,4 +125,20 @@ export const ACTIVITY_KINDS = [
     "client.connected",
     "client.disconnected",
     "client.registered",
+    "scheduler.failed",
 ] as const;
+
+/**
+ * The background jobs the server runs on a timer. Each keeps one row in `scheduler_state`:
+ * its last finished run and whatever it has to remember from one run to the next.
+ */
+export const SCHEDULER_IDS = ["notification-cleanup", "token-cleanup"] as const;
+
+/** Whether the timer started a run or a user did, through the settings page. */
+export const SCHEDULER_TRIGGERS = ["schedule", "manual"] as const;
+
+/**
+ * How a finished run ended. `partial` finished but left work undone; `interrupted` never
+ * finished, because the server stopped while it ran.
+ */
+export const SCHEDULER_RUN_STATUSES = ["success", "partial", "failed", "interrupted"] as const;

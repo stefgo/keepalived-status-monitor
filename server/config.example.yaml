@@ -32,13 +32,12 @@ jwtExpiresIn: "12h"
 
 # General server settings
 settings:
-    # Number of days an invalid token is kept before it becomes eligible for deletion.
-    # Set to "0" to make every invalid token immediately eligible.
-    retention_invalid_tokens_days: "30"
-    # Minimum number of most-recent invalid tokens that are always retained, even if
-    # they are older than retention_invalid_tokens_days. Useful to keep an audit trail
-    # of the last N invalidations. Set to "0" to disable.
-    retention_invalid_tokens_count: "10"
+    # Number of days an invalid (used or expired) registration token is kept before the
+    # cleanup removes it. Set to "0" to remove every invalid token on the next run.
+    token_retention_days: "30"
+    # How often the token cleanup runs, in hours. Set to "0" to disable the scheduler
+    # (manual runs via the Settings page still work).
+    token_cleanup_interval_hours: "24"
 
     # Activity log: entries older than this many days are removed ("0" disables expiry).
     notification_retention_days: "90"

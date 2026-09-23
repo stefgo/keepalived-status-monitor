@@ -13,6 +13,8 @@ import { fileURLToPath } from "url";
 import { initOIDC, appConfig, serverPort } from "./config/AppConfig.js";
 import { AuthService } from "./services/AuthService.js";
 import { NotificationCleanupService } from "./services/NotificationCleanupService.js";
+import { TokenCleanupService } from "./services/TokenCleanupService.js";
+import { SchedulerStateRepository } from "./repositories/SchedulerStateRepository.js";
 import apiRoutes from "./routes/api.js";
 import { SESSION_COOKIE } from "./services/SessionCookie.js";
 import { WebSocketController, type AgentQuery } from "./controllers/WebSocketController.js";
@@ -26,7 +28,9 @@ import { initDatabase } from "./core/Database.js";
 await initDatabase();
 await initOIDC();
 await AuthService.initializeAdmin(); // Ensure admin user
+SchedulerStateRepository.markInterrupted();
 NotificationCleanupService.startScheduler();
+TokenCleanupService.startScheduler();
 
 import { loggerOptions } from "@kasm/shared/node";
 
@@ -187,6 +191,7 @@ try {
 const shutdown = () => {
     server.log.info("Shutting down server...");
     NotificationCleanupService.stopScheduler();
+    TokenCleanupService.stopScheduler();
     server.close(() => {
         process.exit(0);
     });
@@ -211,6 +216,7 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (err) => {
     server.log.fatal({ err }, "Uncaught exception, terminating");
     NotificationCleanupService.stopScheduler();
+    TokenCleanupService.stopScheduler();
     // Give the pino transport worker a moment to flush before we go.
     setTimeout(() => process.exit(1), 250);
 });

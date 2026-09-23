@@ -5,6 +5,9 @@ import {
     ACTIVITY_SOURCES,
     CLIENT_STATUS,
     CONNECTION_MODE,
+    SCHEDULER_IDS,
+    SCHEDULER_RUN_STATUSES,
+    SCHEDULER_TRIGGERS,
     VRRP_STATES,
 } from "./constants.js";
 import {
@@ -28,6 +31,7 @@ import {
     ActivityRecordSchema,
     ActivitySubjectSchema,
     DashboardMessageSchema,
+    SchedulerStatusUpdateSchema,
 } from "./schemas.js";
 
 export type RegistrationPayload = z.infer<typeof RegistrationPayloadSchema>;
@@ -174,6 +178,58 @@ export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 
 /** An event as the server holds it. See `ActivityRecordSchema` for what the two times mean. */
 export type ActivityRecord = z.infer<typeof ActivityRecordSchema>;
+
+// ── Schedulers ───────────────────────────────────────────────────────────────
+
+export type SchedulerId = (typeof SCHEDULER_IDS)[number];
+export type SchedulerTrigger = (typeof SCHEDULER_TRIGGERS)[number];
+export type SchedulerRunStatus = (typeof SCHEDULER_RUN_STATUSES)[number];
+
+/** What each scheduler reports as the result of a run. */
+export interface SchedulerRunResults {
+    "notification-cleanup": { removed: number };
+    "token-cleanup": { removed: number };
+}
+
+/** The last run a scheduler finished, as `scheduler_state` holds it. */
+export interface SchedulerRunSummary<Id extends SchedulerId = SchedulerId> {
+    trigger: SchedulerTrigger;
+    status: SchedulerRunStatus;
+    startedAt: string;
+    /** Null for a run the server did not live to finish (`interrupted`). */
+    finishedAt: string | null;
+    /** Null unless the run succeeded, fully or in part. */
+    result: SchedulerRunResults[Id] | null;
+    error: string | null;
+}
+
+export interface SchedulerStatus<Id extends SchedulerId = SchedulerId> {
+    isRunning: boolean;
+    /** Null when the scheduler is switched off. */
+    nextRun: string | null;
+    lastRun: SchedulerRunSummary<Id> | null;
+}
+
+/** `GET /api/v1/settings/scheduler-status`: every scheduler the server runs. */
+export type SchedulerStatuses = {
+    [Id in SchedulerId]: SchedulerStatus<Id>;
+};
+
+/** The payload of `SCHEDULER_STATUS_UPDATE`: one scheduler, whenever a run starts or ends. */
+export type SchedulerStatusUpdate = {
+    [Id in SchedulerId]: { scheduler: Id; status: SchedulerStatuses[Id] };
+}[SchedulerId];
+
+/**
+ * The dashboard parses `SCHEDULER_STATUS_UPDATE` with `SchedulerStatusUpdateSchema`, which
+ * is written separately from the types above. This fails to compile as soon as the two
+ * drift apart, in either direction.
+ */
+const schedulerStatusUpdateMatchesSchema: [
+    (update: SchedulerStatusUpdate) => z.infer<typeof SchedulerStatusUpdateSchema>,
+    (parsed: z.infer<typeof SchedulerStatusUpdateSchema>) => SchedulerStatusUpdate,
+] = [(update) => update, (parsed) => parsed];
+void schedulerStatusUpdateMatchesSchema;
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 

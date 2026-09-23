@@ -13,6 +13,12 @@ import { vrrpStateLabel } from "../../keepalived/lib/vrrp";
  * itself, because dropping the line would hide an observation that cannot be made again.
  */
 
+/** The server's schedulers as the settings page names them. */
+const SCHEDULER_NAMES: Record<string, string> = {
+    "notification-cleanup": "Notification cleanup",
+    "token-cleanup": "Token cleanup",
+};
+
 function instance(event: ActivityRecord): string {
     const name = event.subject?.instanceName;
     return name ? `VRRP instance ${name}` : "A VRRP instance";
@@ -54,6 +60,12 @@ export function activityMessage(event: ActivityRecord): string {
             return `${host(event)} disconnected`;
         case "client.registered":
             return `${str(event, "hostname") ?? host(event)} registered`;
+        case "scheduler.failed": {
+            const scheduler = str(event, "scheduler");
+            const error = str(event, "error");
+            const what = scheduler ? (SCHEDULER_NAMES[scheduler] ?? scheduler) : "A scheduled job";
+            return error ? `${what} failed: ${error}` : `${what} failed`;
+        }
         default:
             // A kind from an agent of another version. Better an unpolished line than none.
             return event.kind;
