@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { CONNECTION_MODE } from "@kasm/shared";
+import { CONNECTION_MODE, type CreatedToken } from "@kasm/shared";
 import { Card, Wizard, WizardStep } from "@stefgo/react-ui-components";
 import { apiFetch } from "../../../../lib/apiFetch";
 import { getErrorMessage } from "../../../../utils";
@@ -41,10 +41,7 @@ export const AddClientWizard = ({
     const [step, setStep] = useState(0);
     const [isFinishing, setIsFinishing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [createdToken, setCreatedToken] = useState<{
-        token: string;
-        expiresAt: string;
-    } | null>(null);
+    const [createdToken, setCreatedToken] = useState<CreatedToken | null>(null);
 
     // The listener sits on `window`, one level further out than menus and dialogs, which
     // listen on `document` and stop the event there: an open select closes itself without

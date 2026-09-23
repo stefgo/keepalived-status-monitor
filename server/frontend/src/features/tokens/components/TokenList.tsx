@@ -21,11 +21,16 @@ interface TokenListProps {
 
 const isExpired = (t: Token) => new Date(t.expiresAt) < new Date();
 
-const TokenValue = ({ token: t }: { token: Token }) => (
+/**
+ * The token's SHA-256 hash, shortened like a commit hash; the full value is in the tooltip.
+ * The token itself was shown once, when it was issued, and the server does not keep it.
+ */
+const TokenHash = ({ token: t }: { token: Token }) => (
     <span
-        className={`font-mono text-sm text-text-primary break-all ${t.usedAt || isExpired(t) ? "line-through opacity-60" : ""}`}
+        title={t.tokenHash}
+        className={`font-mono text-sm text-text-primary ${t.usedAt || isExpired(t) ? "line-through opacity-60" : ""}`}
     >
-        {t.token}
+        {t.tokenHash.slice(0, 12)}
     </span>
 );
 
@@ -70,7 +75,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
         const q = searchQuery.toLowerCase();
         return tokens.filter(
             (t) =>
-                t.token.toLowerCase().includes(q) ||
+                t.tokenHash.includes(q) ||
                 (t.displayName ?? "").toLowerCase().includes(q) ||
                 (t.inboundAllowedIp ?? "").toLowerCase().includes(q),
         );
@@ -79,7 +84,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
     const renderActions = (t: Token) => (
         <div onClick={(e) => e.stopPropagation()}>
             <DataAction
-                rowId={t.token}
+                rowId={t.tokenHash}
                 menuEntries={[
                     {
                         label: "Delete",
@@ -94,8 +99,8 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
 
     const tableDef: DataTableDef<Token>[] = [
         {
-            tableHeader: "Token",
-            tableItemRender: (t) => <TokenValue token={t} />,
+            tableHeader: "Token Hash",
+            tableItemRender: (t) => <TokenHash token={t} />,
         },
         {
             tableHeader: "Client",
@@ -130,7 +135,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
                     listItemRender: (t) => (
                         <div className="flex items-center gap-2 py-1">
                             <StatusBadge token={t} />
-                            <TokenValue token={t} />
+                            <TokenHash token={t} />
                         </div>
                     ),
                 },
@@ -174,7 +179,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
             data={filteredTokens}
             tableDef={tableDef}
             listColumns={listColumns}
-            keyField="token"
+            keyField="tokenHash"
             isLoading={isLoading}
             loadingMessage="Loading tokens…"
             searchable

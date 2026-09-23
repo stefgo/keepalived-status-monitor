@@ -29,7 +29,8 @@ server/backend/src/
 │       ├── 00_initial.ts                  # users, clients, registration_tokens, activity
 │       ├── 01_keepalived_state.ts         # keepalived_state: the last reading per client
 │       ├── 02_client_site.ts              # clients.site: part of the VRRP cluster key
-│       └── 03_scheduler_state.ts          # scheduler_state: last run and state per scheduler
+│       ├── 03_scheduler_state.ts          # scheduler_state: last run and state per scheduler
+│       └── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -311,7 +312,7 @@ The backend uses **SQLite3** via `better-sqlite3` (synchronous API) for fast, em
 
 | Column       | Type     | Description                                              |
 | :----------- | :------- | :------------------------------------------------------- |
-| `token`      | TEXT PK  | Random 32-character hex string.                          |
+| `token_hash` | TEXT PK  | SHA-256 (hex) of the random 32-character token. The token itself is only in the response that issued it _(migration 04)_. |
 | `created_at` | DATETIME | Creation timestamp.                                      |
 | `expires_at` | DATETIME | Expiry timestamp (30 minutes after creation).            |
 | `used_at`    | DATETIME | Timestamp when a client registered with this token.      |

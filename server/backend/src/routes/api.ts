@@ -96,7 +96,7 @@ export default async function apiRoutes(fastify: FastifyInstance) {
                 protectedRoutes.get("/tokens", TokenController.list);
                 protectedRoutes.post("/tokens", TokenController.create);
                 protectedRoutes.delete(
-                    "/tokens/:token",
+                    "/tokens/:tokenHash",
                     TokenController.delete,
                 );
 

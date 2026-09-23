@@ -230,8 +230,10 @@ export const RegistrationResponseSchema = z.object({
     clientId: z.string(),
 });
 
+/** A registration token as the list shows it: by its hash, never the token itself. */
 export const TokenSchema = z.object({
-    token: z.string(),
+    /** SHA-256 of the token, hex. Also what `DELETE /api/v1/tokens/:tokenHash` takes. */
+    tokenHash: z.string(),
     createdAt: z.string(),
     expiresAt: z.string(),
     usedAt: z.string().optional(),
@@ -239,6 +241,17 @@ export const TokenSchema = z.object({
      * What the operator fixed when issuing the token, for the client it creates. Absent
      * means the agent's hostname and the address it registers from decide, as before.
      */
+    displayName: z.string().nullish(),
+    inboundAllowedIp: z.string().nullish(),
+});
+
+/**
+ * `POST /api/v1/tokens`: the one response that carries the token in the clear. The server
+ * stores only its hash, so this is the only time it can be shown.
+ */
+export const CreatedTokenSchema = z.object({
+    token: z.string(),
+    expiresAt: z.string(),
     displayName: z.string().nullish(),
     inboundAllowedIp: z.string().nullish(),
 });

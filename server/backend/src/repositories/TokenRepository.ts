@@ -1,8 +1,18 @@
+import crypto from "crypto";
 import db from "../core/Database.js";
+
+/**
+ * How a registration token is stored and looked up. The value itself is shown once, when it
+ * is issued; the table only holds its SHA-256 hash, which the list shows in its place.
+ */
+export function hashToken(token: string): string {
+    return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 /** A row of the `registration_tokens` table. */
 export interface RegistrationTokenRow {
-    token: string;
+    /** SHA-256 of the token, hex. The token itself is never stored. */
+    token_hash: string;
     created_at: string;
     expires_at: string | null;
     used_at: string | null;
@@ -24,9 +34,9 @@ export class TokenRepository {
     static findValidByToken(token: string): RegistrationTokenRow | undefined {
         return db
             .prepare(
-                "SELECT * FROM registration_tokens WHERE token = ? AND used_at IS NULL AND expires_at > datetime('now')",
+                "SELECT * FROM registration_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')",
             )
-            .get(token) as RegistrationTokenRow | undefined;
+            .get(hashToken(token)) as RegistrationTokenRow | undefined;
     }
 
     /**
@@ -41,22 +51,22 @@ export class TokenRepository {
         allowedIp: string | null = null,
     ): void {
         db.prepare(
-            "INSERT INTO registration_tokens (token, expires_at, display_name, allowed_ip) VALUES (?, ?, ?, ?)",
-        ).run(token, expiresAt, displayName, allowedIp);
+            "INSERT INTO registration_tokens (token_hash, expires_at, display_name, allowed_ip) VALUES (?, ?, ?, ?)",
+        ).run(hashToken(token), expiresAt, displayName, allowedIp);
     }
 
-    static markUsed(token: string): { changes: number } {
+    static markUsed(tokenHash: string): { changes: number } {
         return db
             .prepare(
-                "UPDATE registration_tokens SET used_at = datetime('now') WHERE token = ?",
+                "UPDATE registration_tokens SET used_at = datetime('now') WHERE token_hash = ?",
             )
-            .run(token);
+            .run(tokenHash);
     }
 
-    static delete(token: string): { changes: number } {
+    static delete(tokenHash: string): { changes: number } {
         return db
-            .prepare("DELETE FROM registration_tokens WHERE token = ?")
-            .run(token);
+            .prepare("DELETE FROM registration_tokens WHERE token_hash = ?")
+            .run(tokenHash);
     }
 
     /**

@@ -374,7 +374,7 @@ Manages user accounts. Supports creating, editing, and deleting users via a `Use
 
 ### TokenOverview (`features/tokens`)
 
-Lists registration tokens via `TokenList` — a `DataMultiView` with search over token, display name and address — and deletes them after asking. Tokens are **issued in the `AddClientWizard`**, not here: that is where the two defaults a token carries — display name and allowed address — are entered, and a second entry point would only produce tokens without them. The list shows both defaults per token, or "From the agent" for a token that carries neither.
+Lists registration tokens via `TokenList` — a `DataMultiView` with search over token hash, display name and address — and deletes them after asking. Tokens are **issued in the `AddClientWizard`**, not here: that is where the two defaults a token carries — display name and allowed address — are entered, and a second entry point would only produce tokens without them. The list shows a token by the first 12 characters of its SHA-256 hash (the full hash in the tooltip), since the server keeps nothing else; the token itself is shown once, in the wizard's `TokenModal`. It shows both defaults per token, or "From the agent" for a token that carries neither.
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 

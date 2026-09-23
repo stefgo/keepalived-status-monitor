@@ -474,21 +474,21 @@ The client's last keepalived reading goes with it. For an outbound client any pe
 
 | Field              | Type           | Description                                     |
 | :----------------- | :------------- | :---------------------------------------------- |
-| `token`            | string         | The token string.                               |
+| `tokenHash`        | string         | SHA-256 of the token, hex. The token itself is not stored and cannot be listed. |
 | `createdAt`        | string         | Creation timestamp.                             |
 | `expiresAt`        | string         | ISO 8601 expiry timestamp (30 min from creation). |
 | `usedAt`           | string \| null | When a client registered with this token.       |
 | `displayName`      | string \| null | Name the client will be created under, if the token carries one. |
 | `inboundAllowedIp` | string \| null | Allowed address or network the client will start with, if the token carries one. |
 
-The rows also carry the database columns under their own names (`created_at`, `expires_at`, `used_at`, `display_name`, `allowed_ip`); the dashboard reads the camelCase fields.
+The rows also carry the database columns under their own names (`token_hash`, `created_at`, `expires_at`, `used_at`, `display_name`, `allowed_ip`); the dashboard reads the camelCase fields.
 
 **Example Response:**
 
 ```json
 [
     {
-        "token": "a1b2c3d4e5f6...",
+        "tokenHash": "9f86d081884c...",
         "createdAt": "2024-01-01 10:00:00",
         "expiresAt": "2024-01-01T10:30:00.000Z",
         "usedAt": null,
@@ -503,6 +503,8 @@ The rows also carry the database columns under their own names (`created_at`, `e
 `POST /api/v1/tokens`
 
 **Description:** Generates a new short-lived registration token (valid for 30 minutes), optionally carrying what the registering agent cannot tell the server about itself.
+
+The response is the only place the token appears in the clear: the server stores just its SHA-256 hash, and [List Tokens](#list-tokens) returns that hash.
 
 #### Request Body
 
@@ -530,15 +532,15 @@ Both defaults are stored with the token and applied by `POST /api/v1/register`. 
 
 ### Delete Token
 
-`DELETE /api/v1/tokens/:token`
+`DELETE /api/v1/tokens/:tokenHash`
 
 **Description:** Manually invalidates and deletes a registration token.
 
 #### Path Parameters
 
-| Parameter | Type   | Required | Description                 |
-| :-------- | :----- | :------- | :-------------------------- |
-| `token`   | string | **Yes**  | The token string to delete. |
+| Parameter   | Type   | Required | Description                                       |
+| :---------- | :----- | :------- | :------------------------------------------------ |
+| `tokenHash` | string | **Yes**  | The `tokenHash` of the token, as the list returns it. |
 
 #### Response
 

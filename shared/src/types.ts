@@ -16,6 +16,7 @@ import {
     RegistrationPayloadSchema,
     RegistrationResponseSchema,
     TokenSchema,
+    CreatedTokenSchema,
     AuthPayloadSchema,
     LoginPayloadSchema,
     CreateUserSchema,
@@ -47,6 +48,7 @@ export type ConnectionMode = (typeof CONNECTION_MODE)[keyof typeof CONNECTION_MO
 export type Client = z.infer<typeof ClientSchema>;
 export type AgentKeepalivedConfig = z.output<typeof AgentKeepalivedConfigSchema>;
 export type Token = z.infer<typeof TokenSchema>;
+export type CreatedToken = z.infer<typeof CreatedTokenSchema>;
 
 // REST request bodies
 export type LoginPayload = z.infer<typeof LoginPayloadSchema>;

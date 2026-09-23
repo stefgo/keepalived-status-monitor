@@ -50,7 +50,7 @@ export const TokenOverview = () => {
         confirm({
             ...describeDeleteToken(active),
             onConfirm: async () => {
-                const res = await apiFetch(`/api/v1/tokens/${token.token}`, { method: "DELETE" });
+                const res = await apiFetch(`/api/v1/tokens/${token.tokenHash}`, { method: "DELETE" });
                 if (!res.ok) {
                     const data = await res.json().catch(() => ({}));
                     throw new Error(data.error || "Failed to delete token");
