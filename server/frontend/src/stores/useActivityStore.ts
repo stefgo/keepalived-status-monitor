@@ -13,7 +13,6 @@ interface ActivityState {
     setCurrentUserId: (id: number) => void;
     setEvents: (events: ActivityRecord[]) => void;
     fetchEvents: () => Promise<void>;
-    markSeen: (id: string) => Promise<void>;
     markManySeen: (ids: string[]) => Promise<void>;
     clearAll: () => Promise<void>;
 }
@@ -32,20 +31,6 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
         if (res.ok) {
             set({ events: await res.json() });
         }
-    },
-
-    markSeen: async (id) => {
-        const userId = get().currentUserId;
-        if (userId) {
-            set((s) => ({
-                events: s.events.map((e) =>
-                    e.id === id && !e.seenBy.includes(userId)
-                        ? { ...e, seenBy: [...e.seenBy, userId] }
-                        : e,
-                ),
-            }));
-        }
-        await apiFetch(`/api/v1/activity/${id}/seen`, { method: "POST" });
     },
 
     /** One request for many events, so the server broadcasts the list once, not per event. */

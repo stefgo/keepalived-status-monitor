@@ -91,7 +91,7 @@ function searchText(event: ActivityRecord): string {
  * that; the search box covers everything a reader would look for by name.
  */
 export function ActivityView() {
-    const { events, currentUserId, markSeen, markManySeen, clearAll } = useActivityStore();
+    const { events, currentUserId, markManySeen, clearAll } = useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
     const clients = useClientStore((s) => s.clients);
@@ -156,10 +156,17 @@ export function ActivityView() {
         });
     };
 
-    /** A row is one group, so seeing it means seeing everything under it. */
+    /**
+     * A row is one group, so seeing it means seeing everything under it -- in one request,
+     * and only for the events that are not seen yet.
+     */
     const handleMarkSeen = (group: ActivityGroup) => {
-        markSeen(group.head.id);
-        for (const member of group.members) markSeen(member.id);
+        if (!currentUserId) return;
+        markManySeen(
+            [group.head, ...group.members]
+                .filter((e) => !e.seenBy.includes(currentUserId))
+                .map((e) => e.id),
+        );
     };
 
     const tableDef: DataTableDef<ActivityGroup>[] = [

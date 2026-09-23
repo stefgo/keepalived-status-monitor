@@ -138,7 +138,6 @@ export default async function apiRoutes(fastify: FastifyInstance) {
                 // dashboard still calls the page "Notifications"; the domain does not.
                 protectedRoutes.get("/activity", ActivityController.list);
                 protectedRoutes.post("/activity/seen", ActivityController.markManySeen);
-                protectedRoutes.post("/activity/:id/seen", ActivityController.markSeen);
                 protectedRoutes.delete("/activity", ActivityController.deleteAll);
             });
 

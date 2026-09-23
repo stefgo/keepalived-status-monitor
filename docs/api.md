@@ -943,10 +943,10 @@ Newest first by `occurredAt`.
 
 ### Mark Seen
 
-`POST /api/v1/activity/:id/seen` marks one event seen by the calling user;
-`POST /api/v1/activity/seen` with `{ "ids": ["…"] }` marks the listed events seen in one
-request (ids that are not there are skipped; an empty or missing list is a `400`). Both answer
-`{ "ok": true }`; the first answers `404` for an id that is not there.
+`POST /api/v1/activity/seen` with `{ "ids": ["…"] }` marks the listed events seen by the
+calling user in one request (ids that are not there are skipped; an empty or missing list is a
+`400`) and answers `{ "ok": true }`. There is no endpoint for a single event: the dashboard
+marks a whole group, or everything the filters leave, with this one.
 
 ### Delete Activity
 

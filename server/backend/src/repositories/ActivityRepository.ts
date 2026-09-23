@@ -82,18 +82,6 @@ export class ActivityRepository {
         return rows.map(rowToRecord);
     }
 
-    static markSeen(id: string, userId: number): boolean {
-        const row = db.prepare("SELECT seen_by FROM activity WHERE id = ?").get(id) as
-            | { seen_by: string }
-            | undefined;
-        if (!row) return false;
-        const seenBy: number[] = JSON.parse(row.seen_by);
-        if (seenBy.includes(userId)) return true;
-        seenBy.push(userId);
-        db.prepare("UPDATE activity SET seen_by = ? WHERE id = ?").run(JSON.stringify(seenBy), id);
-        return true;
-    }
-
     /** Marks the given events seen by `userId`; ids that are not there are skipped. */
     static markManySeen(ids: string[], userId: number): void {
         const placeholders = ids.map(() => "?").join(",");

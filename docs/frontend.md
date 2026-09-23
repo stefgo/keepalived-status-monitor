@@ -152,7 +152,7 @@ We use **Zustand** split into specialized stores to maintain a clean, reactive s
 
 - **`useClientStore`**: Holds the master list of registered clients and their real-time online/offline status. Provides `fetchClients`, `deleteClient`, `updateClient`, and `setClients` (used by WebSocket updates).
 - **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
-- **`useActivityStore`**: The activity list (`ActivityRecord[]`) and `currentUserId`, which the per-event seen state is kept against. Fed by `ACTIVITY_UPDATE` and by `fetchEvents` on connect; `markSeen`, `markManySeen` and `clearAll` update optimistically and then call the API.
+- **`useActivityStore`**: The activity list (`ActivityRecord[]`) and `currentUserId`, which the per-event seen state is kept against. Fed by `ACTIVITY_UPDATE` and by `fetchEvents` on connect; `markManySeen` and `clearAll` update optimistically and then call the API.
 - **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
 - **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`kasm-ui-storage`).
 

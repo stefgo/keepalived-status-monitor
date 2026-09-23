@@ -143,12 +143,6 @@ export class ActivityService {
         }
     }
 
-    static markSeen(id: string, userId: number): boolean {
-        const ok = ActivityRepository.markSeen(id, userId);
-        if (ok) broadcast();
-        return ok;
-    }
-
     static markManySeen(ids: string[], userId: number): void {
         ActivityRepository.markManySeen(ids, userId);
         broadcast();

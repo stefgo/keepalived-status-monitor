@@ -7,13 +7,6 @@ export class ActivityController {
         return ActivityService.list();
     }
 
-    static async markSeen(request: FastifyRequest, reply: FastifyReply) {
-        const { id } = request.params as { id: string };
-        const ok = ActivityService.markSeen(id, request.user.id);
-        if (!ok) return reply.code(404).send({ error: "Activity event not found" });
-        return { ok: true };
-    }
-
     static async markManySeen(request: FastifyRequest, reply: FastifyReply) {
         const parsed = MarkActivitySeenSchema.safeParse(request.body);
         if (!parsed.success) {
