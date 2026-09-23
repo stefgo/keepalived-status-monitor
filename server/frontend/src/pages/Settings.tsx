@@ -174,10 +174,12 @@ export default function Settings() {
             padding="none"
         >
             <div className="flex flex-col md:flex-row min-h-[450px]">
+                {/* The card is overflow-visible, so its rounded corner does not clip the
+                    sidebar's background; the sidebar rounds that corner itself. */}
                 <TabList
                     tabs={tabs}
                     aria-label="Settings sections"
-                    className="w-full md:w-64 shrink-0 bg-app-bg border-b md:border-b-0 md:border-r border-border py-4 flex flex-col gap-1"
+                    className="w-full md:w-64 shrink-0 bg-app-bg border-b md:border-b-0 md:border-r md:rounded-bl-lg border-border py-4 flex flex-col gap-1"
                 >
                     {SECTIONS.map((section) => {
                         const { selected, ...tabAttributes } = tabs.tabProps(section.id);
