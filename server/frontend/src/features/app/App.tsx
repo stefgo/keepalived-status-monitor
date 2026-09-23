@@ -9,7 +9,7 @@ import {
     useParams,
     useSearchParams,
 } from "react-router-dom";
-import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Bell } from "lucide-react";
+import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, History } from "lucide-react";
 
 // Library Components
 import {
@@ -215,7 +215,7 @@ function AppLayout() {
 
     // Activity. The badge only signals that something needs a look: red for an unseen error,
     // yellow for an unseen warning, nothing otherwise.
-    const notificationsTone =
+    const activityTone =
         useActivityStore((s) => unseenTone(s.events)) ?? undefined;
 
     // Routing Helpers
@@ -283,7 +283,7 @@ function AppLayout() {
     const navGroups: DashboardNavGroup[] = [
         { id: "overview" },
         { id: "resources", title: "Monitoring" },
-        { id: "notification" },
+        { id: "activity" },
         { id: "admin", title: "Administration" },
     ];
 
@@ -323,15 +323,15 @@ function AppLayout() {
                 },
             },
             {
-                id: "notifications",
-                path: "/notifications",
+                id: "activity",
+                path: "/activity",
                 nav: {
-                    groupId: "notification",
-                    label: "Notifications",
-                    icon: Bell,
-                    badgeDot: notificationsTone !== undefined,
-                    badgeTone: notificationsTone,
-                    onClick: () => navigate("/notifications"),
+                    groupId: "activity",
+                    label: "Activity",
+                    icon: History,
+                    badgeDot: activityTone !== undefined,
+                    badgeTone: activityTone,
+                    onClick: () => navigate("/activity"),
                 },
             },
             {
@@ -368,7 +368,7 @@ function AppLayout() {
                 },
             },
         ],
-        [stats, navigate, notificationsTone],
+        [stats, navigate, activityTone],
     );
 
     return (
@@ -396,7 +396,7 @@ function AppLayout() {
                     <Route path="/client/:clientId" element={<ClientDetailRoute />} />
                     <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
                     <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
-                    <Route path="/notifications" element={<ActivityView />} />
+                    <Route path="/activity" element={<ActivityView />} />
                     <Route path="/users" element={<UserOverview />} />
                     <Route path="/tokens" element={<TokenOverview />} />
                     <Route path="/settings" element={<Settings />} />

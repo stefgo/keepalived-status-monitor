@@ -778,7 +778,7 @@ The defaults:
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
 
-The `notification_*` names are kept from the project KASM started from, because the settings page still calls the list "Notification History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
+The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
 
 ### Update Settings
 
@@ -829,7 +829,7 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 `POST /api/v1/settings/cleanup/notifications`
 
-**Description:** Runs `NotificationCleanupService` now, applying the retention policy to the activity table. Recorded as a `manual` run of `notification-cleanup`. The path keeps the old name, as the dashboard page does; what it prunes is the activity list.
+**Description:** Runs `NotificationCleanupService` now, applying the retention policy to the activity table. Recorded as a `manual` run of `notification-cleanup`. The path keeps the old name; what it prunes is the activity list.
 
 #### Response
 
@@ -873,8 +873,7 @@ Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`
 
 ## 📣 Activity
 
-Everything that happened, as its originator reported it. The dashboard still calls the page
-"Notifications"; the domain does not.
+Everything that happened, as its originator reported it.
 
 An event carries no message. It carries a `kind`, a `level`, what it is about and the facts
 of that kind — the old and the new VRRP state, a priority, an error — and the text is composed in
@@ -956,7 +955,7 @@ marks a whole group, or everything the filters leave, with this one.
 cannot be deleted; retention and "Delete all" are the only ways an event goes.
 
 Retention runs on its own through `notification_retention_days` and
-`notification_retention_count` — the page they are set on is called "Notification History".
+`notification_retention_count` — the page they are set on is called "Activity History".
 
 Over the dashboard WebSocket: a new event goes out as `ACTIVITY_APPENDED` with only the events
 stored for the first time (a repeat from the at-least-once delivery is not sent again); marking

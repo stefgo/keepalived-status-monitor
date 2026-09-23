@@ -178,7 +178,7 @@ The timer, the bookkeeping and the status of one server scheduler; both — `Not
 Each service's `run(trigger = "schedule")` goes through its job; the settings controller passes `"manual"`. `startScheduler()` / `stopScheduler()` / `restartScheduler()` and `getStatus()` delegate to it. At startup, `index.ts` calls `SchedulerStateRepository.markInterrupted()` before starting either of them.
 
 #### `NotificationCleanupService`
-Retention for the activity list. It is named after the settings it reads (`notification_retention_days`, `notification_retention_count`, `notification_cleanup_interval_hours`) and the page they are set on, "Notification History". Age is the event's own `occurred_at`, not its arrival time: a batch handed over after a week offline is a week old. Runs every `notification_cleanup_interval_hours`; returns `{ removed }`.
+Retention for the activity list. It is named after the settings it reads (`notification_retention_days`, `notification_retention_count`, `notification_cleanup_interval_hours`) and the page they are set on, "Activity History". Age is the event's own `occurred_at`, not its arrival time: a batch handed over after a week offline is a week old. Runs every `notification_cleanup_interval_hours`; returns `{ removed }`.
 
 #### `TokenCleanupService`
 - `run(trigger?)` — Removes registration tokens that have been invalid (used or expired) for longer than `token_retention_days`. Returns `{ removed }`.

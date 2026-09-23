@@ -15,7 +15,7 @@ import { vrrpStateLabel } from "../../keepalived/lib/vrrp";
 
 /** The server's schedulers as the settings page names them. */
 const SCHEDULER_NAMES: Record<string, string> = {
-    "notification-cleanup": "Notification cleanup",
+    "notification-cleanup": "Activity cleanup",
     "token-cleanup": "Token cleanup",
 };
 

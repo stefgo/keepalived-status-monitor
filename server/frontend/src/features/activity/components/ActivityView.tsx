@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import {
     ChevronRight,
     ChevronDown,
-    Bell,
+    History,
+    MoreVertical,
+    Trash2,
     Eye,
     EyeOff,
     Server,
@@ -10,11 +12,14 @@ import {
 } from "lucide-react";
 import {
     ActionButton,
+    ActionMenu,
     Button,
+    cn,
     DataAction,
     DataMultiView,
     DataTableDef,
     Select,
+    useActionMenu,
     useConfirm,
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord } from "@kasm/shared";
@@ -27,6 +32,7 @@ import { activityDetail, activityMessage } from "../lib/activityText";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, formatDate } from "../../../utils";
+import { MENU_ENTRY } from "../../../components/menuEntry";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 
 function SubjectBadges({ event }: { event: ActivityRecord }) {
@@ -81,8 +87,7 @@ function searchText(event: ActivityRecord): string {
 }
 
 /**
- * The activity list. Still reached under "Notifications" -- the page has kept the name it
- * had, while what it shows has become structured events.
+ * The activity list: structured events, not messages written for the reader.
  *
  * Two things follow from that and are visible here: the text of a row is written in
  * `activityText` out of `kind` and `data`, not taken from the event, and a multi-step
@@ -94,6 +99,7 @@ export function ActivityView() {
     const { events, markManySeen, clearAll } = useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
+    const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const clients = useClientStore((s) => s.clients);
     // A minimum, not an exact match: "info" shows everything but the trace level. The page
     // opens on what needs a look: "error" while an error is unseen, else "warning" while a
@@ -107,7 +113,7 @@ export function ActivityView() {
     const levelFilter = chosenLevel ?? startLevel;
     // Whether seen entries are listed at all. Under "unseen" a row leaves the list as soon as
     // it is marked seen, which is the point: what is left is what has not been looked at.
-    const [seenFilter, setSeenFilter] = useState<"all" | "unseen">("all");
+    const [seenFilter, setSeenFilter] = useState<"all" | "unseen">("unseen");
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
     // Events recorded before the server stored `clientName` with them name no host. The
@@ -292,13 +298,30 @@ export function ActivityView() {
                 </Button>
             )}
             {groups.length > 0 && (
-                <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => confirm({ ...describeDeleteAllActivity(events.length), onConfirm: clearAll })}
-                >
-                    Delete all
-                </Button>
+                <div className="relative">
+                    <ActionButton
+                        icon={MoreVertical}
+                        aria-label="Activity actions"
+                        onClick={(e) => openMenu(e, "activity")}
+                    />
+                    <ActionMenu
+                        isOpen={menuState?.id === "activity"}
+                        onClose={closeMenu}
+                        anchor={menuState?.anchor ?? null}
+                        triggerRef={triggerRef}
+                    >
+                        {/* Closes the menu first: the dialog would otherwise sit under it. */}
+                        <button
+                            onClick={() => {
+                                closeMenu();
+                                confirm({ ...describeDeleteAllActivity(events.length), onConfirm: clearAll });
+                            }}
+                            className={cn(MENU_ENTRY, "text-error")}
+                        >
+                            <Trash2 size={16} /> Delete all
+                        </button>
+                    </ActionMenu>
+                </div>
             )}
         </div>
     );
@@ -307,7 +330,7 @@ export function ActivityView() {
         <DataMultiView<ActivityGroup>
             title={
                 <>
-                    <Bell size={18} className="text-text-muted" /> Notifications
+                    <History size={18} className="text-text-muted" /> Activity
                 </>
             }
             viewMode={{ persist: { key: "activityView", scope: "local" } }}
@@ -320,7 +343,7 @@ export function ActivityView() {
             noResultsMessage="No events match these filters."
             pagination={pagination(PAGE_SIZE.page)}
             searchable
-            searchPlaceholder="Search notifications…"
+            searchPlaceholder="Search activity…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             searchActions={filterSelects}
             extraActions={extraActions}

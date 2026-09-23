@@ -48,7 +48,7 @@ src/
 │   │   ├── components/
 │   │   │   ├── ActivityGroupSteps.tsx    # The members of one correlated group
 │   │   │   ├── ActivityLevelIcon.tsx     # One icon per level, wherever an event is listed
-│   │   │   └── ActivityView.tsx          # The page, still reached as "Notifications"
+│   │   │   └── ActivityView.tsx          # The page at /activity
 │   │   └── lib/
 │   │       ├── activityText.ts           # kind + data -> the sentence a reader sees
 │   │       └── groupActivity.ts          # Folds the flat list into rows by correlationId
@@ -109,14 +109,14 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
 | `/client/:clientId/edit` | `AppLayout` | The `ClientEditor` for that client.                               |
 | `/client/:clientId/instance/:instanceName` | `AppLayout` | Redirects to the cluster of that instance; kept for old links. |
-| `/notifications`    | `AppLayout`     | The activity list. The path and the menu entry keep the old name.   |
+| `/activity`         | `AppLayout`     | The activity list.                                                  |
 | `/users`            | `AppLayout`     | User management.                                                    |
 | `/tokens`           | `AppLayout`     | Registration token management.                                      |
 | `/settings`         | `AppLayout`     | System settings (retention of tokens and activity).                 |
 
 All routes except `/login` are wrapped in a `ProtectedRoute` component that redirects unauthenticated users to `/login`.
 
-The `AppLayout` uses the `Dashboard` component from `@stefgo/react-ui-components`. Since library 3.0 it renders **only the navigation** and highlights the entry whose `path` matches; the page content is a `<Routes>` element passed to it as `children`. A `DashboardPage` entry is therefore `{ id, path, nav }` — path (with `:param` segments), plus label, icon and an optional badge. Navigation is organised into `navGroups` (`overview` with the dashboard, `resources` titled "Monitoring" with clusters and clients, `notification`, `admin`).
+The `AppLayout` uses the `Dashboard` component from `@stefgo/react-ui-components`. Since library 3.0 it renders **only the navigation** and highlights the entry whose `path` matches; the page content is a `<Routes>` element passed to it as `children`. A `DashboardPage` entry is therefore `{ id, path, nav }` — path (with `:param` segments), plus label, icon and an optional badge. Navigation is organised into `navGroups` (`overview` with the dashboard, `resources` titled "Monitoring" with clusters and clients, `activity`, `admin`).
 
 A path no entry claims reaches the catch-all route and renders a **404 card** that names the path and leads back to the clients view. The Dashboard used to fall back to its first page silently, so an unknown URL looked like the clients page.
 
@@ -336,9 +336,8 @@ MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the res
 
 ### ActivityView (`features/activity`)
 
-The page at `/notifications` — the menu entry keeps the name, what it shows does not. Its
-entries are structured events: a `kind`, a `level`, what the event is about and the facts of
-that kind.
+The page at `/activity`. Its entries are structured events: a `kind`, a `level`, what the
+event is about and the facts of that kind.
 
 **The text is written here.** `activityText.ts` is the one place a wording exists: an agent
 reports `vrrp.state_changed` with the two states and nothing else, and the sentence —
@@ -393,7 +392,7 @@ Lists registration tokens via `TokenList` — a `DataMultiView` with search over
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 
-System settings page, one section per tab: Client Tokens and Notification History. The tabs are the library's `useTabs`/`TabList`/`TabPanel`, and the open one is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
+System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel`, and the open one is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
 

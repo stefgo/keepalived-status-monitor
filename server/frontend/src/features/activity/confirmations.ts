@@ -7,8 +7,8 @@ import { plural } from "../../utils";
  */
 export function describeDeleteAllActivity(count: number): ConfirmOptions {
     return {
-        title: `Delete all ${plural(count, "notification")}?`,
-        description: "The whole notification history is deleted for every user, including entries the current filter hides. This cannot be undone.",
+        title: `Delete all ${plural(count, "event")}?`,
+        description: "The whole activity history is deleted for every user, including entries the current filter hides. This cannot be undone.",
         confirmLabel: "Delete all",
         variant: "danger",
     };
