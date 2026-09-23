@@ -658,6 +658,11 @@ export const ActivityBatchEnvelopeSchema = z.object({
     events: z.array(z.unknown()).min(1),
 });
 
+/** `POST /api/v1/activity/seen`. The events the calling user has seen. */
+export const MarkActivitySeenSchema = z.object({
+    ids: z.array(z.string().min(1)).min(1),
+});
+
 /** `ACTIVITY_ACK`. The ids the server has stored; the agent drops them from its queue. */
 export const ActivityAckSchema = z.object({
     ids: z.array(z.string().min(1)),

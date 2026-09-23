@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
     ChevronRight,
     ChevronDown,
-    Trash2,
     Bell,
     Eye,
     EyeOff,
@@ -27,7 +26,7 @@ import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { activityDetail, activityMessage } from "../lib/activityText";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
-import { clientName, describeFailure, formatDate } from "../../../utils";
+import { clientName, formatDate } from "../../../utils";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 
 function SubjectBadges({ event }: { event: ActivityRecord }) {
@@ -92,13 +91,28 @@ function searchText(event: ActivityRecord): string {
  * that; the search box covers everything a reader would look for by name.
  */
 export function ActivityView() {
-    const { events, currentUserId, markSeen, markAllSeen, removeEvent, clearAll } =
-        useActivityStore();
+    const { events, currentUserId, markSeen, markManySeen, clearAll } = useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    const { confirm, alert } = useConfirm();
+    const { confirm } = useConfirm();
     const clients = useClientStore((s) => s.clients);
-    // A minimum, not an exact match: "info" shows everything but the trace level.
-    const [levelFilter, setLevelFilter] = useState<ActivityLevel>("info");
+    // A minimum, not an exact match: "info" shows everything but the trace level. The page
+    // opens on what needs a look: "error" while an error is unseen, else "warning" while a
+    // warning is, else "info". That start is fixed once the list is known, so marking a row
+    // seen does not pull the filter out from under the reader; until then it follows the list.
+    const [chosenLevel, setChosenLevel] = useState<ActivityLevel | null>(null);
+    const unseen = currentUserId ? events.filter((e) => !e.seenBy.includes(currentUserId)) : [];
+    const startLevel: ActivityLevel = unseen.some((e) => e.level === "error")
+        ? "error"
+        : unseen.some((e) => e.level === "warning")
+            ? "warning"
+            : "info";
+    if (chosenLevel === null && currentUserId && events.length > 0) {
+        setChosenLevel(startLevel);
+    }
+    const levelFilter = chosenLevel ?? startLevel;
+    // Whether seen entries are listed at all. Under "unseen" a row leaves the list as soon as
+    // it is marked seen, which is the point: what is left is what has not been looked at.
+    const [seenFilter, setSeenFilter] = useState<"all" | "unseen">("all");
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
     // Events recorded before the server stored `clientName` with them name no host. The
@@ -123,13 +137,14 @@ export function ActivityView() {
                 if (ACTIVITY_LEVELS.indexOf(group.level) < ACTIVITY_LEVELS.indexOf(levelFilter)) {
                     return false;
                 }
+                if (seenFilter === "unseen" && !group.unseen) return false;
                 if (!searchQuery) return true;
                 const q = searchQuery.toLowerCase();
                 return [group.head, ...group.members].some((event) =>
                     searchText(event).includes(q),
                 );
             }),
-        [groups, levelFilter, searchQuery],
+        [groups, levelFilter, seenFilter, searchQuery],
     );
 
     const toggleExpand = (id: string) => {
@@ -145,20 +160,6 @@ export function ActivityView() {
     const handleMarkSeen = (group: ActivityGroup) => {
         markSeen(group.head.id);
         for (const member of group.members) markSeen(member.id);
-    };
-
-    /**
-     * Deleting a group is one request per event, run one after another: the store rolls its
-     * optimistic removal back on failure, and parallel calls would each roll back to the list
-     * as it stood before them -- the first failure would undo the deletions that succeeded.
-     */
-    const handleDelete = async (group: ActivityGroup) => {
-        try {
-            await removeEvent(group.head.id);
-            for (const member of group.members) await removeEvent(member.id);
-        } catch (e: unknown) {
-            alert(describeFailure("The activity entry was not deleted", e));
-        }
     };
 
     const tableDef: DataTableDef<ActivityGroup>[] = [
@@ -245,40 +246,55 @@ export function ActivityView() {
                                     tooltip: "Already seen",
                                     color: "gray" as const,
                                 }]),
-                        {
-                            icon: Trash2,
-                            onClick: () => handleDelete(g),
-                            tooltip: "Delete",
-                            color: "red" as const,
-                        },
                     ]}
                 />
             ),
         },
     ];
 
-    const unseenCount = groups.filter((g) => g.unseen).length;
+    // "Mark as seen" acts on what the level filter and the search leave on screen, every page
+    // of it -- not on events the reader has not been shown.
+    const unseenShown = currentUserId
+        ? filtered
+            .flatMap((g) => [g.head, ...g.members])
+            .filter((e) => !e.seenBy.includes(currentUserId))
+            .map((e) => e.id)
+        : [];
 
-    // Styled like the search pill it sits next to rather than like a form field: same height,
+    // Styled like the search pill they sit next to rather than like form fields: same height,
     // radius, border and background, so the bar reads as one row of controls.
-    const levelSelect = (
-        <Select
-            aria-label="Filter by level"
-            fullWidth={false}
-            classNames={{
-                select: "py-1 pl-3 pr-9 rounded-full border-border bg-app-bg text-sm",
-            }}
-            value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value as ActivityLevel)}
-            options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: level }))}
-        />
+    const pillSelect = {
+        select: "py-1 pl-3 pr-9 rounded-full border-border bg-app-bg text-sm",
+    };
+    const filterSelects = (
+        <div className="flex flex-wrap items-center gap-2">
+            <Select
+                aria-label="Filter by seen state"
+                fullWidth={false}
+                classNames={pillSelect}
+                value={seenFilter}
+                onChange={(e) => setSeenFilter(e.target.value as "all" | "unseen")}
+                options={[
+                    { value: "all", label: "all" },
+                    { value: "unseen", label: "unseen" },
+                ]}
+            />
+            <Select
+                aria-label="Filter by level"
+                fullWidth={false}
+                classNames={pillSelect}
+                value={levelFilter}
+                onChange={(e) => setChosenLevel(e.target.value as ActivityLevel)}
+                options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: level }))}
+            />
+        </div>
     );
 
     const extraActions = (
         <div className="flex flex-wrap items-center gap-2">
-            {unseenCount > 0 && (
-                <Button variant="secondary" size="sm" onClick={markAllSeen}>
-                    Mark all as seen
+            {unseenShown.length > 0 && (
+                <Button variant="secondary" size="sm" onClick={() => markManySeen(unseenShown)}>
+                    Mark as seen
                 </Button>
             )}
             {groups.length > 0 && (
@@ -312,7 +328,7 @@ export function ActivityView() {
             searchable
             searchPlaceholder="Search notifications…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            searchActions={levelSelect}
+            searchActions={filterSelects}
             extraActions={extraActions}
             classNames={{ table: { table: "w-full" } }}
         />

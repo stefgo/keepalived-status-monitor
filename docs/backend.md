@@ -81,7 +81,7 @@ All routes are registered as a single Fastify plugin under the `/api` prefix. Pr
 - Tokens: `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/:token`
 - keepalived: `GET /api/v1/keepalived/states`, `GET /api/v1/keepalived/clusters`, `GET /api/v1/clients/:clientId/keepalived`, `POST /api/v1/clients/:clientId/keepalived/refresh`
 - Settings: `GET/PUT /api/v1/settings/cleanup`, `POST /api/v1/settings/cleanup/{invalid-tokens,notifications}`, `GET /api/v1/settings/scheduler-status`
-- Activity: `GET/DELETE /api/v1/activity`, `POST /api/v1/activity/seen-all`, `POST /api/v1/activity/:id/seen`, `DELETE /api/v1/activity/:id`
+- Activity: `GET/DELETE /api/v1/activity`, `POST /api/v1/activity/seen`, `POST /api/v1/activity/:id/seen`
 
 The full reference is in [api.md](api.md).
 
@@ -162,7 +162,7 @@ Activity events are structured facts — `kind`, `level`, a subject, a `data` ob
 - `record(input)` — Records an event the **server** is the originator of. That is deliberately a short list: the connection state of an agent (`client.connected` / `client.disconnected`), a registration (`client.registered`), and a scheduler run that threw (`scheduler.failed`, `error`, with `scheduler`, `trigger` and `error`). Everything that happens *on* a host is reported by that host.
 - `handleBatch(clientId, payload)` — One `ACTIVITY` batch from an agent: validated, ingested, then acknowledged with `ACTIVITY_ACK`. Only the envelope is parsed as a whole; the events are parsed one by one. A batch whose envelope does not parse is dropped **without** an ack, so the agent keeps offering it — acknowledging what was never written would delete it on the only side that still had it. The one exception is an event that can never be stored: one that does not parse but carries an id is acknowledged without being stored and logged, because re-offering it changes nothing and the agent's in-order queue would stall behind it until its seven-day age limit.
 - `ingest(clientId, events)` — Stores the batch and returns the ids the agent may drop. `source` and `clientId` are overwritten from the connection: an agent may only ever speak about itself.
-- `markSeen` / `markAllSeen` / `delete` / `deleteAll` — Each broadcasts the new list as `ACTIVITY_UPDATE`.
+- `markSeen` / `markManySeen` / `deleteAll` — Each broadcasts the new list as `ACTIVITY_UPDATE`.
 
 Delivery is at-least-once and the id comes from the originator, so a repeat is expected rather than an error: `ActivityRepository.insertMany` writes `ON CONFLICT DO NOTHING` inside one transaction, and the second copy of an event changes nothing. That is what puts a failover at three in the morning, with the server switched off, on record once the server is back.
 

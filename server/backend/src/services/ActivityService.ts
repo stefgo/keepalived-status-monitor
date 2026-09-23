@@ -149,15 +149,9 @@ export class ActivityService {
         return ok;
     }
 
-    static markAllSeen(userId: number): void {
-        ActivityRepository.markAllSeen(userId);
+    static markManySeen(ids: string[], userId: number): void {
+        ActivityRepository.markManySeen(ids, userId);
         broadcast();
-    }
-
-    static delete(id: string): boolean {
-        const ok = ActivityRepository.delete(id);
-        if (ok) broadcast();
-        return ok;
     }
 
     static deleteAll(): void {

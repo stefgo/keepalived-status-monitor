@@ -944,13 +944,14 @@ Newest first by `occurredAt`.
 ### Mark Seen
 
 `POST /api/v1/activity/:id/seen` marks one event seen by the calling user;
-`POST /api/v1/activity/seen-all` marks every event seen. Both answer `{ "ok": true }`;
-the first answers `404` for an id that is not there.
+`POST /api/v1/activity/seen` with `{ "ids": ["…"] }` marks the listed events seen in one
+request (ids that are not there are skipped; an empty or missing list is a `400`). Both answer
+`{ "ok": true }`; the first answers `404` for an id that is not there.
 
 ### Delete Activity
 
-`DELETE /api/v1/activity/:id` removes one event, `DELETE /api/v1/activity` removes all of
-them. Both answer `{ "ok": true }`; the first answers `404` for an id that is not there.
+`DELETE /api/v1/activity` removes all events and answers `{ "ok": true }`. Single events
+cannot be deleted; retention and "Delete all" are the only ways an event goes.
 
 Retention runs on its own through `notification_retention_days` and
 `notification_retention_count` — the page they are set on is called "Notification History".

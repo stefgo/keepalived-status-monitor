@@ -94,8 +94,12 @@ export class ActivityRepository {
         return true;
     }
 
-    static markAllSeen(userId: number): void {
-        const rows = db.prepare("SELECT id, seen_by FROM activity").all() as {
+    /** Marks the given events seen by `userId`; ids that are not there are skipped. */
+    static markManySeen(ids: string[], userId: number): void {
+        const placeholders = ids.map(() => "?").join(",");
+        const rows = db
+            .prepare(`SELECT id, seen_by FROM activity WHERE id IN (${placeholders})`)
+            .all(...ids) as {
             id: string;
             seen_by: string;
         }[];
@@ -110,10 +114,6 @@ export class ActivityRepository {
             }
         });
         update();
-    }
-
-    static delete(id: string): boolean {
-        return db.prepare("DELETE FROM activity WHERE id = ?").run(id).changes > 0;
     }
 
     static deleteAll(): void {

@@ -1,4 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
+import { MarkActivitySeenSchema, firstIssue } from "@kasm/shared";
 import { ActivityService } from "../services/ActivityService.js";
 
 export class ActivityController {
@@ -13,15 +14,12 @@ export class ActivityController {
         return { ok: true };
     }
 
-    static async markAllSeen(request: FastifyRequest, _reply: FastifyReply) {
-        ActivityService.markAllSeen(request.user.id);
-        return { ok: true };
-    }
-
-    static async deleteOne(request: FastifyRequest, reply: FastifyReply) {
-        const { id } = request.params as { id: string };
-        const ok = ActivityService.delete(id);
-        if (!ok) return reply.code(404).send({ error: "Activity event not found" });
+    static async markManySeen(request: FastifyRequest, reply: FastifyReply) {
+        const parsed = MarkActivitySeenSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: firstIssue(parsed.error) });
+        }
+        ActivityService.markManySeen(parsed.data.ids, request.user.id);
         return { ok: true };
     }
 
