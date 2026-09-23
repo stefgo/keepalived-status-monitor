@@ -14,6 +14,7 @@ import { migration01 } from "./migrations/01_keepalived_state.js";
 import { migration02 } from "./migrations/02_client_site.js";
 import { migration03 } from "./migrations/03_scheduler_state.js";
 import { migration04 } from "./migrations/04_registration_token_hash.js";
+import { migration05 } from "./migrations/05_activity_seen.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // server/src/core -> server/data
@@ -38,6 +39,7 @@ const migrator = new Umzug<Database.Database>({
         { name: "02_client_site", up: migration02.up, down: migration02.down },
         { name: "03_scheduler_state", up: migration03.up, down: migration03.down },
         { name: "04_registration_token_hash", up: migration04.up, down: migration04.down },
+        { name: "05_activity_seen", up: migration05.up, down: migration05.down },
     ],
     context: db,
     storage: {

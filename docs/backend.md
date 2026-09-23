@@ -30,7 +30,8 @@ server/backend/src/
 │       ├── 01_keepalived_state.ts         # keepalived_state: the last reading per client
 │       ├── 02_client_site.ts              # clients.site: part of the VRRP cluster key
 │       ├── 03_scheduler_state.ts          # scheduler_state: last run and state per scheduler
-│       └── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
+│       ├── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
+│       └── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -197,7 +198,7 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 | `TokenRepository`        | `registration_tokens`                    | Create with expiry and optional defaults, find a valid one, mark as used, delete, retention cleanup. |
 | `UserRepository`         | `users`                                  | CRUD, lookup by username, password hash management.              |
 | `KeepalivedStateRepository` | `keepalived_state`                    | Upsert, list and delete the last reading per client.             |
-| `ActivityRepository`     | `activity`                               | Batch insert with primary-key dedup, seen state, deletion, retention. |
+| `ActivityRepository`     | `activity`, `activity_seen`              | Batch insert with primary-key dedup, seen state, deletion, retention. |
 | `SchedulerStateRepository` | `scheduler_state`                      | Mark a run started and finished, save and read the state a scheduler carries, turn runs cut off by a restart into `interrupted` ones. |
 
 ### 5. WebSocket Controller (`src/controllers/WebSocketController.ts`)
@@ -344,10 +345,21 @@ activity list, reported by the agents themselves.
 | `data`           | TEXT    | JSON: the facts of this kind — the old and the new state, priorities, an error.        |
 | `occurred_at`    | TEXT    | The originator's clock. Orders the list.                                               |
 | `received_at`    | TEXT    | The server's clock. Tells a late arrival from a recent event, and exposes a wrong agent clock. |
-| `seen_by`        | TEXT    | JSON array of user ids.                                                                |
 
 Indexed on `occurred_at DESC` and on `correlation_id`. There is no message column: the text
 is written in the frontend out of `kind` and `data`.
+
+**`activity_seen`** _(migration 05)_
+
+| Column        | Type       | Description                           |
+| :------------ | :--------- | :------------------------------------ |
+| `activity_id` | TEXT FK    | → `activity.id`, `ON DELETE CASCADE`. |
+| `user_id`     | INTEGER FK | → `users.id`, `ON DELETE CASCADE`.    |
+
+Primary key `(activity_id, user_id)`, `WITHOUT ROWID`. One row per event a user has seen, so
+marking is a single `INSERT OR IGNORE`, and retention, "Delete all" and deleting a user clear
+it away by themselves. Until migration 05 this was a JSON array in `activity.seen_by`; its
+entries were moved over, except the ids of users that no longer exist.
 
 **`scheduler_state`** _(migration 03)_
 

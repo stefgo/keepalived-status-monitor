@@ -12,8 +12,15 @@ interface ActivityRow {
     data: string | null;
     occurred_at: string;
     received_at: string;
+    /** Not a column: the JSON array `SELECT_RECORD` builds out of `activity_seen`. */
     seen_by: string;
 }
+
+/** An event with the ids of the users who have seen it, as `rowToRecord` reads it. */
+const SELECT_RECORD = `
+    SELECT a.*,
+        (SELECT json_group_array(s.user_id) FROM activity_seen s WHERE s.activity_id = a.id) AS seen_by
+    FROM activity a`;
 
 function rowToRecord(row: ActivityRow): ActivityRecord {
     return {
@@ -35,7 +42,7 @@ export class ActivityRepository {
     /** Newest first by the originator's clock -- see `ActivityRecord` on the two times. */
     static list(): ActivityRecord[] {
         const rows = db
-            .prepare("SELECT * FROM activity ORDER BY occurred_at DESC")
+            .prepare(`${SELECT_RECORD} ORDER BY a.occurred_at DESC`)
             .all() as ActivityRow[];
         return rows.map(rowToRecord);
     }
@@ -52,8 +59,8 @@ export class ActivityRepository {
     static insertMany(events: ActivityEvent[], receivedAt: string): ActivityRecord[] {
         const stmt = db.prepare(`
             INSERT INTO activity
-                (id, source, client_id, kind, level, correlation_id, subject, data, occurred_at, received_at, seen_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]')
+                (id, source, client_id, kind, level, correlation_id, subject, data, occurred_at, received_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO NOTHING
         `);
         const insert = db.transaction((batch: ActivityEvent[]) => {
@@ -74,40 +81,30 @@ export class ActivityRepository {
         });
         insert(events);
 
-        const ids = events.map((e) => e.id);
-        const placeholders = ids.map(() => "?").join(", ");
+        const ids = JSON.stringify(events.map((e) => e.id));
         const rows = db
-            .prepare(`SELECT * FROM activity WHERE id IN (${placeholders})`)
-            .all(...ids) as ActivityRow[];
+            .prepare(`${SELECT_RECORD} WHERE a.id IN (SELECT value FROM json_each(?))`)
+            .all(ids) as ActivityRow[];
         return rows.map(rowToRecord);
     }
 
     /**
      * Marks the given events seen by `userId`; ids that are not there are skipped. Returns
      * how many events were not seen by that user before.
+     *
+     * One statement. The ids go in as a single JSON parameter, so the length of the list is
+     * bounded by the request body, not by SQLite's limit on bound variables. A user deleted
+     * while their session is still valid marks nothing instead of failing the foreign key.
      */
     static markManySeen(ids: string[], userId: number): number {
-        const placeholders = ids.map(() => "?").join(",");
-        const rows = db
-            .prepare(`SELECT id, seen_by FROM activity WHERE id IN (${placeholders})`)
-            .all(...ids) as {
-            id: string;
-            seen_by: string;
-        }[];
-        const stmt = db.prepare("UPDATE activity SET seen_by = ? WHERE id = ?");
-        const update = db.transaction(() => {
-            let changed = 0;
-            for (const row of rows) {
-                const seenBy: number[] = JSON.parse(row.seen_by);
-                if (!seenBy.includes(userId)) {
-                    seenBy.push(userId);
-                    stmt.run(JSON.stringify(seenBy), row.id);
-                    changed++;
-                }
-            }
-            return changed;
-        });
-        return update();
+        return db
+            .prepare(`
+                INSERT OR IGNORE INTO activity_seen (activity_id, user_id)
+                SELECT a.id, u.id
+                FROM activity a, users u
+                WHERE a.id IN (SELECT value FROM json_each(?)) AND u.id = ?
+            `)
+            .run(JSON.stringify(ids), userId).changes;
     }
 
     static deleteAll(): void {
