@@ -216,7 +216,7 @@ function AppLayout() {
     // Activity. The badge only signals that something needs a look: red for an unseen error,
     // yellow for an unseen warning, nothing otherwise.
     const notificationsTone =
-        useActivityStore((s) => unseenTone(s.events, s.currentUserId)) ?? undefined;
+        useActivityStore((s) => unseenTone(s.events)) ?? undefined;
 
     // Routing Helpers
     const path = location.pathname;

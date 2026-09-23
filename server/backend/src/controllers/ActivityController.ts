@@ -3,8 +3,8 @@ import { MarkActivitySeenSchema, firstIssue } from "@kasm/shared";
 import { ActivityService } from "../services/ActivityService.js";
 
 export class ActivityController {
-    static async list(_request: FastifyRequest, _reply: FastifyReply) {
-        return ActivityService.list();
+    static async list(request: FastifyRequest, _reply: FastifyReply) {
+        return ActivityService.list(request.user.id);
     }
 
     static async markManySeen(request: FastifyRequest, reply: FastifyReply) {

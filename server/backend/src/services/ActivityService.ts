@@ -14,13 +14,6 @@ import { logger } from "@kasm/shared/node";
 import { ActivityRepository } from "../repositories/ActivityRepository.js";
 import { ProxyService } from "./ProxyService.js";
 
-function broadcast(): void {
-    ProxyService.broadcastToDashboard({
-        type: WS_EVENTS.ACTIVITY_UPDATE,
-        payload: ActivityRepository.list(),
-    });
-}
-
 /**
  * Tells the dashboards about new events only. They hold the list already, and a new event is
  * the same for everyone, so a delta replaces the full list every event used to cost.
@@ -44,8 +37,9 @@ interface ServerEventInput {
 }
 
 export class ActivityService {
-    static list(): ActivityRecord[] {
-        return ActivityRepository.list();
+    /** The list as `userId` sees it: `seen` is theirs. */
+    static list(userId: number): ActivityRecord[] {
+        return ActivityRepository.list(userId);
     }
 
     /**
@@ -65,9 +59,9 @@ export class ActivityService {
             subject: input.subject ?? null,
             data: input.data ?? null,
         };
-        const { stored, inserted } = ActivityRepository.insertMany([event], event.occurredAt);
+        const { inserted } = ActivityRepository.insertMany([event], event.occurredAt);
         broadcastAppended(inserted);
-        return stored[0];
+        return inserted[0];
     }
 
     /**
@@ -85,9 +79,9 @@ export class ActivityService {
             source: "agent" as const,
             clientId,
         }));
-        const { stored, inserted } = ActivityRepository.insertMany(owned, receivedAt);
+        const { storedIds, inserted } = ActivityRepository.insertMany(owned, receivedAt);
         broadcastAppended(inserted);
-        return stored.map((e) => e.id);
+        return storedIds;
     }
 
     /**
@@ -155,13 +149,25 @@ export class ActivityService {
         }
     }
 
-    /** Broadcasts only when something changed: a repeated click has nothing to tell anyone. */
+    /**
+     * Tells the sessions of `userId` which events turned seen -- only theirs: what one user
+     * has seen changes nobody else's list. Nothing is sent when nothing changed.
+     */
     static markManySeen(ids: string[], userId: number): void {
-        if (ActivityRepository.markManySeen(ids, userId) > 0) broadcast();
+        const marked = ActivityRepository.markManySeen(ids, userId);
+        if (marked.length === 0) return;
+        ProxyService.sendToUser(userId, {
+            type: WS_EVENTS.ACTIVITY_SEEN,
+            payload: { ids: marked },
+        });
     }
 
+    /** An empty list is the same for everyone, so it goes to every dashboard. */
     static deleteAll(): void {
         ActivityRepository.deleteAll();
-        broadcast();
+        ProxyService.broadcastToDashboard({
+            type: WS_EVENTS.ACTIVITY_UPDATE,
+            payload: [],
+        });
     }
 }

@@ -39,13 +39,7 @@ function maxLevel(events: ActivityRecord[]): ActivityLevel {
  * whose request was cleared away, or a run still under way -- the earliest member stands in
  * for it, so no event can go missing because its head is absent.
  */
-export function groupActivity(
-    events: ActivityRecord[],
-    currentUserId: number | null,
-): ActivityGroup[] {
-    const isSeen = (e: ActivityRecord) =>
-        currentUserId === null ? false : e.seenBy.includes(currentUserId);
-
+export function groupActivity(events: ActivityRecord[]): ActivityGroup[] {
     const byCorrelation = new Map<string, ActivityRecord[]>();
     const groups: ActivityGroup[] = [];
     // Placeholders keep the correlated rows in the position of their first-seen member, so
@@ -79,7 +73,7 @@ export function groupActivity(
                 head,
                 members: ordered.filter((m) => m.id !== head.id),
                 level: maxLevel(ordered),
-                unseen: ordered.some((m) => !isSeen(m)),
+                unseen: ordered.some((m) => !m.seen),
             });
             continue;
         }
@@ -88,7 +82,7 @@ export function groupActivity(
             head: event,
             members: [],
             level: event.level,
-            unseen: !isSeen(event),
+            unseen: !event.seen,
         });
     }
 

@@ -91,7 +91,7 @@ function searchText(event: ActivityRecord): string {
  * that; the search box covers everything a reader would look for by name.
  */
 export function ActivityView() {
-    const { events, currentUserId, markManySeen, clearAll } = useActivityStore();
+    const { events, markManySeen, clearAll } = useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
     const clients = useClientStore((s) => s.clients);
@@ -100,8 +100,8 @@ export function ActivityView() {
     // warning is, else "info". That start is fixed once the list is known, so marking a row
     // seen does not pull the filter out from under the reader; until then it follows the list.
     const [chosenLevel, setChosenLevel] = useState<ActivityLevel | null>(null);
-    const startLevel: ActivityLevel = unseenTone(events, currentUserId) ?? "info";
-    if (chosenLevel === null && currentUserId && events.length > 0) {
+    const startLevel: ActivityLevel = unseenTone(events) ?? "info";
+    if (chosenLevel === null && events.length > 0) {
         setChosenLevel(startLevel);
     }
     const levelFilter = chosenLevel ?? startLevel;
@@ -121,10 +121,7 @@ export function ActivityView() {
         });
     }, [events, clients]);
 
-    const groups = useMemo(
-        () => groupActivity(named, currentUserId),
-        [named, currentUserId],
-    );
+    const groups = useMemo(() => groupActivity(named), [named]);
 
     const filtered = useMemo(
         () =>
@@ -156,11 +153,8 @@ export function ActivityView() {
      * and only for the events that are not seen yet.
      */
     const handleMarkSeen = (group: ActivityGroup) => {
-        if (!currentUserId) return;
         markManySeen(
-            [group.head, ...group.members]
-                .filter((e) => !e.seenBy.includes(currentUserId))
-                .map((e) => e.id),
+            [group.head, ...group.members].filter((e) => !e.seen).map((e) => e.id),
         );
     };
 
@@ -256,12 +250,10 @@ export function ActivityView() {
 
     // "Mark as seen" acts on what the level filter and the search leave on screen, every page
     // of it -- not on events the reader has not been shown.
-    const unseenShown = currentUserId
-        ? filtered
-            .flatMap((g) => [g.head, ...g.members])
-            .filter((e) => !e.seenBy.includes(currentUserId))
-            .map((e) => e.id)
-        : [];
+    const unseenShown = filtered
+        .flatMap((g) => [g.head, ...g.members])
+        .filter((e) => !e.seen)
+        .map((e) => e.id);
 
     // Styled like the search pill they sit next to rather than like form fields: same height,
     // radius, border and background, so the bar reads as one row of controls.

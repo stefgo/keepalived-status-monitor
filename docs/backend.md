@@ -159,12 +159,13 @@ virtual addresses are payload, not identity). The dashboard runs the same functi
 #### `ActivityService`
 Activity events are structured facts — `kind`, `level`, a subject, a `data` object — recorded by whoever observed them. Nothing in the backend writes a sentence: the text is composed in the frontend out of `kind` and `data`, so an agent of an older version stays useful and filtering by kind and level is exact rather than a search through prose.
 
-- `list()` — Every event, newest first by `occurred_at`.
+- `list(userId)` — Every event, newest first by `occurred_at`, with `seen` as that user has it.
 - `record(input)` — Records an event the **server** is the originator of. That is deliberately a short list: the connection state of an agent (`client.connected` / `client.disconnected`), a registration (`client.registered`), and a scheduler run that threw (`scheduler.failed`, `error`, with `scheduler`, `trigger` and `error`). Everything that happens *on* a host is reported by that host.
 - `handleBatch(clientId, payload)` — One `ACTIVITY` batch from an agent: validated, ingested, then acknowledged with `ACTIVITY_ACK`. Only the envelope is parsed as a whole; the events are parsed one by one. A batch whose envelope does not parse is dropped **without** an ack, so the agent keeps offering it — acknowledging what was never written would delete it on the only side that still had it. The one exception is an event that can never be stored: one that does not parse but carries an id is acknowledged without being stored and logged, because re-offering it changes nothing and the agent's in-order queue would stall behind it until its seven-day age limit.
 - `ingest(clientId, events)` — Stores the batch and returns the ids the agent may drop. `source` and `clientId` are overwritten from the connection: an agent may only ever speak about itself.
 - `record` and `ingest` broadcast `ACTIVITY_APPENDED` with the events they stored for the first time — never the full list, and never a repeat.
-- `markManySeen` / `deleteAll` — Each broadcasts the new list as `ACTIVITY_UPDATE`; `markManySeen` only when it changed anything.
+- `markManySeen(ids, userId)` — Sends `ACTIVITY_SEEN` with the ids that turned seen to the sessions of that user only (`ProxyService.sendToUser`), and nothing when nothing changed.
+- `deleteAll` — Broadcasts `ACTIVITY_UPDATE` with an empty list to every dashboard.
 
 Delivery is at-least-once and the id comes from the originator, so a repeat is expected rather than an error: `ActivityRepository.insertMany` writes `ON CONFLICT DO NOTHING` inside one transaction, and the second copy of an event changes nothing. That is what puts a failover at three in the morning, with the server switched off, on record once the server is back.
 
@@ -206,7 +207,7 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 
 **Dashboard WebSocket (`/ws/dashboard`):**
 - Verifies the JWT from the `kasm_session` cookie of the handshake (`4001` without or with an invalid one).
-- Sends on connect: `CLIENTS_UPDATE`, the stored `KEEPALIVED_STATE_UPDATE` of every client, and `ACTIVITY_UPDATE`.
+- Sends on connect: `CLIENTS_UPDATE`, the stored `KEEPALIVED_STATE_UPDATE` of every client, and `ACTIVITY_UPDATE` with the seen state of the session's user.
 - Attaches the 30-second ping/pong heartbeat before the JWT check.
 - Registered in `ProxyService` to receive all broadcasts.
 

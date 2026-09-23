@@ -12,14 +12,17 @@ interface ActivityRow {
     data: string | null;
     occurred_at: string;
     received_at: string;
-    /** Not a column: the JSON array `SELECT_RECORD` builds out of `activity_seen`. */
-    seen_by: string;
+    /** Not a column: whether the user `SELECT_RECORD` was asked about has seen the event. */
+    seen: 0 | 1;
 }
 
-/** An event with the ids of the users who have seen it, as `rowToRecord` reads it. */
+/**
+ * An event with whether one user has seen it, as `rowToRecord` reads it. The first bound
+ * parameter is that user's id; `null` matches nobody, which is right for an event just stored.
+ */
 const SELECT_RECORD = `
     SELECT a.*,
-        (SELECT json_group_array(s.user_id) FROM activity_seen s WHERE s.activity_id = a.id) AS seen_by
+        EXISTS (SELECT 1 FROM activity_seen s WHERE s.activity_id = a.id AND s.user_id = ?) AS seen
     FROM activity a`;
 
 function rowToRecord(row: ActivityRow): ActivityRecord {
@@ -34,26 +37,29 @@ function rowToRecord(row: ActivityRow): ActivityRecord {
         data: row.data ? JSON.parse(row.data) : null,
         occurredAt: row.occurred_at,
         receivedAt: row.received_at,
-        seenBy: JSON.parse(row.seen_by),
+        seen: row.seen === 1,
     };
 }
 
 export class ActivityRepository {
-    /** Newest first by the originator's clock -- see `ActivityRecord` on the two times. */
-    static list(): ActivityRecord[] {
+    /**
+     * Newest first by the originator's clock -- see `ActivityRecord` on the two times. `seen`
+     * is that of `userId`: each user gets the list as they have worked through it.
+     */
+    static list(userId: number): ActivityRecord[] {
         const rows = db
             .prepare(`${SELECT_RECORD} ORDER BY a.occurred_at DESC`)
-            .all() as ActivityRow[];
+            .all(userId) as ActivityRow[];
         return rows.map(rowToRecord);
     }
 
     /**
-     * Stores a batch under the ids their originator gave them. Returns the records as they
-     * now stand (`stored`) and, among them, the ones this call wrote (`inserted`). Delivery
-     * is at-least-once, so a repeat is expected rather than an error: `ON CONFLICT DO
-     * NOTHING` makes the second copy a no-op, and the caller still gets the id back in
-     * `stored` so the sender can stop offering it -- but not in `inserted`, since nobody
-     * needs to be told about it a second time.
+     * Stores a batch under the ids their originator gave them. Returns the ids that are now
+     * stored (`storedIds`) and the records this call wrote (`inserted`), which nobody has seen
+     * yet. Delivery is at-least-once, so a repeat is expected rather than an error: `ON
+     * CONFLICT DO NOTHING` makes the second copy a no-op, and the caller still gets the id
+     * back in `storedIds` so the sender can stop offering it -- but not in `inserted`, since
+     * nobody needs to be told about it a second time.
      *
      * One transaction: a batch is what an agent handed over in one go, and half of it
      * stored with the other half rolled back would be acknowledged as a whole.
@@ -61,7 +67,7 @@ export class ActivityRepository {
     static insertMany(
         events: ActivityEvent[],
         receivedAt: string,
-    ): { stored: ActivityRecord[]; inserted: ActivityRecord[] } {
+    ): { storedIds: string[]; inserted: ActivityRecord[] } {
         const stmt = db.prepare(`
             INSERT INTO activity
                 (id, source, client_id, kind, level, correlation_id, subject, data, occurred_at, received_at)
@@ -88,31 +94,34 @@ export class ActivityRepository {
         });
         insert(events);
 
-        const ids = JSON.stringify(events.map((e) => e.id));
+        // The transaction went through, so every id is there: written now, or before.
+        const storedIds = [...new Set(events.map((e) => e.id))];
+        if (insertedIds.size === 0) return { storedIds, inserted: [] };
         const rows = db
             .prepare(`${SELECT_RECORD} WHERE a.id IN (SELECT value FROM json_each(?))`)
-            .all(ids) as ActivityRow[];
-        const stored = rows.map(rowToRecord);
-        return { stored, inserted: stored.filter((r) => insertedIds.has(r.id)) };
+            .all(null, JSON.stringify([...insertedIds])) as ActivityRow[];
+        return { storedIds, inserted: rows.map(rowToRecord) };
     }
 
     /**
      * Marks the given events seen by `userId`; ids that are not there are skipped. Returns
-     * how many events were not seen by that user before.
+     * the ids that were not seen by that user before -- the ones there is anything to tell.
      *
      * One statement. The ids go in as a single JSON parameter, so the length of the list is
      * bounded by the request body, not by SQLite's limit on bound variables. A user deleted
      * while their session is still valid marks nothing instead of failing the foreign key.
      */
-    static markManySeen(ids: string[], userId: number): number {
-        return db
+    static markManySeen(ids: string[], userId: number): string[] {
+        const rows = db
             .prepare(`
                 INSERT OR IGNORE INTO activity_seen (activity_id, user_id)
                 SELECT a.id, u.id
                 FROM activity a, users u
                 WHERE a.id IN (SELECT value FROM json_each(?)) AND u.id = ?
+                RETURNING activity_id
             `)
-            .run(JSON.stringify(ids), userId).changes;
+            .all(JSON.stringify(ids), userId) as { activity_id: string }[];
+        return rows.map((r) => r.activity_id);
     }
 
     static deleteAll(): void {

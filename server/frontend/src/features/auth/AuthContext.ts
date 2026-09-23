@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 
 export interface SessionUser {
-    /** A number, like `users.id` -- and like the entries of a notification's `seenBy`. */
+    /** A number, like `users.id`. */
     id: number;
     username: string;
 }

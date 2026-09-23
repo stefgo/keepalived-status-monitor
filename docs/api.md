@@ -125,7 +125,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 
 `GET /api/v1/me`
 
-**Description:** Who the current session belongs to and when it expires. The dashboard reads the username, the user id (for the seen state of notifications) and the expiry (for its automatic logout) from here, because it cannot read the httpOnly cookie. Protected like every `/api/v1` endpoint: without a valid session it answers `401`.
+**Description:** Who the current session belongs to and when it expires. The dashboard reads the username, the user id and the expiry (for its automatic logout) from here, because it cannot read the httpOnly cookie. Protected like every `/api/v1` endpoint: without a valid session it answers `401`.
 
 #### Response
 
@@ -915,6 +915,8 @@ the agent happened to read it.
 
 `GET /api/v1/activity`
 
+`seen` is that of the calling user; who else has seen an event is not part of the answer.
+
 **Response:**
 
 ```json
@@ -934,7 +936,7 @@ the agent happened to read it.
             "interface": "eth0"
         },
         "data": { "from": "MASTER", "to": "BACKUP", "priority": 100, "effectivePriority": 100 },
-        "seenBy": [1]
+        "seen": false
     }
 ]
 ```
@@ -956,9 +958,10 @@ cannot be deleted; retention and "Delete all" are the only ways an event goes.
 Retention runs on its own through `notification_retention_days` and
 `notification_retention_count` — the page they are set on is called "Notification History".
 
-Every mutating endpoint broadcasts `ACTIVITY_UPDATE` with the full list. A new event goes out
-as `ACTIVITY_APPENDED` with only the events stored for the first time; a repeat from the
-at-least-once delivery is not sent again.
+Over the dashboard WebSocket: a new event goes out as `ACTIVITY_APPENDED` with only the events
+stored for the first time (a repeat from the at-least-once delivery is not sent again); marking
+sends `ACTIVITY_SEEN` with the ids that turned seen, to the sessions of the calling user only;
+"Delete all" broadcasts `ACTIVITY_UPDATE` with an empty list.
 
 ---
 
@@ -1017,8 +1020,9 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 | :-------------------- | :------------------------------------------ | :---------------------------------------------------------------- |
 | `CLIENTS_UPDATE`      | `Client[]`                                  | Full list of all clients and their statuses.                      |
 | `KEEPALIVED_STATE_UPDATE` | `KeepalivedState`                       | One client's reading, as in [List Readings](#list-readings). The dashboard recomputes the clusters from these. |
-| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The activity list, after the seen state changed or the list was deleted. |
+| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The whole activity list: on connect, with the seen state of the session's user, and empty after "Delete all". |
 | `ACTIVITY_APPENDED`   | `ActivityRecord[]`                          | Events stored for the first time, to be merged into the list by id. |
+| `ACTIVITY_SEEN`       | `{ ids: string[] }`                         | Events the session's user has just marked seen. Sent to that user's sessions only. |
 | `SCHEDULER_STATUS_UPDATE` | `{ scheduler, status }`                 | One scheduler's status, in the shape of [Scheduler Status](#scheduler-status), whenever a run starts or ends or its timer is set. |
 
 ---

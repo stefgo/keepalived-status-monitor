@@ -152,13 +152,13 @@ We use **Zustand** split into specialized stores to maintain a clean, reactive s
 
 - **`useClientStore`**: Holds the master list of registered clients and their real-time online/offline status. Provides `fetchClients`, `deleteClient`, `updateClient`, and `setClients` (used by WebSocket updates).
 - **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
-- **`useActivityStore`**: The activity list (`ActivityRecord[]`) and `currentUserId`, which the per-event seen state is kept against. Fed by `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED` and by `fetchEvents` on connect; `markManySeen` and `clearAll` update optimistically and then call the API.
+- **`useActivityStore`**: The activity list (`ActivityRecord[]`) as the server reads it for the session's user, so `seen` needs no user id on this side. Fed by `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` (`applySeen`) and by `fetchEvents` on connect; `unseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes; `markManySeen` and `clearAll` update optimistically and then call the API.
 - **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
 - **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`kasm-ui-storage`).
 
 ### Real-time Updates (WebSocket)
 
-The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake. It also hands `user.id` to `useActivityStore.setCurrentUserId`. Incoming messages are dispatched to the stores:
+The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake. Incoming messages are dispatched to the stores:
 
 | Event                  | Handler                                          |
 | :--------------------- | :----------------------------------------------- |
@@ -166,6 +166,7 @@ The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maint
 | `KEEPALIVED_STATE_UPDATE` | `useKeepalivedStore.setState(state)`          |
 | `ACTIVITY_UPDATE`      | `useActivityStore` — replaces the activity list  |
 | `ACTIVITY_APPENDED`    | `useActivityStore.appendEvents` — merges new events by id, newest first |
+| `ACTIVITY_SEEN`        | `useActivityStore.applySeen` — marks the ids seen, also from another tab |
 | `SCHEDULER_STATUS_UPDATE` | `useSchedulerStore.applyUpdate`               |
 
 On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading and the activity list by itself, so the first screen fills without a REST call.

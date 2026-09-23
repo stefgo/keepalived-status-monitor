@@ -9,18 +9,15 @@ export type { ActivityLevel, ActivityRecord };
 export type UnseenTone = "error" | "warning" | null;
 
 /**
- * Info and trace events never ask for a look. Until /me has answered nobody is known to have
- * seen anything, so nothing counts as unseen either: counting everything would flash a dot
- * for events already looked at.
+ * Info and trace events never ask for a look.
  *
  * Returns a string rather than a list, so a component selecting it re-renders only when the
  * tone changes, not on every update of the list.
  */
-export function unseenTone(events: ActivityRecord[], userId: number | null): UnseenTone {
-    if (!userId) return null;
+export function unseenTone(events: ActivityRecord[]): UnseenTone {
     let tone: UnseenTone = null;
     for (const e of events) {
-        if (e.seenBy.includes(userId)) continue;
+        if (e.seen) continue;
         if (e.level === "error") return "error";
         if (e.level === "warning") tone = "warning";
     }
@@ -28,13 +25,12 @@ export function unseenTone(events: ActivityRecord[], userId: number | null): Uns
 }
 
 interface ActivityState {
+    /** As the server reads it for this session's user: `seen` is theirs. */
     events: ActivityRecord[];
-    /** From /api/v1/me, where `id` is a number -- and so are the entries of `seenBy`. */
-    currentUserId: number | null;
     error: string | null;
-    setCurrentUserId: (id: number) => void;
     setEvents: (events: ActivityRecord[]) => void;
     appendEvents: (events: ActivityRecord[]) => void;
+    applySeen: (ids: string[]) => void;
     fetchEvents: () => Promise<void>;
     markManySeen: (ids: string[]) => Promise<void>;
     clearAll: () => Promise<void>;
@@ -42,10 +38,7 @@ interface ActivityState {
 
 export const useActivityStore = create<ActivityState>()((set, get) => ({
     events: [],
-    currentUserId: null,
     error: null,
-
-    setCurrentUserId: (id) => set({ currentUserId: id }),
 
     setEvents: (events) => set({ events }),
 
@@ -65,6 +58,19 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
             return { events };
         }),
 
+    /**
+     * `ACTIVITY_SEEN`: events this user has seen, possibly in another tab. Arrives for this
+     * tab's own marking too, where it changes nothing.
+     */
+    applySeen: (ids) =>
+        set((s) => {
+            const seen = new Set(ids);
+            if (!s.events.some((e) => !e.seen && seen.has(e.id))) return s;
+            return {
+                events: s.events.map((e) => (!e.seen && seen.has(e.id) ? { ...e, seen: true } : e)),
+            };
+        }),
+
     fetchEvents: async () => {
         const res = await apiFetch("/api/v1/activity");
         if (res.ok) {
@@ -73,7 +79,8 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
     },
 
     /**
-     * One request for many events, so the server broadcasts the list once, not per event.
+     * One request for many events. The server answers the sessions of this user with
+     * `ACTIVITY_SEEN`, and nobody else.
      *
      * Optimistic: the rows turn seen at once. If the request fails, exactly the events this
      * call turned seen go back, and the error is kept -- the server sent nothing, so without
@@ -81,18 +88,15 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
      */
     markManySeen: async (ids) => {
         if (ids.length === 0) return;
-        const userId = get().currentUserId;
         const marked = new Set<string>();
-        if (userId) {
-            const requested = new Set(ids);
-            set((s) => ({
-                events: s.events.map((e) => {
-                    if (!requested.has(e.id) || e.seenBy.includes(userId)) return e;
-                    marked.add(e.id);
-                    return { ...e, seenBy: [...e.seenBy, userId] };
-                }),
-            }));
-        }
+        const requested = new Set(ids);
+        set((s) => ({
+            events: s.events.map((e) => {
+                if (!requested.has(e.id) || e.seen) return e;
+                marked.add(e.id);
+                return { ...e, seen: true };
+            }),
+        }));
 
         try {
             const res = await apiFetch("/api/v1/activity/seen", {
@@ -108,9 +112,7 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
             set((s) => ({
                 error: getErrorMessage(e),
                 events: s.events.map((event) =>
-                    marked.has(event.id)
-                        ? { ...event, seenBy: event.seenBy.filter((id) => id !== userId) }
-                        : event,
+                    marked.has(event.id) ? { ...event, seen: false } : event,
                 ),
             }));
         }

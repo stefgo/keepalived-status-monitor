@@ -12,13 +12,13 @@ interface WebSocketProviderProps {
 }
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
-    const { isAuthenticated, user } = useAuth();
+    const { isAuthenticated } = useAuth();
     const { setClients } = useClientStore();
     const { setState: setKeepalivedState } = useKeepalivedStore();
     // Only the actions: the whole store would re-render the provider on every activity update.
     const setEvents = useActivityStore((s) => s.setEvents);
     const appendEvents = useActivityStore((s) => s.appendEvents);
-    const setCurrentUserId = useActivityStore((s) => s.setCurrentUserId);
+    const applySeen = useActivityStore((s) => s.applySeen);
     const fetchEvents = useActivityStore((s) => s.fetchEvents);
     const applySchedulerUpdate = useSchedulerStore((s) => s.applyUpdate);
     const [isConnected, setIsConnected] = useState(false);
@@ -85,6 +85,9 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                     case WS_EVENTS.ACTIVITY_APPENDED:
                         appendEvents(message.data.payload);
                         break;
+                    case WS_EVENTS.ACTIVITY_SEEN:
+                        applySeen(message.data.payload.ids);
+                        break;
                     case WS_EVENTS.SCHEDULER_STATUS_UPDATE:
                         applySchedulerUpdate(message.data.payload);
                         break;
@@ -134,13 +137,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, appendEvents, fetchEvents, applySchedulerUpdate]);
-
-    // Who has seen which event is kept per user id, which comes from /api/v1/me instead of
-    // being decoded out of the JWT.
-    useEffect(() => {
-        if (user) setCurrentUserId(user.id);
-    }, [user, setCurrentUserId]);
+    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
 
     return (
         <WebSocketContext.Provider value={{ isConnected }}>
