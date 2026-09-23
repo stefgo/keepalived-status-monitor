@@ -143,9 +143,9 @@ export class ActivityService {
         }
     }
 
+    /** Broadcasts only when something changed: a repeated click has nothing to tell anyone. */
     static markManySeen(ids: string[], userId: number): void {
-        ActivityRepository.markManySeen(ids, userId);
-        broadcast();
+        if (ActivityRepository.markManySeen(ids, userId) > 0) broadcast();
     }
 
     static deleteAll(): void {

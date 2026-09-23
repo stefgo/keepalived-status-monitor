@@ -82,8 +82,11 @@ export class ActivityRepository {
         return rows.map(rowToRecord);
     }
 
-    /** Marks the given events seen by `userId`; ids that are not there are skipped. */
-    static markManySeen(ids: string[], userId: number): void {
+    /**
+     * Marks the given events seen by `userId`; ids that are not there are skipped. Returns
+     * how many events were not seen by that user before.
+     */
+    static markManySeen(ids: string[], userId: number): number {
         const placeholders = ids.map(() => "?").join(",");
         const rows = db
             .prepare(`SELECT id, seen_by FROM activity WHERE id IN (${placeholders})`)
@@ -93,15 +96,18 @@ export class ActivityRepository {
         }[];
         const stmt = db.prepare("UPDATE activity SET seen_by = ? WHERE id = ?");
         const update = db.transaction(() => {
+            let changed = 0;
             for (const row of rows) {
                 const seenBy: number[] = JSON.parse(row.seen_by);
                 if (!seenBy.includes(userId)) {
                     seenBy.push(userId);
                     stmt.run(JSON.stringify(seenBy), row.id);
+                    changed++;
                 }
             }
+            return changed;
         });
-        update();
+        return update();
     }
 
     static deleteAll(): void {
