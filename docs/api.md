@@ -956,7 +956,9 @@ cannot be deleted; retention and "Delete all" are the only ways an event goes.
 Retention runs on its own through `notification_retention_days` and
 `notification_retention_count` — the page they are set on is called "Notification History".
 
-Every mutating endpoint broadcasts `ACTIVITY_UPDATE` with the full list.
+Every mutating endpoint broadcasts `ACTIVITY_UPDATE` with the full list. A new event goes out
+as `ACTIVITY_APPENDED` with only the events stored for the first time; a repeat from the
+at-least-once delivery is not sent again.
 
 ---
 
@@ -1015,7 +1017,8 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 | :-------------------- | :------------------------------------------ | :---------------------------------------------------------------- |
 | `CLIENTS_UPDATE`      | `Client[]`                                  | Full list of all clients and their statuses.                      |
 | `KEEPALIVED_STATE_UPDATE` | `KeepalivedState`                       | One client's reading, as in [List Readings](#list-readings). The dashboard recomputes the clusters from these. |
-| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The activity list, after an event arrived or the seen state changed. |
+| `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The activity list, after the seen state changed or the list was deleted. |
+| `ACTIVITY_APPENDED`   | `ActivityRecord[]`                          | Events stored for the first time, to be merged into the list by id. |
 | `SCHEDULER_STATUS_UPDATE` | `{ scheduler, status }`                 | One scheduler's status, in the shape of [Scheduler Status](#scheduler-status), whenever a run starts or ends or its timer is set. |
 
 ---

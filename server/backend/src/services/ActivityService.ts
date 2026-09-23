@@ -21,6 +21,18 @@ function broadcast(): void {
     });
 }
 
+/**
+ * Tells the dashboards about new events only. They hold the list already, and a new event is
+ * the same for everyone, so a delta replaces the full list every event used to cost.
+ */
+function broadcastAppended(records: ActivityRecord[]): void {
+    if (records.length === 0) return;
+    ProxyService.broadcastToDashboard({
+        type: WS_EVENTS.ACTIVITY_APPENDED,
+        payload: records,
+    });
+}
+
 /** What the server itself reports. Everything else is observed on a host, by its agent. */
 interface ServerEventInput {
     kind: ActivityKind;
@@ -53,9 +65,9 @@ export class ActivityService {
             subject: input.subject ?? null,
             data: input.data ?? null,
         };
-        const [stored] = ActivityRepository.insertMany([event], event.occurredAt);
-        broadcast();
-        return stored;
+        const { stored, inserted } = ActivityRepository.insertMany([event], event.occurredAt);
+        broadcastAppended(inserted);
+        return stored[0];
     }
 
     /**
@@ -73,8 +85,8 @@ export class ActivityService {
             source: "agent" as const,
             clientId,
         }));
-        const stored = ActivityRepository.insertMany(owned, receivedAt);
-        if (stored.length > 0) broadcast();
+        const { stored, inserted } = ActivityRepository.insertMany(owned, receivedAt);
+        broadcastAppended(inserted);
         return stored.map((e) => e.id);
     }
 

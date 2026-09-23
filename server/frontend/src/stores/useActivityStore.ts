@@ -34,6 +34,7 @@ interface ActivityState {
     error: string | null;
     setCurrentUserId: (id: number) => void;
     setEvents: (events: ActivityRecord[]) => void;
+    appendEvents: (events: ActivityRecord[]) => void;
     fetchEvents: () => Promise<void>;
     markManySeen: (ids: string[]) => Promise<void>;
     clearAll: () => Promise<void>;
@@ -47,6 +48,22 @@ export const useActivityStore = create<ActivityState>()((set, get) => ({
     setCurrentUserId: (id) => set({ currentUserId: id }),
 
     setEvents: (events) => set({ events }),
+
+    /**
+     * Merges `ACTIVITY_APPENDED` into the list: ids already there are skipped, and the list
+     * stays newest first by `occurredAt` -- an event handed over after an offline stretch
+     * lands where it happened, not on top.
+     */
+    appendEvents: (incoming) =>
+        set((s) => {
+            const known = new Set(s.events.map((e) => e.id));
+            const fresh = incoming.filter((e) => !known.has(e.id));
+            if (fresh.length === 0) return s;
+            const events = [...fresh, ...s.events].sort((a, b) =>
+                a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : 0,
+            );
+            return { events };
+        }),
 
     fetchEvents: async () => {
         const res = await apiFetch("/api/v1/activity");

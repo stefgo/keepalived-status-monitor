@@ -48,24 +48,30 @@ export class ActivityRepository {
     }
 
     /**
-     * Stores a batch under the ids their originator gave them, and returns the records as
-     * they now stand. Delivery is at-least-once, so a repeat is expected rather than an
-     * error: `ON CONFLICT DO NOTHING` makes the second copy a no-op, and the caller still
-     * gets the id back so the sender can stop offering it.
+     * Stores a batch under the ids their originator gave them. Returns the records as they
+     * now stand (`stored`) and, among them, the ones this call wrote (`inserted`). Delivery
+     * is at-least-once, so a repeat is expected rather than an error: `ON CONFLICT DO
+     * NOTHING` makes the second copy a no-op, and the caller still gets the id back in
+     * `stored` so the sender can stop offering it -- but not in `inserted`, since nobody
+     * needs to be told about it a second time.
      *
      * One transaction: a batch is what an agent handed over in one go, and half of it
      * stored with the other half rolled back would be acknowledged as a whole.
      */
-    static insertMany(events: ActivityEvent[], receivedAt: string): ActivityRecord[] {
+    static insertMany(
+        events: ActivityEvent[],
+        receivedAt: string,
+    ): { stored: ActivityRecord[]; inserted: ActivityRecord[] } {
         const stmt = db.prepare(`
             INSERT INTO activity
                 (id, source, client_id, kind, level, correlation_id, subject, data, occurred_at, received_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO NOTHING
         `);
+        const insertedIds = new Set<string>();
         const insert = db.transaction((batch: ActivityEvent[]) => {
             for (const event of batch) {
-                stmt.run(
+                const { changes } = stmt.run(
                     event.id,
                     event.source,
                     event.clientId ?? null,
@@ -77,6 +83,7 @@ export class ActivityRepository {
                     event.occurredAt,
                     receivedAt,
                 );
+                if (changes > 0) insertedIds.add(event.id);
             }
         });
         insert(events);
@@ -85,7 +92,8 @@ export class ActivityRepository {
         const rows = db
             .prepare(`${SELECT_RECORD} WHERE a.id IN (SELECT value FROM json_each(?))`)
             .all(ids) as ActivityRow[];
-        return rows.map(rowToRecord);
+        const stored = rows.map(rowToRecord);
+        return { stored, inserted: stored.filter((r) => insertedIds.has(r.id)) };
     }
 
     /**

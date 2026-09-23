@@ -21,6 +21,11 @@ export const WS_EVENTS = {
     ACTIVITY_ACK: "ACTIVITY_ACK",
     /** Server → Dashboard: the current activity list. */
     ACTIVITY_UPDATE: "ACTIVITY_UPDATE",
+    /**
+     * Server → Dashboard: events stored for the first time, to be merged into the list the
+     * dashboard already holds. A repeat the server already had is not sent again.
+     */
+    ACTIVITY_APPENDED: "ACTIVITY_APPENDED",
 
     // Scheduler events
     /** Server → Dashboard: one scheduler's status, whenever a run starts or ends. */

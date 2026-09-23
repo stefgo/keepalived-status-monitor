@@ -736,6 +736,10 @@ export const DashboardMessageSchema = z.discriminatedUnion("type", [
         payload: z.array(ActivityRecordSchema),
     }),
     z.object({
+        type: z.literal(WS_EVENTS.ACTIVITY_APPENDED),
+        payload: z.array(ActivityRecordSchema),
+    }),
+    z.object({
         type: z.literal(WS_EVENTS.SCHEDULER_STATUS_UPDATE),
         payload: SchedulerStatusUpdateSchema,
     }),
