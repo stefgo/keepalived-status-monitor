@@ -760,8 +760,8 @@ The defaults:
 
 ```json
 {
-    "retention_invalid_tokens_days": "30",
-    "retention_invalid_tokens_count": "10",
+    "token_retention_days": "30",
+    "token_cleanup_interval_hours": "24",
     "notification_retention_days": "90",
     "notification_retention_count": "500",
     "notification_cleanup_interval_hours": "24"
@@ -770,13 +770,13 @@ The defaults:
 
 | Setting                                      | Description                                                                   |
 | :------------------------------------------- | :---------------------------------------------------------------------------- |
-| `retention_invalid_tokens_days`              | Days to retain used/expired registration tokens before they become eligible for deletion. `"0"` deletes immediately. |
-| `retention_invalid_tokens_count`             | Minimum number of most-recent invalid tokens to always keep (audit trail).    |
+| `token_retention_days`                       | Days to retain used/expired registration tokens before the cleanup removes them. `"0"` removes them on the next run. |
+| `token_cleanup_interval_hours`               | Interval of the automatic token cleanup. `"0"` disables the scheduler.        |
 | `notification_retention_days`                | Days to keep activity events, measured against `occurredAt`. `"0"` is not "forever": it falls back to `90`. |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
 
-The `notification_*` names are kept from the project KASM started from, because the settings page still calls the list "Notification History".
+The `notification_*` names are kept from the project KASM started from, because the settings page still calls the list "Notification History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
 
 ### Update Settings
 
@@ -790,14 +790,14 @@ Pass any of the setting keys to update them.
 
 ```json
 {
-    "retention_invalid_tokens_days": "60",
+    "token_retention_days": "60",
     "notification_retention_days": "30"
 }
 ```
 
 | Kind of setting | Keys | Accepted values |
 | :-------------- | :--- | :-------------- |
-| Counts, days, intervals | `retention_invalid_tokens_*`, `notification_*` | A non-negative whole number, as string or number. Stored as string. |
+| Counts, days, intervals | `token_*`, `notification_*` | A non-negative whole number, as string or number. Stored as string. |
 
 Keys not listed are accepted and written as they are: the settings page sends back everything it read, including keys an operator added to `config.yaml` by hand, and rejecting or dropping them would delete them from the file.
 
@@ -809,13 +809,13 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 - **400** — a value does not match the table above, or the body contains `security`. Network and HSTS settings are configured in `config.yaml` only; a session token must not be enough to lock every agent out.
 
-> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler.
+> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler, `token_*` the `TokenCleanupService`.
 
 ### Run Invalid Token Cleanup
 
 `POST /api/v1/settings/cleanup/invalid-tokens`
 
-**Description:** Runs `TokenCleanupService` synchronously, removing used/expired registration tokens older than `retention_invalid_tokens_days` while keeping at least `retention_invalid_tokens_count` of the most-recent ones.
+**Description:** Runs `TokenCleanupService` now, removing registration tokens that have been invalid (used or expired) for longer than `token_retention_days`. Recorded as a `manual` run of `token-cleanup`.
 
 #### Response
 
@@ -827,7 +827,7 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 `POST /api/v1/settings/cleanup/notifications`
 
-**Description:** Runs `NotificationCleanupService` synchronously, applying the retention policy to the activity table. The path keeps the old name, as the dashboard page does; what it prunes is the activity list.
+**Description:** Runs `NotificationCleanupService` now, applying the retention policy to the activity table. Recorded as a `manual` run of `notification-cleanup`. The path keeps the old name, as the dashboard page does; what it prunes is the activity list.
 
 #### Response
 
@@ -847,9 +847,25 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 ```json
 {
-    "notificationCleanupLastRun": "2026-04-18T04:00:00.000Z"
+    "schedulers": {
+        "notification-cleanup": {
+            "isRunning": false,
+            "nextRun": "2026-04-19T04:00:00.000Z",
+            "lastRun": {
+                "trigger": "schedule",
+                "status": "success",
+                "startedAt": "2026-04-18T04:00:00.000Z",
+                "finishedAt": "2026-04-18T04:00:00.000Z",
+                "result": { "removed": 12 },
+                "error": null
+            }
+        },
+        "token-cleanup": { "isRunning": false, "nextRun": null, "lastRun": null }
+    }
 }
 ```
+
+Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`) and `lastRun`, the last run it finished (`null` before its first). `lastRun.trigger` is `schedule` or `manual`; `lastRun.status` is `success`, `failed` (with `error`) or `interrupted` (the server stopped during the run; no `finishedAt`, no `result`). `result` is `{ removed }` for both schedulers. The state is kept in the database and survives a restart.
 
 ---
 
@@ -997,6 +1013,7 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 | `CLIENTS_UPDATE`      | `Client[]`                                  | Full list of all clients and their statuses.                      |
 | `KEEPALIVED_STATE_UPDATE` | `KeepalivedState`                       | One client's reading, as in [List Readings](#list-readings). The dashboard recomputes the clusters from these. |
 | `ACTIVITY_UPDATE`     | `ActivityRecord[]`                          | The activity list, after an event arrived or the seen state changed. |
+| `SCHEDULER_STATUS_UPDATE` | `{ scheduler, status }`                 | One scheduler's status, in the shape of [Scheduler Status](#scheduler-status), whenever a run starts or ends or its timer is set. |
 
 ---
 

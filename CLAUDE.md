@@ -78,7 +78,7 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 
 ### Frontend (server/frontend/src)
 - Feature-based structure under `features/` (keepalived, clients, activity, users, auth, tokens, settings, app)
-- Zustand stores in `stores/` (useClientStore, useKeepalivedStore, useActivityStore, useUIStore)
+- Zustand stores in `stores/` (useClientStore, useKeepalivedStore, useActivityStore, useSchedulerStore, useUIStore)
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: ThemeContext, WebSocketContext, AuthContext
