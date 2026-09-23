@@ -87,6 +87,7 @@ src/
 │   ├── useClientStore.ts                 # Registered clients and online/offline status
 │   ├── useKeepalivedStore.ts             # The last keepalived reading per client
 │   ├── useActivityStore.ts               # The activity list and the per-user seen state
+│   ├── useSchedulerStore.ts              # Status of the schedulers the server runs
 │   └── useUIStore.ts                     # UI state (sidebar collapse, persisted)
 └── utils.ts                              # General utility functions
 ```
@@ -152,6 +153,7 @@ We use **Zustand** split into specialized stores to maintain a clean, reactive s
 - **`useClientStore`**: Holds the master list of registered clients and their real-time online/offline status. Provides `fetchClients`, `deleteClient`, `updateClient`, and `setClients` (used by WebSocket updates).
 - **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
 - **`useActivityStore`**: The activity list (`ActivityRecord[]`) and `currentUserId`, which the per-event seen state is kept against. Fed by `ACTIVITY_UPDATE` and by `fetchEvents` on connect; `markSeen`, `markAllSeen`, `removeEvent` and `clearAll` update optimistically and then call the API.
+- **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
 - **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`kasm-ui-storage`).
 
 ### Real-time Updates (WebSocket)
@@ -163,6 +165,7 @@ The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maint
 | `CLIENTS_UPDATE`       | `useClientStore.setClients`                      |
 | `KEEPALIVED_STATE_UPDATE` | `useKeepalivedStore.setState(state)`          |
 | `ACTIVITY_UPDATE`      | `useActivityStore` — replaces the activity list  |
+| `SCHEDULER_STATUS_UPDATE` | `useSchedulerStore.applyUpdate`               |
 
 On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading and the activity list by itself, so the first screen fills without a REST call.
 
@@ -379,10 +382,12 @@ System settings page, one section per tab: Client Tokens and Notification Histor
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
 
+**Every tab follows one layout:** its settings, then one `SchedulerBox` headed "Scheduler". It shows Status (`Running…` or `Idle`), Last Run (with "manual" when a user started it), Next Run (or "Disabled") and Result, and, below a divider, the `ManualRun` row with its Run Now button. The box draws no field borders: its values are to read, not to edit. It reads `useSchedulerStore`; the result is worded by `describeRunResult` (`features/settings/lib/runResult.ts`), in red for a failed or interrupted run. The settings page uses no monospaced type.
+
 | Setting                                      | Description                                                                   |
 | :------------------------------------------- | :---------------------------------------------------------------------------- |
-| `retention_invalid_tokens_days`              | Days to keep used/expired registration tokens before cleanup.                 |
-| `retention_invalid_tokens_count`             | Minimum number of most-recent invalid tokens to always retain.                |
+| `token_retention_days`                       | Days to keep used/expired registration tokens before cleanup.                 |
+| `token_cleanup_interval_hours`               | Automatic token cleanup interval. `0` disables.                               |
 | `notification_retention_days`                | Days to keep activity events.                                                 |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Automatic activity cleanup interval. `0` disables.                            |
@@ -390,7 +395,7 @@ System settings page, one section per tab: Client Tokens and Notification Histor
 - `GET/PUT /api/v1/settings/cleanup` — Fetch and save settings.
 - `POST /api/v1/settings/cleanup/invalid-tokens` — Manually run the token cleanup.
 - `POST /api/v1/settings/cleanup/notifications` — Manually run the activity cleanup.
-- `GET /api/v1/settings/scheduler-status` — When the activity cleanup last ran.
+- `GET /api/v1/settings/scheduler-status` — Status, last and next run of both schedulers.
 
 How often an agent reads keepalived is not a server setting: it is `keepalived.pollInterval`
 in the agent's own `config.yaml`, because the agent reads on its own clock whether or not the

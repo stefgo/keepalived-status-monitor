@@ -188,7 +188,7 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 |                            | `client_secret` | OIDC Client Secret.                                      |
 |                            | `redirect_uri`  | OIDC Redirect URI.                                       |
 | `jwtExpiresIn`             | —               | JWT session lifetime (e.g. `"24h"`). Defaults to `"12h"`. Tokens always expire; the session cookies expire with them, and the dashboard logs out when they do. |
-| `settings`                 | `retention_invalid_tokens_days` / `_count` | Retention policy for used/expired registration tokens. |
+| `settings`                 | `token_retention_days` / `token_cleanup_interval_hours` | Retention of used/expired registration tokens (defaults 30 days, every 24 h). |
 |                            | `notification_retention_days` / `_count` / `notification_cleanup_interval_hours` | Retention of the activity list (defaults 90 days, at least 500 kept, every 24 h). |
 | `logLevel`                 | —               | pino log level; `LOG_LEVEL` wins when set.               |
 | `port`                     | —               | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set. The published port: `EXPOSE`, the compose port mapping and every agent's `serverUrl` have to follow it. |

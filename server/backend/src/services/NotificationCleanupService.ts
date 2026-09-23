@@ -1,13 +1,12 @@
 import { appConfig } from "../config/AppConfig.js";
 import { ActivityRepository } from "../repositories/ActivityRepository.js";
+import { ScheduledJob } from "./ScheduledJob.js";
 import { logger } from "@kasm/shared/node";
+import type { SchedulerStatus, SchedulerTrigger } from "@kasm/shared";
 
 export interface NotificationCleanupResult {
     removed: number;
 }
-
-let timer: NodeJS.Timeout | null = null;
-let lastRun: Date | null = null;
 
 function readConfig() {
     const ttlDays = parseInt(appConfig.settings.notification_retention_days ?? "90", 10);
@@ -25,46 +24,34 @@ function readConfig() {
  * deliberately left that way: the settings it reads (`notification_retention_*`) are stored
  * values, and the page the user sets them on is still called "Notification History".
  */
-export class NotificationCleanupService {
-    static run(): NotificationCleanupResult {
-        const { ttlDays, minKeep } = readConfig();
-        const removed = ActivityRepository.cleanupOld(ttlDays, minKeep);
-        lastRun = new Date();
-        logger.info({ removed, ttlDays, minKeep }, "Notification cleanup completed");
-        return { removed };
-    }
+const job = new ScheduledJob({
+    id: "notification-cleanup",
+    intervalMs: () => readConfig().intervalHours * 60 * 60 * 1000,
+});
 
-    static getLastRun(): string | null {
-        return lastRun?.toISOString() ?? null;
+export class NotificationCleanupService {
+    static run(trigger: SchedulerTrigger = "schedule"): Promise<NotificationCleanupResult> {
+        return job.run(trigger, () => {
+            const { ttlDays, minKeep } = readConfig();
+            const removed = ActivityRepository.cleanupOld(ttlDays, minKeep);
+            logger.info({ removed, ttlDays, minKeep }, "Notification cleanup completed");
+            return { removed };
+        });
     }
 
     static startScheduler(): void {
-        this.stopScheduler();
-        const { intervalHours } = readConfig();
-        if (intervalHours <= 0) {
-            logger.info("Notification cleanup scheduler disabled");
-            return;
-        }
-        const intervalMs = intervalHours * 60 * 60 * 1000;
-        timer = setInterval(() => {
-            try {
-                this.run();
-            } catch (err) {
-                logger.error({ err }, "Scheduled notification cleanup failed");
-            }
-        }, intervalMs);
-        timer.unref?.();
-        logger.info({ intervalHours }, "Notification cleanup scheduler started");
+        job.start(() => this.run("schedule"));
     }
 
     static stopScheduler(): void {
-        if (timer) {
-            clearInterval(timer);
-            timer = null;
-        }
+        job.stop();
     }
 
     static restartScheduler(): void {
         this.startScheduler();
+    }
+
+    static getStatus(): SchedulerStatus<"notification-cleanup"> {
+        return job.status();
     }
 }

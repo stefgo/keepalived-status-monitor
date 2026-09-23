@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { CleanupSettingsSchema, firstIssue } from "@kasm/shared";
+import { CleanupSettingsSchema, firstIssue, type SchedulerStatuses } from "@kasm/shared";
 import { SettingsService } from "../services/SettingsService.js";
 import { TokenCleanupService } from "../services/TokenCleanupService.js";
 import { NotificationCleanupService } from "../services/NotificationCleanupService.js";
@@ -38,7 +38,7 @@ export class SettingsController {
 
     static async runInvalidTokenCleanup(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const result = TokenCleanupService.run();
+            const result = await TokenCleanupService.run("manual");
             return reply.send({ success: true, ...result });
         } catch (e) {
             request.log.error(e);
@@ -51,13 +51,16 @@ export class SettingsController {
     /** The schedulers the server runs. */
     static async getSchedulerStatus(_request: FastifyRequest, reply: FastifyReply) {
         return reply.send({
-            notificationCleanupLastRun: NotificationCleanupService.getLastRun(),
+            schedulers: {
+                "notification-cleanup": NotificationCleanupService.getStatus(),
+                "token-cleanup": TokenCleanupService.getStatus(),
+            } satisfies SchedulerStatuses,
         });
     }
 
     static async runNotificationCleanup(_request: FastifyRequest, reply: FastifyReply) {
         try {
-            const result = NotificationCleanupService.run();
+            const result = await NotificationCleanupService.run("manual");
             return reply.send({ success: true, ...result });
         } catch (e) {
             _request.log.error(e);

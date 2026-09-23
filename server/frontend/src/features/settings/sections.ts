@@ -21,7 +21,7 @@ export const SECTIONS: readonly SectionDef[] = [
         id: "tokens",
         label: "Client Tokens",
         icon: Sliders,
-        keys: ["retention_invalid_tokens_days", "retention_invalid_tokens_count"],
+        keys: ["token_retention_days", "token_cleanup_interval_hours"],
     },
     {
         id: "notifications",
@@ -39,8 +39,8 @@ export const SECTION_IDS: readonly SectionId[] = SECTIONS.map((s) => s.id);
 
 /** What a section shows until the server has answered -- the server's own defaults. */
 export const DEFAULT_SETTINGS: SettingsValues = {
-    retention_invalid_tokens_days: "30",
-    retention_invalid_tokens_count: "10",
+    token_retention_days: "30",
+    token_cleanup_interval_hours: "24",
     notification_retention_days: "90",
     notification_retention_count: "500",
     notification_cleanup_interval_hours: "24",

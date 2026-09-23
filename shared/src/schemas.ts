@@ -5,6 +5,9 @@ import {
     CLIENT_STATUS,
     CONNECTION_MODE,
     DEFAULT_AGENT_PORT,
+    SCHEDULER_IDS,
+    SCHEDULER_RUN_STATUSES,
+    SCHEDULER_TRIGGERS,
     VRRP_STATES,
     WS_EVENTS,
 } from "./constants.js";
@@ -378,8 +381,8 @@ const WholeNumberSettingSchema = z
  * session must not be able to lock every agent out.
  */
 export const CleanupSettingsSchema = z.looseObject({
-    retention_invalid_tokens_days: WholeNumberSettingSchema.optional(),
-    retention_invalid_tokens_count: WholeNumberSettingSchema.optional(),
+    token_retention_days: WholeNumberSettingSchema.optional(),
+    token_cleanup_interval_hours: WholeNumberSettingSchema.optional(),
     notification_retention_days: WholeNumberSettingSchema.optional(),
     notification_retention_count: WholeNumberSettingSchema.optional(),
     notification_cleanup_interval_hours: WholeNumberSettingSchema.optional(),
@@ -411,8 +414,8 @@ export const AgentWebRegisterSchema = z.object({
  */
 export const AppSettingsSchema = z
     .looseObject({
-        retention_invalid_tokens_days: WholeNumberSettingSchema.default("30"),
-        retention_invalid_tokens_count: WholeNumberSettingSchema.default("10"),
+        token_retention_days: WholeNumberSettingSchema.default("30"),
+        token_cleanup_interval_hours: WholeNumberSettingSchema.default("24"),
         notification_retention_days: WholeNumberSettingSchema.default("90"),
         notification_retention_count: WholeNumberSettingSchema.default("500"),
         notification_cleanup_interval_hours: WholeNumberSettingSchema.default("24"),
@@ -664,6 +667,31 @@ export const ActivityRecordSchema = ActivityEventSchema.extend({
     seenBy: z.array(z.number().int()),
 });
 
+// ── Schedulers ───────────────────────────────────────────────────────────────
+
+/**
+ * `SCHEDULER_STATUS_UPDATE` as the dashboard parses it. The types in types.ts are written
+ * by hand, generic over the scheduler; this schema is checked against them there. Every
+ * scheduler reports `{ removed }` as its result, so one shape covers all of them.
+ */
+export const SchedulerStatusUpdateSchema = z.object({
+    scheduler: z.enum(SCHEDULER_IDS),
+    status: z.object({
+        isRunning: z.boolean(),
+        nextRun: z.string().nullable(),
+        lastRun: z
+            .object({
+                trigger: z.enum(SCHEDULER_TRIGGERS),
+                status: z.enum(SCHEDULER_RUN_STATUSES),
+                startedAt: z.string(),
+                finishedAt: z.string().nullable(),
+                result: z.object({ removed: z.number() }).nullable(),
+                error: z.string().nullable(),
+            })
+            .nullable(),
+    }),
+});
+
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
 /**
@@ -688,5 +716,9 @@ export const DashboardMessageSchema = z.discriminatedUnion("type", [
     z.object({
         type: z.literal(WS_EVENTS.ACTIVITY_UPDATE),
         payload: z.array(ActivityRecordSchema),
+    }),
+    z.object({
+        type: z.literal(WS_EVENTS.SCHEDULER_STATUS_UPDATE),
+        payload: SchedulerStatusUpdateSchema,
     }),
 ]);
