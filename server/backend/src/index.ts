@@ -171,8 +171,16 @@ server.register(async function (fastify) {
 
 // Catch-all for SPA
 server.setNotFoundHandler(async (request, reply) => {
-    if (request.raw.url && request.raw.url.startsWith("/api")) {
+    const url = request.raw.url ?? "";
+    if (url.startsWith("/api")) {
         return reply.code(404).send({ error: "Endpoint not found" });
+    }
+    // A build asset that does not exist is a 404, not the SPA. A tab still running the
+    // previous deploy asks for chunks whose hashes are gone; answered with index.html,
+    // the browser rejects it as a module with the wrong MIME type instead of reporting
+    // the missing file.
+    if (url.startsWith("/assets/")) {
+        return reply.code(404).send({ error: "Asset not found" });
     }
     return reply.sendFile("index.html");
 });
