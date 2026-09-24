@@ -6,6 +6,10 @@
 # platform and Node release, and the full image carries the compiler it then falls back to.
 FROM node:22-bookworm
 
+# The server writes the address compose.dev.yaml's healthcheck asks only in a container --
+# see server/backend/src/core/HealthFile.ts.
+ENV KASM_CONTAINER=true
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends sqlite3 && \
     rm -rf /var/lib/apt/lists/*

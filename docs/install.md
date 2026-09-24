@@ -123,7 +123,7 @@ An image is tagged only after CI has started it and it answered its health check
 | :------------ | :------------------------------- | :------------ | :---------------------------------------------------------------------------- |
 | `LOG_LEVEL`   | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` | `info` | Controls log verbosity. Wins over `logLevel` in `config.yaml`. |
 | `LOG_FORMAT`  | `pretty`, `json`                 | _auto_        | `pretty` for colored single-line logs (default in dev), `json` for prod.      |
-| `KASM_SERVER_PORT` | `1`–`65535`                 | `3010`        | Port the server listens on; wins over `port` in `config.yaml`. An unusable value ends the start. The container's health check reads it too. |
+| `KASM_SERVER_PORT` | `1`–`65535`                 | `3010`        | Port the server listens on; wins over `port` in `config.yaml`. An unusable value ends the start. The container's health check follows the port either way (see [Health](#health)). |
 | `NODE_ENV`    | `development`, `production`      | `development` | Picks the log format when `LOG_FORMAT` is unset (`production` → JSON).        |
 | `KASM_CLIENT_PORT` | `1`–`65535`                  | `3011`        | _(Client only)_ Port of the local web server; wins over `listenPort` in `config.yaml`. An unusable value ends the start. |
 | `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: the identity it was issued at registration (`identity.json`), its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. **Losing this directory means registering the agent again.** |
@@ -381,6 +381,18 @@ loopback is its own and the `curl` above works there — from any other machine 
 - The route is there whatever `config.yaml` disables: with both pages off and no outbound
   mode the agent still starts its web server for it, bound to `127.0.0.1`. A `404` from
   another machine is the loopback rule, not a broken agent.
+- **The checks follow the port the process actually listens on.** Neither reads
+  `config.yaml`: once server and agent listen, each writes the address it serves to
+  `/tmp/kasm-health.json` inside its container, and the check asks that. A `port` or
+  `listenPort` moved in `config.yaml` is followed like one moved through `KASM_SERVER_PORT` or
+  `KASM_CLIENT_PORT`, and so is the agent's `tls` block — the certificate is not verified, since
+  the check only ever asks `127.0.0.1`. The commands above assume the default ports.
+- **Without that file the server's check fails; the agent's falls back.** The server's check
+  has nothing else to ask and reports `unhealthy` — during start-up, which `start_period`
+  covers, and when the repository's `compose.yaml` runs an image from before the file
+  existed. The agent's check then asks `KASM_CLIENT_PORT` (default `3011`), plain HTTP first
+  and HTTPS only when the connection fails. A `healthcheck:` block of your own should read the
+  same file.
 - **Docker does not restart an unhealthy container.** `restart: unless-stopped` reacts to a
   process exiting, not to its health. The state is for monitoring and for
   `depends_on: condition: service_healthy`.

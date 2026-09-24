@@ -23,6 +23,7 @@ import { ClientConnector } from "./services/ClientConnector.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import { initDatabase } from "./core/Database.js";
+import { clearHealthFile, writeHealthFile } from "./core/HealthFile.js";
 
 // Initialize Database & Services
 await initDatabase();
@@ -177,11 +178,13 @@ server.setNotFoundHandler(async (request, reply) => {
 });
 
 // Start
+clearHealthFile();
 try {
     await server.listen({
         port: serverPort,
         host: "0.0.0.0",
     });
+    writeHealthFile(serverPort);
     await ClientConnector.connectAll();
 } catch (err) {
     server.log.error(err);

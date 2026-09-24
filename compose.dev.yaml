@@ -65,7 +65,7 @@ services:
         # The dev image's CMD is bash and declares no HEALTHCHECK, so this is the only health
         # signal the dev container has. Longer start period: tsx has to compile first.
         healthcheck:
-            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.KASM_SERVER_PORT || 3010) + '/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            test: ["CMD", "node", "-e", "Promise.resolve().then(() => fetch(JSON.parse(require('fs').readFileSync('/tmp/kasm-health.json', 'utf8')).url)).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
             interval: 15s
             timeout: 5s
             start_period: 45s
@@ -158,7 +158,7 @@ services:
 
         # See server-dev: the dev image declares no HEALTHCHECK either.
         healthcheck:
-            test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.KASM_CLIENT_PORT || 3011) + '/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+            test: ["CMD", "node", "-e", "const get = (u) => new Promise((done) => require(u.split(':')[0]).get(u, { rejectUnauthorized: false }, (r) => done(r.statusCode)).on('error', () => done(0))); let f; try { f = JSON.parse(require('fs').readFileSync('/tmp/kasm-health.json', 'utf8')).url; } catch {} const u = '://127.0.0.1:' + (process.env.KASM_CLIENT_PORT || 3011) + '/api/health'; (f ? get(f) : get('http' + u).then((s) => s || get('https' + u))).then((s) => process.exit(s === 200 ? 0 : 1))"]
             interval: 15s
             timeout: 5s
             start_period: 45s

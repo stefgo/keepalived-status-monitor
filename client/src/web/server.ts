@@ -118,6 +118,42 @@ function isLoopback(request: FastifyRequest): boolean {
     return ip === "::1" || isIpInCidr(ip, "127.0.0.0/8");
 }
 
+/**
+ * Where the agent tells the container's HEALTHCHECK which address to ask. The probe cannot
+ * work the port and scheme out for itself: they come from config.yaml or KASM_CLIENT_PORT,
+ * and repeating that resolution in a one-line probe would drift from this one -- and would
+ * follow an edited config.yaml before the agent had restarted onto it. So the agent writes
+ * what it actually listens on, and the probe reads that. The probe in the image and in both
+ * compose files names the same path.
+ *
+ * Under /tmp, not the data directory: an address from a previous container must not
+ * outlive it.
+ */
+const HEALTH_FILE = "/tmp/kasm-health.json";
+
+/**
+ * Removed before listen() so that a failed start leaves no address from the previous one
+ * behind -- the probe would then ask a port that was right once. Failures are logged and
+ * nothing more: the probe falls back to KASM_CLIENT_PORT, and an agent must not stop working
+ * over its health check.
+ */
+function clearHealthFile(): void {
+    try {
+        fs.rmSync(HEALTH_FILE, { force: true });
+    } catch (err) {
+        logger.warn({ err, file: HEALTH_FILE }, "Could not remove the health check address");
+    }
+}
+
+function writeHealthFile(port: number): void {
+    const url = `${config.tls ? "https" : "http"}://127.0.0.1:${port}/api/health`;
+    try {
+        fs.writeFileSync(HEALTH_FILE, JSON.stringify({ url }));
+    } catch (err) {
+        logger.warn({ err, file: HEALTH_FILE }, "Could not write the health check address");
+    }
+}
+
 export async function startWebServer() {
     const routes = getWebRoutes();
     const pages = routes.statusPage || routes.registerPage;
@@ -164,9 +200,15 @@ export async function startWebServer() {
     // need not be reachable. The notify endpoint keeps 0.0.0.0: KASM_NOTIFY_URL may point
     // the script at this agent from elsewhere.
     const host = pages || routes.outbound || routes.notify ? "0.0.0.0" : "127.0.0.1";
+    if (routes.health) {
+        clearHealthFile();
+    }
     try {
         const port = config.listenPort;
         await fastify.listen({ port, host });
+        if (routes.health) {
+            writeHealthFile(port);
+        }
         logger.info(
             { ...routes },
             `Client Web UI listening on ${host}:${port} (${config.tls ? "https" : "http"})`,
