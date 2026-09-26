@@ -34,7 +34,7 @@ export class TokenRepository {
     static findValidByToken(token: string): RegistrationTokenRow | undefined {
         return db
             .prepare(
-                "SELECT * FROM registration_tokens WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')",
+                "SELECT * FROM registration_tokens WHERE token_hash = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')",
             )
             .get(hashToken(token)) as RegistrationTokenRow | undefined;
     }
@@ -73,15 +73,17 @@ export class TokenRepository {
      * Removes registration tokens that have become invalid (used or expired)
      * and whose invalidation timestamp is older than the given TTL in days.
      *
-     * An invalid token is considered invalidated at COALESCE(used_at, expires_at).
+     * An invalid token is considered invalidated at COALESCE(used_at, expires_at). Both go
+     * through datetime(): `expires_at` is written as ISO text, `used_at` by SQLite itself,
+     * and compared as plain strings the two formats disagree within the same day.
      */
     static cleanupInvalidTokens(ttlDays: number): number {
         const days = Number.isFinite(ttlDays) && ttlDays >= 0 ? Math.floor(ttlDays) : 0;
 
         const result = db.prepare(`
             DELETE FROM registration_tokens
-            WHERE (used_at IS NOT NULL OR expires_at <= datetime('now'))
-              AND COALESCE(used_at, expires_at) < datetime('now', ?)
+            WHERE (used_at IS NOT NULL OR datetime(expires_at) <= datetime('now'))
+              AND datetime(COALESCE(used_at, expires_at)) < datetime('now', ?)
         `).run(`-${days} days`);
         return result.changes;
     }
