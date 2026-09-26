@@ -112,6 +112,12 @@ export interface VrrpClusterMember {
      * report, not its present state, and the health below does not count it.
      */
     online: boolean;
+    /**
+     * Whether keepalived reports this instance right now. False while it is stopped or
+     * unreadable on the host: the instance is then the last one it reported, and the health
+     * below does not count it either.
+     */
+    reporting: boolean;
     instance: VrrpInstance;
 }
 
@@ -142,11 +148,11 @@ export interface VrrpCluster {
     vips: string[];
     members: VrrpClusterMember[];
     /**
-     * Counted over online members only. `split-brain`: more than one MASTER. `no-master`:
-     * online members exist, none is MASTER. `vip-mismatch`: the members do not all carry the
-     * same addresses, so a failover would change which of them are up. `degraded`: one
-     * MASTER holds, but a member is in FAULT, offline, or the only one left. `unknown`: no
-     * member is online.
+     * Counted over live members only -- online, and with keepalived reporting. `split-brain`:
+     * more than one MASTER. `no-master`: live members exist, none is MASTER. `vip-mismatch`:
+     * the members do not all carry the same addresses, so a failover would change which of
+     * them are up. `degraded`: one MASTER holds, but a member is in FAULT, offline, has
+     * keepalived stopped or unreadable, or is the only one left. `unknown`: no member is live.
      *
      * `vip-mismatch` is the one case counted over **every** member, online or not: it is a
      * statement about the configuration rather than the present state. A running outage is

@@ -623,6 +623,7 @@ how current it is.
 | `error` | string \| null | Why a running keepalived could not be read, e.g. a missing capability. |
 | `instances` | VrrpInstance[] | See below. |
 | `syncGroups` | `{ name, state, instances: string[] }[]` | VRRP sync groups. |
+| `lastKnownInstances` | VrrpInstance[] \| undefined | Set by the server, never by the agent: the instances of the last reading that had any, while keepalived is stopped or unreadable and `instances` is empty. Keeps the host in its clusters. Counters (`stats`) are left out. |
 
 **VrrpInstance:**
 
@@ -702,24 +703,29 @@ the members carry, and `key` is `<site>|<vrid>|<network>`.
         "vips": ["192.168.1.100/24"],
         "health": "degraded",
         "members": [
-            { "clientId": "550e…", "online": true, "instance": { "name": "VI_WEB", "state": "MASTER", "…": "…" } },
-            { "clientId": "7c1a…", "online": true, "instance": { "name": "VI_WEB", "state": "FAULT", "…": "…" } }
+            { "clientId": "550e…", "online": true, "reporting": true, "instance": { "name": "VI_WEB", "state": "MASTER", "…": "…" } },
+            { "clientId": "7c1a…", "online": true, "reporting": true, "instance": { "name": "VI_WEB", "state": "FAULT", "…": "…" } }
         ]
     }
 ]
 ```
 
-`health` is counted over online members only — an offline member's state is its last
-report, not its present one:
+A member's `online` says whether its agent is connected, `reporting` whether keepalived on
+the host reports the instance right now. A host whose keepalived is stopped or unreadable
+stays in its clusters with `reporting: false` and the instance it last reported
+(`lastKnownInstances`), instead of dropping out of them.
+
+`health` is counted over live members only — online and reporting. Any other member's state
+is its last report, not its present one:
 
 | `health` | Means |
 | :------- | :---- |
-| `split-brain` | More than one online member is MASTER. |
-| `no-master` | Online members exist, none is MASTER. |
+| `split-brain` | More than one live member is MASTER. |
+| `no-master` | Live members exist, none is MASTER. |
 | `vip-mismatch` | The members do not all carry the same virtual addresses, so a failover changes which of them are up. The one value counted over **every** member, offline included: it describes the configuration, not the state. An outage above keeps its place. |
-| `degraded` | One MASTER, but a member is in FAULT, offline, or the only member. |
-| `unknown` | No member is online. |
-| `ok` | One MASTER, every member online and none in FAULT. |
+| `degraded` | One MASTER, but a member is in FAULT, offline, has keepalived stopped or unreadable, or is the only member. |
+| `unknown` | No member is live. |
+| `ok` | One MASTER, every member live and none in FAULT. |
 
 Ordered with the clusters that need attention first.
 

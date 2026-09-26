@@ -52,7 +52,8 @@ export const CLUSTER_HEALTH: Record<
     degraded: {
         label: "Degraded",
         variant: "warning",
-        description: "One MASTER holds, but a member is in FAULT, offline, or the only one left.",
+        description:
+            "One MASTER holds, but a member is in FAULT, offline, has keepalived stopped or unreadable, or is the only one left.",
     },
     "no-master": {
         label: "No MASTER",
@@ -70,7 +71,11 @@ export const CLUSTER_HEALTH: Record<
         description:
             "The members do not all carry the same virtual addresses: a failover would change which of them are up. Counted over every member, offline ones included.",
     },
-    unknown: { label: "Unknown", variant: "neutral", description: "No member of this cluster is online." },
+    unknown: {
+        label: "Unknown",
+        variant: "neutral",
+        description: "No member of this cluster is online with keepalived reporting.",
+    },
 };
 
 /** keepalived reports fractions of a second; whole seconds read better. */
@@ -258,6 +263,19 @@ export function hasProblemCounts(stats: Record<string, number> | null | undefine
 
 /** How a cluster member is told apart from the others: a host may take part with several instances. */
 export const memberKey = (member: VrrpClusterMember) => `${member.clientId}:${member.instance.name}`;
+
+/**
+ * Whether what a member shows is its last report rather than its present state: its agent is
+ * offline, or keepalived on its host is stopped or cannot be read.
+ */
+export const memberStale = (member: VrrpClusterMember) => !member.online || !member.reporting;
+
+/**
+ * Why keepalived reports no instances on a host, in the words `summarizeKeepalived` uses. A
+ * missing reading counts as stopped: there is no process the agent could have failed to read.
+ */
+export const silenceLabel = (reading: KeepalivedState | undefined) =>
+    reading?.running ? "Unreadable" : "Stopped";
 
 /**
  * The members whose counters a cluster page compares until the reader picks others: the ones

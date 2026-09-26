@@ -31,6 +31,7 @@ import {
     groupCounters,
     hasProblemCounts,
     memberKey,
+    memberStale,
     type CounterRow,
 } from "../lib/vrrp";
 import { ClusterCard } from "./ClusterCard";
@@ -161,6 +162,8 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
               ));
 
     const offline = members.filter((m) => !m.online);
+    // Online, but keepalived on the host is stopped or cannot be read.
+    const silent = members.filter((m) => m.online && !m.reporting);
     // Hosts that do not carry the cluster's full address list. Offline ones count too: what
     // is wrong here is the configuration, not the state.
     const mismatched = mismatchedVips(members);
@@ -234,14 +237,14 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 ),
                 tableHeaderClassName: cn(
                     "text-right text-sm font-normal normal-case tracking-normal",
-                    !m.online && "opacity-60",
+                    memberStale(m) && "opacity-60",
                 ),
                 tableCellClassName: (row) => {
                     const value = row.kind === "counter" ? row.row.values[i] : null;
                     return cn(
                         "text-right text-sm tabular-nums",
                         row.kind === "counter" && row.row.problem && value ? "text-error font-medium" : "text-text-primary",
-                        !m.online && "opacity-60",
+                        memberStale(m) && "opacity-60",
                     );
                 },
                 tableItemRender: (row) => (row.kind === "counter" ? (row.row.values[i] ?? "–") : null),
@@ -259,7 +262,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 title={clusterLabel(cluster)}
                 meta={<ClusterHealthBadge health={cluster.health} />}
                 alert={
-                    (offline.length > 0 || mismatched.length > 0) && (
+                    (offline.length > 0 || silent.length > 0 || mismatched.length > 0) && (
                         <div className="space-y-2">
                             {mismatched.length > 0 && (
                                 <div className="space-y-1 text-sm text-error">
@@ -284,6 +287,14 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                                     {offline.length === 1 ? "is" : "are"} offline. What is shown for{" "}
                                     {offline.length === 1 ? "it" : "them"} is the last reading, not the present
                                     state.
+                                </p>
+                            )}
+                            {silent.length > 0 && (
+                                <p className="text-sm text-warning">
+                                    keepalived reports nothing on {joined(silent.map((m) => hostLink(m.clientId)))}:
+                                    it is stopped or cannot be read. What is shown for{" "}
+                                    {silent.length === 1 ? "that host" : "those hosts"} is the last reading, not the
+                                    present state.
                                 </p>
                             )}
                         </div>
