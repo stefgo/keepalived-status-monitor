@@ -69,19 +69,14 @@ export const ClientList = ({
             sortable: true,
             sortValue: (client) => clientName(client),
             tableItemRender: (client) => (
-                <>
-                    <div className="flex items-center gap-3 mb-1">
-                        <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
-                        <div
-                            className={`text-sm font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
-                        >
-                            {clientName(client)}
-                        </div>
+                <div className="flex items-center gap-3">
+                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
+                    <div
+                        className={`text-sm font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
+                    >
+                        {clientName(client)}
                     </div>
-                    <div className="text-xs font-mono text-text-muted pl-5 truncate opacity-70">
-                        {client.id}
-                    </div>
-                </>
+                </div>
             ),
         });
 
