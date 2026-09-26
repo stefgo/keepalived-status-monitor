@@ -1,7 +1,15 @@
 import { ReactNode, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Network } from "lucide-react";
-import { Card, EntityHeader, type EntityDetail } from "@stefgo/react-ui-components";
+import {
+    Card,
+    DataTreeTable,
+    EntityHeader,
+    FOCUS_RING,
+    cn,
+    type DataTableDef,
+    type EntityDetail,
+} from "@stefgo/react-ui-components";
 import { mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
@@ -23,6 +31,7 @@ import {
     groupCounters,
     hasProblemCounts,
     memberKey,
+    type CounterRow,
 } from "../lib/vrrp";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
@@ -31,10 +40,18 @@ import { VrrpStateBadge } from "./VrrpStateBadge";
 /** How many of the cluster's events the page lists; the rest is one link away. */
 const HISTORY_LIMIT = 20;
 
-/** The sticky first column of the counter table needs its own background to cover what scrolls under it. */
-const STICKY = "sticky left-0 bg-card";
-/** The same for a group heading, on the band's background. */
-const GROUP_STICKY = "sticky left-0 bg-hover";
+/**
+ * One row of the counter table: a group on the first level, drawn as a band across the table,
+ * and its counters underneath. The tree is what gives a group its heading row -- the table
+ * itself knows one row per item and nothing in between.
+ */
+type CounterTableRow =
+    | { kind: "group"; key: string; title: string; children: CounterTableRow[] }
+    | { kind: "counter"; key: string; row: CounterRow };
+
+/** The sticky first column needs its own background to cover what scrolls under it. */
+const stickyCell = (row: CounterTableRow) =>
+    cn("sticky left-0", row.kind === "group" ? "bg-hover" : "bg-card");
 
 interface ClusterDetailProps {
     site: string | null;
@@ -129,7 +146,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         return c ? clientName(c) : clientId;
     };
     const hostLink = (clientId: string) => (
-        <Link to={`/client/${clientId}`} className="hover:text-primary">
+        <Link to={`/client/${clientId}`} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
             {hostName(clientId)}
         </Link>
     );
@@ -179,6 +196,58 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     );
     const narrowed = errorGroups.length > 0 && !allGroups;
     const counters = narrowed ? errorGroups : allCounters;
+    const counterRows: CounterTableRow[] = counters.map((group) => ({
+        kind: "group",
+        key: group.title,
+        title: group.title,
+        children: group.rows.map((row) => ({ kind: "counter", key: `${group.title}/${row.label}`, row })),
+    }));
+    // The table is turned on its side: a row per counter, a column per compared host. The
+    // host's state sits in its header, under the name, where it used to be a second header
+    // row -- the table has one.
+    const counterColumns: DataTableDef<CounterTableRow>[] = [
+        {
+            tableHeader: "Counter",
+            tableHeaderClassName: "sticky left-0 bg-table-header",
+            tableCellClassName: (row) =>
+                cn(
+                    stickyCell(row),
+                    "text-sm",
+                    row.kind === "group"
+                        ? "text-xs font-semibold uppercase tracking-wide"
+                        : "text-text-secondary",
+                ),
+            tableItemRender: (row) => (row.kind === "group" ? row.title : row.row.label),
+        },
+        ...compared.map(
+            (m, i): DataTableDef<CounterTableRow> => ({
+                tableHeader: (
+                    <div className="flex flex-col items-end gap-1">
+                        <Link
+                            to={`/client/${m.clientId}`}
+                            className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
+                        >
+                            {hostName(m.clientId)}
+                        </Link>
+                        <VrrpStateBadge state={m.instance.state} />
+                    </div>
+                ),
+                tableHeaderClassName: cn(
+                    "text-right text-sm font-normal normal-case tracking-normal",
+                    !m.online && "opacity-60",
+                ),
+                tableCellClassName: (row) => {
+                    const value = row.kind === "counter" ? row.row.values[i] : null;
+                    return cn(
+                        "text-right text-sm tabular-nums",
+                        row.kind === "counter" && row.row.problem && value ? "text-error font-medium" : "text-text-primary",
+                        !m.online && "opacity-60",
+                    );
+                },
+                tableItemRender: (row) => (row.kind === "counter" ? (row.row.values[i] ?? "–") : null),
+            }),
+        ),
+    ];
     // "Show all" searches the activity page by instance name, which only works where the
     // hosts agree on one.
     const instanceNames = [...new Set(instances.map((i) => i.name))];
@@ -246,7 +315,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                     errorGroups.length > 0 && (
                         <button
                             type="button"
-                            className="text-sm text-text-secondary hover:text-primary"
+                            className={cn("rounded-sm text-sm text-text-secondary hover:text-primary", FOCUS_RING)}
                             onClick={() => setAllGroupsOf(narrowed ? cluster.key : undefined)}
                         >
                             {narrowed ? "Show all" : "Show errors only"}
@@ -263,70 +332,16 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 ) : counters.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">keepalived reported no counters for this cluster.</p>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                {/* Host and state look like the counter rows below; they are headers only to the markup. */}
-                                <tr>
-                                    <th className={`${STICKY} px-4 py-1.5 text-left font-normal text-text-secondary`}>
-                                        Host
-                                    </th>
-                                    {compared.map((m) => (
-                                        <th
-                                            key={memberKey(m)}
-                                            className={`px-4 py-1.5 text-right font-normal whitespace-nowrap text-text-primary ${m.online ? "" : "opacity-60"}`}
-                                        >
-                                            <Link to={`/client/${m.clientId}`} className="hover:text-primary">
-                                                {hostName(m.clientId)}
-                                            </Link>
-                                        </th>
-                                    ))}
-                                </tr>
-                                <tr className="border-t border-border">
-                                    <th className={`${STICKY} px-4 py-1.5 text-left font-normal text-text-secondary`}>
-                                        State
-                                    </th>
-                                    {compared.map((m) => (
-                                        <th
-                                            key={memberKey(m)}
-                                            className={`px-4 py-1.5 text-right font-normal ${m.online ? "" : "opacity-60"}`}
-                                        >
-                                            <VrrpStateBadge state={m.instance.state} />
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            {counters.map((group) => (
-                                <tbody key={group.title}>
-                                    {/* A band across the table, so a group reads as a heading and not as one more counter. */}
-                                    <tr className="border-y border-border bg-hover">
-                                        {/* Only the first cell is sticky, so the title stays in view while the rest scrolls. */}
-                                        <th
-                                            className={`${GROUP_STICKY} whitespace-nowrap px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-text-primary`}
-                                        >
-                                            {group.title}
-                                        </th>
-                                        <td colSpan={compared.length} />
-                                    </tr>
-                                    {group.rows.map((row) => (
-                                        <tr key={row.label} className="border-t border-border">
-                                            <td className={`${STICKY} py-1.5 pr-4 pl-8 text-text-secondary`}>{row.label}</td>
-                                            {row.values.map((value, i) => (
-                                                <td
-                                                    key={i}
-                                                    className={`px-4 py-1.5 text-right tabular-nums ${
-                                                        row.problem && value ? "text-error font-medium" : "text-text-primary"
-                                                    } ${compared[i].online ? "" : "opacity-60"}`}
-                                                >
-                                                    {value ?? "–"}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            ))}
-                        </table>
-                    </div>
+                    <DataTreeTable<CounterTableRow>
+                        data={counterRows}
+                        keyField="key"
+                        getChildren={(row) => (row.kind === "group" ? row.children : null)}
+                        expanded={{ all: true }}
+                        itemDef={counterColumns}
+                        // A band across the table, so a group reads as a heading and not as one
+                        // more counter.
+                        rowClassName={(row) => (row.kind === "group" ? "bg-hover" : "")}
+                    />
                 )}
             </Card>
 
@@ -337,7 +352,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                     instanceNames.length === 1 && (
                         <Link
                             to={`/activity?search=${encodeURIComponent(instanceNames[0])}`}
-                            className="text-sm text-text-secondary hover:text-primary"
+                            className={cn("rounded-sm text-sm text-text-secondary hover:text-primary", FOCUS_RING)}
                         >
                             Show all
                         </Link>
@@ -406,7 +421,7 @@ const ClusterChoice = ({
                         <Link
                             to={clusterPath(candidate, clusters) ?? "/clusters"}
                             state={state}
-                            className="font-mono text-text-primary hover:text-primary"
+                            className={cn("rounded-sm font-mono text-text-primary hover:text-primary", FOCUS_RING)}
                         >
                             {candidate.networks.join(", ") || clusterVipLabel(candidate)}
                         </Link>
