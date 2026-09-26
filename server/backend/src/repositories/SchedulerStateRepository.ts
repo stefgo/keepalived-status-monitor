@@ -6,9 +6,13 @@ import type {
     SchedulerTrigger,
 } from "@kasm/shared";
 
-/** A row of `scheduler_state` (migration 03). `last_result` and `state` are JSON text. */
+/**
+ * A row of `scheduler_state` (migration 03, `next_run_at` from migration 06). `last_result`
+ * and `state` are JSON text.
+ */
 interface SchedulerStateRow {
     scheduler: string;
+    next_run_at: string | null;
     running_since: string | null;
     running_trigger: string | null;
     last_started_at: string | null;
@@ -59,6 +63,19 @@ export class SchedulerStateRepository {
     /** What the scheduler saved with `saveState`, or null. */
     static state(scheduler: SchedulerId): unknown {
         return parseJson(this.row(scheduler)?.state ?? null);
+    }
+
+    /** When the timer planned the next run, or null while it has none planned. */
+    static plannedRun(scheduler: SchedulerId): string | null {
+        return this.row(scheduler)?.next_run_at ?? null;
+    }
+
+    /** Stores the run the timer planned, so a restart keeps it; null when it plans none. */
+    static savePlannedRun(scheduler: SchedulerId, nextRunAt: string | null): void {
+        db.prepare(`
+            INSERT INTO scheduler_state (scheduler, next_run_at) VALUES (?, ?)
+            ON CONFLICT(scheduler) DO UPDATE SET next_run_at = excluded.next_run_at
+        `).run(scheduler, nextRunAt);
     }
 
     /** A run begins. The last finished run stays as it is until this one ends. */

@@ -31,7 +31,8 @@ server/backend/src/
 │       ├── 02_client_site.ts              # clients.site: part of the VRRP cluster key
 │       ├── 03_scheduler_state.ts          # scheduler_state: last run and state per scheduler
 │       ├── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
-│       └── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
+│       ├── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
+│       └── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -172,7 +173,7 @@ Delivery is at-least-once and the id comes from the originator, so a repeat is e
 #### `ScheduledJob`
 The timer, the bookkeeping and the status of one server scheduler; both — `NotificationCleanupService` and `TokenCleanupService` — hold one and differ only in the work they do.
 - `run(trigger, work)` — Runs `work` as one recorded run (`trigger` is `schedule` or `manual`): `SchedulerStateRepository.markStarted` before, `markFinished` after, with `success` (or `partial` where a scheduler says so; none does today). A run that throws is stored as `failed` with its message, recorded as `scheduler.failed` in the activity, and the exception is rethrown. Broadcasts `SCHEDULER_STATUS_UPDATE` when a run starts and when it ends.
-- `start(runScheduled)` / `stop()` — The timer is a chain of timeouts rather than an interval. The first run comes one interval after the last run *started* — at once if that is already past — so a restart does not push a due run back by a whole interval; without a stored run it comes one interval after startup. An interval of `0` switches the timer off. Delays beyond what `setTimeout` takes (~24 days) are waited out in steps.
+- `start(runScheduled)` / `stop()` — The timer is a chain of timeouts rather than an interval. The first run comes one interval after the last run *started* — at once if that is already past — so a restart does not push a due run back by a whole interval; a scheduler that has never run keeps the run it had planned (`next_run_at`), so restarting more often than the interval does not keep pushing its first run away. That run is capped at one interval from now, for an interval that was shortened; with none planned, the first run comes one interval after startup. An interval of `0` switches the timer off. Delays beyond what `setTimeout` takes (~24 days) are waited out in steps.
 - `status()` — `{ isRunning, nextRun, lastRun }`, `lastRun` read from `scheduler_state`.
 
 Each service's `run(trigger = "schedule")` goes through its job; the settings controller passes `"manual"`. `startScheduler()` / `stopScheduler()` / `restartScheduler()` and `getStatus()` delegate to it. At startup, `index.ts` calls `SchedulerStateRepository.markInterrupted()` before starting either of them.
@@ -363,7 +364,7 @@ marking is a single `INSERT OR IGNORE`, and retention, "Delete all" and deleting
 it away by themselves. Until migration 05 this was a JSON array in `activity.seen_by`; its
 entries were moved over, except the ids of users that no longer exist.
 
-**`scheduler_state`** _(migration 03)_
+**`scheduler_state`** _(migration 03, `next_run_at` from 06)_
 
 One row per scheduler, written over on every run — there is no history. What is worth looking back on, a run that failed or was cut short, is in the activity list.
 
@@ -379,6 +380,7 @@ One row per scheduler, written over on every run — there is no history. What i
 | `last_result`      | TEXT    | JSON, `{ removed }` for both schedulers.                                             |
 | `last_error`       | TEXT    | The message of a `failed` or `interrupted` run.                                      |
 | `state`            | TEXT    | JSON a scheduler carries from one run to the next; none uses it today.              |
+| `next_run_at`      | TEXT    | The run the timer has planned; NULL while the scheduler is off. Read at startup only while there is no last run. |
 
 > The running columns are kept apart from the `last_*` ones so the page goes on showing the last finished run while a run is in progress. A row that still has `running_since` at startup belongs to a run the server did not live to finish; `markInterrupted` turns it into the last run, `interrupted`.
 

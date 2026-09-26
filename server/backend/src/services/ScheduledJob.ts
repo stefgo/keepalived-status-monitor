@@ -32,7 +32,9 @@ interface ScheduledJobOptions<Id extends SchedulerId> {
  * `failed` and reported as `scheduler.failed` rather than only logged.
  *
  * The timer is a chain of timeouts rather than an interval, so that the first run after a
- * restart can be placed one interval after the last run instead of one after startup.
+ * restart can be placed one interval after the last run instead of one after startup. The
+ * planned run is stored as well: before a scheduler has run once, it is all a restart has to
+ * go on, and without it a server restarted more often than the interval would never run it.
  */
 export class ScheduledJob<Id extends SchedulerId> {
     private timer: NodeJS.Timeout | null = null;
@@ -77,24 +79,34 @@ export class ScheduledJob<Id extends SchedulerId> {
 
     /**
      * (Re)starts the timer from the current settings. The first run comes one interval after
-     * the last one started -- at once if that is past -- or one interval from now when the
-     * scheduler has never run.
+     * the last one started -- at once if that is past. A scheduler that has never run keeps
+     * the run it had planned, unless that lies more than one interval ahead, as it does after
+     * the interval was shortened; with none planned, it comes one interval from now.
      */
     start(runScheduled: () => Promise<unknown>): void {
         this.stop();
+        const { id } = this.options;
         const intervalMs = this.options.intervalMs();
         if (intervalMs <= 0) {
-            logger.info({ scheduler: this.options.id }, "Scheduler disabled");
+            SchedulerStateRepository.savePlannedRun(id, null);
+            logger.info({ scheduler: id }, "Scheduler disabled");
             this.broadcast();
             return;
         }
-        const lastStarted = SchedulerStateRepository.lastRun(this.options.id)?.startedAt;
+        const now = Date.now();
+        const lastStarted = SchedulerStateRepository.lastRun(id)?.startedAt;
         const last = lastStarted ? Date.parse(lastStarted) : NaN;
-        const first = isNaN(last) ? Date.now() + intervalMs : Math.max(Date.now(), last + intervalMs);
+        const planned = Date.parse(SchedulerStateRepository.plannedRun(id) ?? "");
+        const first = !isNaN(last)
+            ? Math.max(now, last + intervalMs)
+            : !isNaN(planned) && planned <= now + intervalMs
+                ? Math.max(now, planned)
+                : now + intervalMs;
         this.schedule(new Date(first), runScheduled);
-        logger.info({ scheduler: this.options.id, intervalMs, nextRun: this.nextRun }, "Scheduler started");
+        logger.info({ scheduler: id, intervalMs, nextRun: this.nextRun }, "Scheduler started");
     }
 
+    /** Stops the timer. The planned run stays stored: a shutdown is when it must survive. */
     stop(): void {
         if (this.timer) {
             clearTimeout(this.timer);
@@ -120,6 +132,9 @@ export class ScheduledJob<Id extends SchedulerId> {
     }
 
     private schedule(at: Date, runScheduled: () => Promise<unknown>): void {
+        if (this.nextRun?.getTime() !== at.getTime()) {
+            SchedulerStateRepository.savePlannedRun(this.options.id, at.toISOString());
+        }
         this.nextRun = at;
         this.broadcast();
         // A long interval is waited out in steps: setTimeout cannot take more than ~24 days.
@@ -138,6 +153,7 @@ export class ScheduledJob<Id extends SchedulerId> {
             if (intervalMs > 0) {
                 this.schedule(new Date(Date.now() + intervalMs), runScheduled);
             } else {
+                SchedulerStateRepository.savePlannedRun(this.options.id, null);
                 this.nextRun = null;
                 this.broadcast();
             }
