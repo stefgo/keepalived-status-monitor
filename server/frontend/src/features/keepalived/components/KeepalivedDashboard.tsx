@@ -1,13 +1,28 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
-import { Card, StatCard } from "@stefgo/react-ui-components";
+import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
 import { CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { clientName } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { ClusterCard } from "./ClusterCard";
+
+/** The part of the page the Warnings card counts, and so the one it leads to. */
+const ATTENTION_ID = "attention";
+
+/**
+ * Brings the attention list into view and moves focus there, so a keyboard user lands where
+ * the eye does. Without motion where the reader asked for none.
+ */
+const showAttention = () => {
+    const target = document.getElementById(ATTENTION_ID);
+    if (!target) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+};
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
@@ -60,51 +75,57 @@ export const KeepalivedDashboard = () => {
                     value={String(summary.masters)}
                     sub={summary.faults > 0 ? `${summary.faults} in FAULT` : undefined}
                     icon={Crown}
+                    // The cluster list shows who is MASTER where.
+                    onClick={() => navigate("/clusters")}
                 />
                 <StatCard
                     label="Warnings"
                     value={String(warnings)}
                     icon={AlertTriangle}
-                    onClick={() => navigate("/activity")}
+                    // It counts the clusters and hosts listed below, not activity events -- so
+                    // it leads there. With none, the line below says that everything is fine.
+                    onClick={showAttention}
                 />
             </div>
 
-            {summary.troubledHosts.length > 0 && (
-                <Card title="Hosts without a reading" titleAs="h3" padding="md">
-                    <ul className="space-y-2">
-                        {summary.troubledHosts.map((client) => {
-                            const state = states[client.id];
-                            return (
-                                <li key={client.id} className="text-sm">
-                                    <button
-                                        type="button"
-                                        className="font-medium text-text-primary hover:text-primary"
-                                        onClick={() => navigate(`/client/${client.id}`)}
-                                    >
-                                        {clientName(client)}
-                                    </button>
-                                    <span className="text-text-secondary">
-                                        {" — "}
-                                        {state?.running ? state.error : "keepalived is not running"}
-                                    </span>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </Card>
-            )}
+            <div id={ATTENTION_ID} tabIndex={-1} className="space-y-6 scroll-mt-6 rounded-xl focus:outline-none">
+                {summary.troubledHosts.length > 0 && (
+                    <Card title="Hosts without a reading" titleAs="h3" padding="md">
+                        <ul className="space-y-2">
+                            {summary.troubledHosts.map((client) => {
+                                const state = states[client.id];
+                                return (
+                                    <li key={client.id} className="text-sm">
+                                        <button
+                                            type="button"
+                                            className={cn("rounded-sm font-medium text-text-primary hover:text-primary", FOCUS_RING)}
+                                            onClick={() => navigate(`/client/${client.id}`)}
+                                        >
+                                            {clientName(client)}
+                                        </button>
+                                        <span className="text-text-secondary">
+                                            {" — "}
+                                            {state?.running ? state.error : "keepalived is not running"}
+                                        </span>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </Card>
+                )}
 
-            {attention.length > 0 ? (
-                attention.map((cluster) => <ClusterCard key={cluster.key} cluster={cluster} />)
-            ) : (
-                <Card padding="md">
-                    <p className="text-text-secondary">
-                        {clusters.length === 0
-                            ? "No VRRP instances reported yet. Register an agent on a host running keepalived to see it here."
-                            : "Every VRRP cluster has exactly one MASTER and all members reporting."}
-                    </p>
-                </Card>
-            )}
+                {attention.length > 0 ? (
+                    attention.map((cluster) => <ClusterCard key={cluster.key} cluster={cluster} />)
+                ) : (
+                    <Card padding="md">
+                        <p className="text-text-secondary">
+                            {clusters.length === 0
+                                ? "No VRRP instances reported yet. Register an agent on a host running keepalived to see it here."
+                                : "Every VRRP cluster has exactly one MASTER and all members reporting."}
+                        </p>
+                    </Card>
+                )}
+            </div>
         </div>
     );
 };
