@@ -10,7 +10,7 @@ import {
     UpdateClient,
 } from "@kasm/shared";
 import { Save } from "lucide-react";
-import { Badge, Button, Card, Checkbox, Input } from "@stefgo/react-ui-components";
+import { Badge, Button, Card, Checkbox, DescriptionList, Input } from "@stefgo/react-ui-components";
 import { StatusDot } from "./StatusDot";
 import { clientName, formatDate, getErrorMessage } from "../../../utils";
 
@@ -154,12 +154,6 @@ export const ClientIdentityCard = ({
                         <div className="text-xl font-bold">
                             {clientName(client)}
                         </div>
-                        {/* The id belongs to the name it identifies, on its own line
-                            beneath it. The overview keeps it in its details instead,
-                            where there is room to copy it. */}
-                        <div className="text-sm font-mono text-text-muted">
-                            {client.id}
-                        </div>
                         {/* Only while offline: for a connected client the pulsing dot
                             already says the agent is here, and a timestamp beside it just
                             invites the question whether it is stale. */}
@@ -177,9 +171,17 @@ export const ClientIdentityCard = ({
         >
             <div className="px-7 py-6 bg-card">
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Read-only, and first: it decides whether there is a target address
-                        or an IP restriction below at all, so it reads as context for the
-                        fields under it rather than as a footnote after them. */}
+                    {/* A `DescriptionList` for its copy button. The classes line its label
+                        and value up with the read-only fields below. */}
+                    <DescriptionList
+                        columns={1}
+                        items={[{ label: "Client ID", value: client.id, copyable: client.id }]}
+                        classNames={{ label: "mb-1.5 ml-1", value: "ml-1" }}
+                    />
+
+                    {/* Read-only, and first after the id: it decides whether there is a target
+                        address or an IP restriction below at all, so it reads as context for
+                        the fields under it rather than as a footnote after them. */}
                     <div>
                         {/* Not an `Input`: there is no control to label. The classes are
                             copied from its stacked label and hint so a read-only value
