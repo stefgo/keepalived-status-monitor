@@ -307,11 +307,17 @@ async function signalAndRead(pid: number, signal: NodeJS.Signals | number, file:
     throw new Error(`keepalived did not write ${file} within ${config.keepalived.dumpTimeoutMs} ms`);
 }
 
+/**
+ * Only a missing file means "not written yet". Anything else -- EACCES above all, a missing
+ * SYS_PTRACE or an AppArmor profile -- would otherwise wait out the timeout and be reported
+ * as a dump that never came, instead of naming the permission.
+ */
 function statOrNull(file: string): fs.Stats | null {
     try {
         return fs.statSync(file);
-    } catch {
-        return null;
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw err;
     }
 }
 
