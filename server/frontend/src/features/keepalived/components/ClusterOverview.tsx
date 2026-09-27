@@ -16,7 +16,7 @@ import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
-import { MemberStatusBadge, VrrpStateBadge } from "./VrrpStateBadge";
+import { MemberStateBadge } from "./VrrpStateBadge";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
@@ -47,8 +47,8 @@ const STATE_RANK: Record<VrrpState, number> = {
 };
 
 /**
- * A host row whose state is not current is dimmed cell by cell rather than as a row, so its
- * `MemberStatusBadge` stays legible.
+ * A host row whose state is not current is dimmed cell by cell rather than as a row, so the
+ * `MemberStatusBadge` that stands in for its state stays legible.
  */
 const dim = (row: ClusterRow) => (row.kind === "member" && memberStale(row.member) ? "opacity-60" : "");
 
@@ -215,12 +215,7 @@ export const ClusterOverview = () => {
                 row.kind === "cluster" ? (
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
-                    <div className="flex flex-wrap items-center gap-1">
-                        <span className={dim(row)}>
-                            <VrrpStateBadge state={row.member.instance.state} />
-                        </span>
-                        <MemberStatusBadge member={row.member} />
-                    </div>
+                    <MemberStateBadge member={row.member} />
                 ),
         },
         {
@@ -275,10 +270,7 @@ export const ClusterOverview = () => {
                                                 <span className={cn("text-text-secondary", dim(child))}>
                                                     {child.member.instance.name}
                                                 </span>
-                                                <span className={dim(child)}>
-                                                    <VrrpStateBadge state={child.member.instance.state} />
-                                                </span>
-                                                <MemberStatusBadge member={child.member} />
+                                                <MemberStateBadge member={child.member} />
                                             </li>
                                         ),
                                 )}

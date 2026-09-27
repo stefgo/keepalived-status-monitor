@@ -260,9 +260,11 @@ effective priority, so the node that should be MASTER is on top. A cluster is ex
 needs a look — any health but `ok`, which includes an offline or inactive member — and, while
 a search runs, so a matching host is not hidden. A cluster that runs into trouble opens by
 itself; one the reader opened or closed by hand stays that way. A
-member whose state is not current is dimmed (`memberStale`) and carries a red badge beside
-its state (`MemberStatusBadge`): "Offline" where its agent is offline, "Not Active" where
-the agent is online but keepalived on the host is stopped or unreadable. Such a member stays
+member whose state is not current is dimmed (`memberStale`) and shows a red badge in place
+of its state (`MemberStateBadge`, which renders `MemberStatusBadge`): "Offline" where its
+agent is offline, "Not Active" where the agent is online but keepalived on the host is
+stopped or unreadable. The last reported state moves into the badge's tooltip; a host row
+always carries exactly one badge. The cluster page keeps both, state and red badge, side by side. Such a member stays
 in the tree with the instance it last reported, instead of dropping out of the cluster. The
 dimming is applied cell by cell, not to the row, so the badge itself stays at full contrast. A cluster row opens the cluster's page, a host row the host.
 The search matches VRID, site, network, address, host and instance name and keeps a whole
