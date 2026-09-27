@@ -1,4 +1,4 @@
-import { ReactNode, useMemo } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
@@ -141,12 +141,38 @@ export const ClusterOverview = () => {
     const clusters = useVrrpClusters();
     const clients = useClientStore((s) => s.clients);
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
+    // What the reader opened or closed by hand; every other cluster follows the default below.
+    const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
 
     const rows = useMemo(() => toRows(clusters, clients), [clusters, clients]);
+    const searching = searchQuery.trim() !== "";
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         return query ? rows.filter((row) => matches(row, query)) : rows;
     }, [rows, searchQuery]);
+
+    // Open are the clusters that need a look -- any health but `ok`, which covers an offline
+    // or inactive member, since that makes a cluster degraded at least -- and, while a search
+    // runs, every cluster, so a matching host is not hidden in a closed one. Worked out on
+    // every render, so a cluster that runs into trouble opens by itself; a reader's own
+    // choice for a cluster wins over it.
+    const expanded = useMemo(
+        () =>
+            new Set(
+                clusters
+                    .filter((cluster) => toggled.get(cluster.key) ?? (searching || cluster.health !== "ok"))
+                    .map((cluster) => cluster.key),
+            ),
+        [clusters, toggled, searching],
+    );
+    const onExpandedChange = (next: Set<string | number>) => {
+        const changed = new Map(toggled);
+        for (const cluster of clusters) {
+            const open = next.has(cluster.key);
+            if (open !== expanded.has(cluster.key)) changed.set(cluster.key, open);
+        }
+        setToggled(changed);
+    };
 
     // Every sortable column gives both kinds of row a value, since the tree sorts each level
     // with the same comparator. A constant for the clusters keeps their order where the
@@ -275,7 +301,7 @@ export const ClusterOverview = () => {
             getChildren={(row) => (row.kind === "cluster" ? row.children : null)}
             tableDef={tableDef}
             listColumns={listColumns}
-            treeExpanded={{ all: true }}
+            treeExpanded={{ value: expanded, onChange: onExpandedChange }}
             keyField="key"
             searchable
             searchPlaceholder="Search VRID, site, network, address or host…"

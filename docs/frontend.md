@@ -256,7 +256,10 @@ usable reading (keepalived stopped or unreadable), then every cluster whose heal
 first level is the virtual router — VRID, virtual addresses and the health badge
 (`CLUSTER_HEALTH` in `lib/vrrp.ts`, with the explanation as the tooltip); the second level is
 its hosts — online dot, link to the client, instance, VRRP state, priority — ordered by
-effective priority, so the node that should be MASTER is on top. Every row starts expanded. A
+effective priority, so the node that should be MASTER is on top. A cluster is expanded when it
+needs a look — any health but `ok`, which includes an offline or inactive member — and, while
+a search runs, so a matching host is not hidden. A cluster that runs into trouble opens by
+itself; one the reader opened or closed by hand stays that way. A
 member whose state is not current is dimmed (`memberStale`) and carries a red badge beside
 its state (`MemberStatusBadge`): "Offline" where its agent is offline, "Not Active" where
 the agent is online but keepalived on the host is stopped or unreadable. Such a member stays
