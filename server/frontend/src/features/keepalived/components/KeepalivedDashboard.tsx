@@ -1,12 +1,11 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { useActivityStore } from "../../../stores/useActivityStore";
-import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName } from "../../../utils";
 import { ActivityView } from "../../activity/components/ActivityView";
 import { groupActivity } from "../../activity/lib/groupActivity";
@@ -18,10 +17,16 @@ import { MasterList } from "./MasterList";
 
 /**
  * The list a card opens beneath the cards. One at a time: the lists keep their search in
- * the same `search` parameter, so two open at once would filter each other.
+ * the same `search` parameter, so two open at once would filter each other. Kept in the
+ * `panel` parameter, so the open list survives a reload and travels with a shared link.
  */
-type Panel = "hosts" | "clusters" | "masters" | "activity";
+const PANELS = ["hosts", "clusters", "masters", "activity"] as const;
+type Panel = (typeof PANELS)[number];
+const PANEL_PARAM = "panel";
 const PANEL_ID = "dashboard-panel";
+
+const toPanel = (value: string | null): Panel | null =>
+    (PANELS as readonly (string | null)[]).includes(value) ? (value as Panel) : null;
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
@@ -33,13 +38,26 @@ export const KeepalivedDashboard = () => {
     const states = useKeepalivedStore((s) => s.states);
     const clusters = useVrrpClusters();
     const events = useActivityStore((s) => s.events);
-    const [panel, setPanel] = useState<Panel | null>(null);
-    const [, setSearchQuery] = useSearchQueryParam();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const panel = toPanel(searchParams.get(PANEL_PARAM));
     // A second click on the open card closes its list again. The search is dropped either
     // way: a host name typed into one list would otherwise filter the next one to nothing.
+    // One write for both: two `setSearchParams` in a row would each start from the same URL,
+    // and the second would undo the first. It replaces the history entry, as the search does.
     const togglePanel = (next: Panel) => {
-        setPanel((open) => (open === next ? null : next));
-        setSearchQuery("");
+        setSearchParams(
+            (prev) => {
+                const params = new URLSearchParams(prev);
+                if (toPanel(prev.get(PANEL_PARAM)) === next) {
+                    params.delete(PANEL_PARAM);
+                } else {
+                    params.set(PANEL_PARAM, next);
+                }
+                params.delete("search");
+                return params;
+            },
+            { replace: true },
+        );
     };
 
     const summary = useMemo(() => {

@@ -256,7 +256,9 @@ Every card opens its list right beneath the cards — `ClientList`, `ClusterOver
 `MasterList` (each instance in MASTER on an online host: host, VRID, virtual IPs, state and
 last transition; a row opens its cluster) and `ActivityView` with the level filter on
 `warning` — and closes it on a second click. Only one list is open at a time and switching
-clears the search, since all of them keep it in the same `search` parameter.
+clears the search, since all of them keep it in the same `search` parameter. The open list
+is kept in the `panel` parameter (`hosts`, `clusters`, `masters`, `activity`), so it survives
+a reload and a shared link opens it too.
 
 ### ClusterOverview & ClusterCard (`features/keepalived`)
 
