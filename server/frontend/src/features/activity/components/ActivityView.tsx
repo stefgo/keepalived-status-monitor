@@ -86,6 +86,15 @@ function searchText(event: ActivityRecord): string {
         .toLowerCase();
 }
 
+interface ActivityViewProps {
+    /**
+     * The level the filter opens on, in place of the one worked out from the unseen events.
+     * The dashboard's Errors / Warnings card passes "warning", so the list shows what the card
+     * counts.
+     */
+    initialLevel?: ActivityLevel;
+}
+
 /**
  * The activity list: structured events, not messages written for the reader.
  *
@@ -95,7 +104,7 @@ function searchText(event: ActivityRecord): string {
  * attached. The level filter works on the field itself, so "warning and above" means exactly
  * that; the search box covers everything a reader would look for by name.
  */
-export function ActivityView() {
+export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const { events, markManySeen, clearAll } = useActivityStore();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
@@ -105,7 +114,8 @@ export function ActivityView() {
     // opens on what needs a look: "error" while an error is unseen, else "warning" while a
     // warning is, else "info". That start is fixed once the list is known, so marking a row
     // seen does not pull the filter out from under the reader; until then it follows the list.
-    const [chosenLevel, setChosenLevel] = useState<ActivityLevel | null>(null);
+    // A caller's `initialLevel` stands in for that start.
+    const [chosenLevel, setChosenLevel] = useState<ActivityLevel | null>(initialLevel ?? null);
     const startLevel: ActivityLevel = unseenTone(events) ?? "info";
     if (chosenLevel === null && events.length > 0) {
         setChosenLevel(startLevel);

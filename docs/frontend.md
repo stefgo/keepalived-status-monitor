@@ -246,9 +246,15 @@ last one reported rather than the present state — the server keeps it for exac
 ### KeepalivedDashboard (`features/keepalived`)
 
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
-count), MASTER (with the FAULT count) and warnings — then a card listing online hosts without a
-usable reading (keepalived stopped or unreadable), then every cluster whose health is not
-`ok`. A healthy fleet shows the numbers and nothing else.
+count), MASTER (with the FAULT count) and errors / warnings (unseen activity rows at `warning`
+and above) — then a card listing online hosts without a usable reading (keepalived stopped or
+unreadable), then every cluster whose health is not `ok`. A healthy fleet shows the numbers
+and nothing else.
+
+Hosts online, VRRP clusters and errors / warnings open their list right beneath the cards —
+`ClientList`, `ClusterOverview`, and `ActivityView` with the level filter on `warning` — and
+close it on a second click. Only one list is open at a time and switching clears the search,
+since all three keep it in the same `search` parameter. MASTER still leads to `/clusters`.
 
 ### ClusterOverview & ClusterCard (`features/keepalived`)
 
@@ -469,7 +475,7 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `DashboardPage`        | Type for a navigation entry (`{ id, path, nav }`).        |
 | `LoginPage`            | Pre-built login form UI (local & OIDC).                   |
 | `Card`                 | Generic surface card. `padding="none"` for a card that holds a table. |
-| `StatCard`             | Stat tile — the dashboard numbers (clickable, leading to their page). |
+| `StatCard`             | Stat tile — the dashboard numbers (clickable, opening their list or page). |
 | `Input`                | Form input field.                                         |
 | `Button`               | Button with variants (primary, secondary, danger).        |
 | `DataTable`            | Table view with sorting and paging.                       |

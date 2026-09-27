@@ -2,37 +2,25 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
-import { CLIENT_STATUS } from "@kasm/shared";
+import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { useActivityStore } from "../../../stores/useActivityStore";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName } from "../../../utils";
+import { ActivityView } from "../../activity/components/ActivityView";
+import { groupActivity } from "../../activity/lib/groupActivity";
 import { ClientList } from "../../clients/components/ClientList";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterOverview } from "./ClusterOverview";
 
-/** The part of the page the Warnings card counts, and so the one it leads to. */
-const ATTENTION_ID = "attention";
-
 /**
- * The list a card opens beneath the cards. One at a time: both lists keep their search in
+ * The list a card opens beneath the cards. One at a time: the lists keep their search in
  * the same `search` parameter, so two open at once would filter each other.
  */
-type Panel = "hosts" | "clusters";
+type Panel = "hosts" | "clusters" | "activity";
 const PANEL_ID = "dashboard-panel";
-
-/**
- * Brings the attention list into view and moves focus there, so a keyboard user lands where
- * the eye does. Without motion where the reader asked for none.
- */
-const showAttention = () => {
-    const target = document.getElementById(ATTENTION_ID);
-    if (!target) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-    target.focus({ preventScroll: true });
-};
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
@@ -43,6 +31,7 @@ export const KeepalivedDashboard = () => {
     const clients = useClientStore((s) => s.clients);
     const states = useKeepalivedStore((s) => s.states);
     const clusters = useVrrpClusters();
+    const events = useActivityStore((s) => s.events);
     const [panel, setPanel] = useState<Panel | null>(null);
     const [, setSearchQuery] = useSearchQueryParam();
     // A second click on the open card closes its list again. The search is dropped either
@@ -70,7 +59,15 @@ export const KeepalivedDashboard = () => {
     }, [clients, states]);
 
     const attention = clusters.filter((cluster) => cluster.health !== "ok" && cluster.health !== "unknown");
-    const warnings = attention.length + summary.troubledHosts.length;
+
+    // What the activity list opens on from the Errors / Warnings card: unseen rows at warning
+    // and above, counted as rows -- grouped the way the list groups them.
+    const unseenWarnings = useMemo(() => {
+        const warning = ACTIVITY_LEVELS.indexOf("warning");
+        return groupActivity(events).filter(
+            (group) => group.unseen && ACTIVITY_LEVELS.indexOf(group.level) >= warning,
+        ).length;
+    }, [events]);
 
     return (
         <div className="space-y-6">
@@ -101,29 +98,29 @@ export const KeepalivedDashboard = () => {
                     onClick={() => navigate("/clusters")}
                 />
                 <StatCard
-                    label="Warnings"
-                    value={String(warnings)}
+                    label="Errors / Warnings"
+                    value={String(unseenWarnings)}
                     icon={AlertTriangle}
-                    // It counts the clusters and hosts listed below, not activity events -- so
-                    // it leads there.
-                    onClick={showAttention}
+                    onClick={() => togglePanel("activity")}
+                    selected={panel === "activity"}
+                    aria-controls={PANEL_ID}
                 />
             </div>
 
             {panel && (
                 <div id={PANEL_ID}>
-                    {panel === "hosts" ? (
+                    {panel === "hosts" && (
                         <ClientList
                             clients={clients}
                             setSelectedClient={(client) => client && navigate(`/client/${client.id}`)}
                         />
-                    ) : (
-                        <ClusterOverview />
                     )}
+                    {panel === "clusters" && <ClusterOverview />}
+                    {panel === "activity" && <ActivityView initialLevel="warning" />}
                 </div>
             )}
 
-            <div id={ATTENTION_ID} tabIndex={-1} className="space-y-6 scroll-mt-6 rounded-xl focus:outline-none">
+            <div className="space-y-6">
                 {summary.troubledHosts.length > 0 && (
                     <Card title="Hosts without a reading" titleAs="h3" padding="md">
                         <ul className="space-y-2">
