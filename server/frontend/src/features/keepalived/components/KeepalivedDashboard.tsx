@@ -5,16 +5,22 @@ import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
 import { CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName } from "../../../utils";
 import { ClientList } from "../../clients/components/ClientList";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { ClusterCard } from "./ClusterCard";
+import { ClusterOverview } from "./ClusterOverview";
 
 /** The part of the page the Warnings card counts, and so the one it leads to. */
 const ATTENTION_ID = "attention";
 
-/** The host list the Hosts online card opens beneath the cards. */
-const HOSTS_ID = "dashboard-hosts";
+/**
+ * The list a card opens beneath the cards. One at a time: both lists keep their search in
+ * the same `search` parameter, so two open at once would filter each other.
+ */
+type Panel = "hosts" | "clusters";
+const PANEL_ID = "dashboard-panel";
 
 /**
  * Brings the attention list into view and moves focus there, so a keyboard user lands where
@@ -37,7 +43,14 @@ export const KeepalivedDashboard = () => {
     const clients = useClientStore((s) => s.clients);
     const states = useKeepalivedStore((s) => s.states);
     const clusters = useVrrpClusters();
-    const [showHosts, setShowHosts] = useState(false);
+    const [panel, setPanel] = useState<Panel | null>(null);
+    const [, setSearchQuery] = useSearchQueryParam();
+    // A second click on the open card closes its list again. The search is dropped either
+    // way: a host name typed into one list would otherwise filter the next one to nothing.
+    const togglePanel = (next: Panel) => {
+        setPanel((open) => (open === next ? null : next));
+        setSearchQuery("");
+    };
 
     const summary = useMemo(() => {
         const online = clients.filter((client) => client.status === CLIENT_STATUS.ONLINE);
@@ -66,18 +79,18 @@ export const KeepalivedDashboard = () => {
                     label="Hosts online"
                     value={`${summary.online} / ${clients.length}`}
                     icon={Monitor}
-                    // Opens the host list right here instead of leaving the dashboard; a
-                    // second click closes it again.
-                    onClick={() => setShowHosts((shown) => !shown)}
-                    selected={showHosts}
-                    aria-controls={HOSTS_ID}
+                    onClick={() => togglePanel("hosts")}
+                    selected={panel === "hosts"}
+                    aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="VRRP clusters"
                     value={String(clusters.length)}
                     sub={`${summary.instances} instances`}
                     icon={Network}
-                    onClick={() => navigate("/clusters")}
+                    onClick={() => togglePanel("clusters")}
+                    selected={panel === "clusters"}
+                    aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="MASTER"
@@ -97,12 +110,16 @@ export const KeepalivedDashboard = () => {
                 />
             </div>
 
-            {showHosts && (
-                <div id={HOSTS_ID}>
-                    <ClientList
-                        clients={clients}
-                        setSelectedClient={(client) => client && navigate(`/client/${client.id}`)}
-                    />
+            {panel && (
+                <div id={PANEL_ID}>
+                    {panel === "hosts" ? (
+                        <ClientList
+                            clients={clients}
+                            setSelectedClient={(client) => client && navigate(`/client/${client.id}`)}
+                        />
+                    ) : (
+                        <ClusterOverview />
+                    )}
                 </div>
             )}
 
