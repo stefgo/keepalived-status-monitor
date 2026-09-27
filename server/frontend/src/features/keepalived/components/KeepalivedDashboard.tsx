@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
@@ -6,11 +6,15 @@ import { CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { clientName } from "../../../utils";
+import { ClientList } from "../../clients/components/ClientList";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { ClusterCard } from "./ClusterCard";
 
 /** The part of the page the Warnings card counts, and so the one it leads to. */
 const ATTENTION_ID = "attention";
+
+/** The host list the Hosts online card opens beneath the cards. */
+const HOSTS_ID = "dashboard-hosts";
 
 /**
  * Brings the attention list into view and moves focus there, so a keyboard user lands where
@@ -33,6 +37,7 @@ export const KeepalivedDashboard = () => {
     const clients = useClientStore((s) => s.clients);
     const states = useKeepalivedStore((s) => s.states);
     const clusters = useVrrpClusters();
+    const [showHosts, setShowHosts] = useState(false);
 
     const summary = useMemo(() => {
         const online = clients.filter((client) => client.status === CLIENT_STATUS.ONLINE);
@@ -61,7 +66,11 @@ export const KeepalivedDashboard = () => {
                     label="Hosts online"
                     value={`${summary.online} / ${clients.length}`}
                     icon={Monitor}
-                    onClick={() => navigate("/clients")}
+                    // Opens the host list right here instead of leaving the dashboard; a
+                    // second click closes it again.
+                    onClick={() => setShowHosts((shown) => !shown)}
+                    selected={showHosts}
+                    aria-controls={HOSTS_ID}
                 />
                 <StatCard
                     label="VRRP clusters"
@@ -87,6 +96,15 @@ export const KeepalivedDashboard = () => {
                     onClick={showAttention}
                 />
             </div>
+
+            {showHosts && (
+                <div id={HOSTS_ID}>
+                    <ClientList
+                        clients={clients}
+                        setSelectedClient={(client) => client && navigate(`/client/${client.id}`)}
+                    />
+                </div>
+            )}
 
             <div id={ATTENTION_ID} tabIndex={-1} className="space-y-6 scroll-mt-6 rounded-xl focus:outline-none">
                 {summary.troubledHosts.length > 0 && (
