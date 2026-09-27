@@ -2,6 +2,7 @@ import { ReactNode, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
+    cn,
     DataMultiView,
     type DataListColumnDef,
     type DataTableDef,
@@ -15,7 +16,7 @@ import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
-import { SilentBadge, VrrpStateBadge } from "./VrrpStateBadge";
+import { MemberStatusBadge, VrrpStateBadge } from "./VrrpStateBadge";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
@@ -44,6 +45,12 @@ const STATE_RANK: Record<VrrpState, number> = {
     BACKUP: 5,
     MASTER: 6,
 };
+
+/**
+ * A host row whose state is not current is dimmed cell by cell rather than as a row, so its
+ * `MemberStatusBadge` stays legible.
+ */
+const dim = (row: ClusterRow) => (row.kind === "member" && memberStale(row.member) ? "opacity-60" : "");
 
 const effectivePriority = (member: VrrpClusterMember) =>
     member.instance.effectivePriority ?? member.instance.priority ?? 0;
@@ -153,12 +160,12 @@ export const ClusterOverview = () => {
                 row.kind === "cluster"
                     ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
                     : row.hostName,
-            tableCellClassName: "text-sm",
+            tableCellClassName: (row) => cn("text-sm", dim(row)),
             tableItemRender: (row) => (row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />),
         },
         {
             tableHeader: "Virtual IPs / Instance",
-            tableCellClassName: "text-sm",
+            tableCellClassName: (row) => cn("text-sm", dim(row)),
             tableItemRender: (row) =>
                 row.kind === "cluster" ? (
                     clusterVipLabel(row.cluster)
@@ -183,8 +190,10 @@ export const ClusterOverview = () => {
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
                     <div className="flex flex-wrap items-center gap-1">
-                        <VrrpStateBadge state={row.member.instance.state} />
-                        <SilentBadge member={row.member} />
+                        <span className={dim(row)}>
+                            <VrrpStateBadge state={row.member.instance.state} />
+                        </span>
+                        <MemberStatusBadge member={row.member} />
                     </div>
                 ),
         },
@@ -192,13 +201,13 @@ export const ClusterOverview = () => {
             tableHeader: "Priority",
             sortable: true,
             sortValue: (row) => (row.kind === "cluster" ? 0 : effectivePriority(row.member)),
-            tableCellClassName: "text-sm",
+            tableCellClassName: (row) => cn("text-sm", dim(row)),
             tableItemRender: (row) => (row.kind === "member" ? <Priority instance={row.member.instance} /> : null),
         },
         {
             tableHeader: "Last transition",
             tableHeaderClassName: "whitespace-nowrap",
-            tableCellClassName: "text-sm whitespace-nowrap",
+            tableCellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
             tableItemRender: (row) =>
                 row.kind === "member" ? formatDate(row.member.instance.lastTransition, { seconds: true }) : null,
         },
@@ -232,14 +241,18 @@ export const ClusterOverview = () => {
                                         child.kind === "member" && (
                                             <li
                                                 key={child.key}
-                                                className={`flex flex-wrap items-center gap-2 ${memberStale(child.member) ? "opacity-60" : ""}`}
+                                                className="flex flex-wrap items-center gap-2"
                                             >
-                                                <HostLink row={child} />
-                                                <span className="text-text-secondary">
+                                                <span className={dim(child)}>
+                                                    <HostLink row={child} />
+                                                </span>
+                                                <span className={cn("text-text-secondary", dim(child))}>
                                                     {child.member.instance.name}
                                                 </span>
-                                                <VrrpStateBadge state={child.member.instance.state} />
-                                                <SilentBadge member={child.member} />
+                                                <span className={dim(child)}>
+                                                    <VrrpStateBadge state={child.member.instance.state} />
+                                                </span>
+                                                <MemberStatusBadge member={child.member} />
                                             </li>
                                         ),
                                 )}
@@ -276,9 +289,7 @@ export const ClusterOverview = () => {
                     ? clusterPath(row.cluster, clusters)
                         ? "align-top"
                         : "align-top cursor-default hover:bg-transparent"
-                    : memberStale(row.member)
-                      ? "align-top opacity-60"
-                      : "align-top"
+                    : "align-top"
             }
             // A cluster row opens the cluster's page, a host row the host. `from` is how the
             // cluster page knows where back is.

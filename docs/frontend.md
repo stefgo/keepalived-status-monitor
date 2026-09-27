@@ -257,10 +257,11 @@ first level is the virtual router — VRID, virtual addresses and the health bad
 (`CLUSTER_HEALTH` in `lib/vrrp.ts`, with the explanation as the tooltip); the second level is
 its hosts — online dot, link to the client, instance, VRRP state, priority — ordered by
 effective priority, so the node that should be MASTER is on top. Every row starts expanded. A
-member whose state is not current is dimmed (`memberStale`): its agent is offline, or
-keepalived on its host is stopped or unreadable. The latter stays in the tree with the
-instance it last reported and a "Stopped" / "Unreadable" badge (`SilentBadge`) beside the
-state, instead of dropping out of the cluster. A cluster row opens the cluster's page, a host row the host.
+member whose state is not current is dimmed (`memberStale`) and carries a red badge beside
+its state (`MemberStatusBadge`): "Offline" where its agent is offline, "Not Active" where
+the agent is online but keepalived on the host is stopped or unreadable. Such a member stays
+in the tree with the instance it last reported, instead of dropping out of the cluster. The
+dimming is applied cell by cell, not to the row, so the badge itself stays at full contrast. A cluster row opens the cluster's page, a host row the host.
 The search matches VRID, site, network, address, host and instance name and keeps a whole
 cluster when one of its hosts matches. The list view, which narrow screens always get, shows
 one entry per cluster with its hosts inside it; its addresses open the cluster's page.

@@ -56,7 +56,7 @@ export const CLUSTER_HEALTH: Record<
             "One MASTER holds, but a member is in FAULT, offline, has keepalived stopped or unreadable, or is the only one left.",
     },
     "no-master": {
-        label: "No MASTER",
+        label: "Unknown Master",
         variant: "error",
         description: "No online member is MASTER: the virtual addresses are not served.",
     },

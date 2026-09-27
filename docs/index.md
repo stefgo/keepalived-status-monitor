@@ -73,10 +73,10 @@ why the addresses are part of the key.
 | Health | Means |
 |---|---|
 | **Healthy** | Exactly one online member is MASTER, every member reports. |
-| **Degraded** | One MASTER holds, but a member is in FAULT, its agent is offline, or it is the only member. |
-| **No MASTER** | No online member is MASTER — the virtual addresses are not being served. |
+| **Degraded** | One MASTER holds, but a member is in FAULT, its agent is offline, its keepalived is stopped or unreadable, or it is the only member. |
+| **Unknown Master** | No online member with keepalived reporting is MASTER — the virtual addresses are not being served. |
 | **Split brain** | More than one member claims MASTER for the same virtual router. |
-| **Unknown** | No member's agent is online. |
+| **Unknown** | No member is online with keepalived reporting. |
 
 The dashboard lists the clusters that need attention; the **VRRP Clusters** page shows all of
 them.

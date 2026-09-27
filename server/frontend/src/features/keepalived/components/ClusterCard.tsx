@@ -9,7 +9,7 @@ import { useClusterPath } from "../hooks/useVrrpClusters";
 import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { VrrpInstanceView } from "./VrrpInstanceView";
-import { SilentBadge } from "./VrrpStateBadge";
+import { MemberStatusBadge } from "./VrrpStateBadge";
 
 export interface ClusterCompare {
     /** Whether the member with this `memberKey` is compared. */
@@ -94,7 +94,7 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                         href: `/client/${member.clientId}`,
                         instance: member.instance,
                         stale: memberStale(member),
-                        stateNote: <SilentBadge member={member} />,
+                        stateNote: <MemberStatusBadge member={member} />,
                         host: (
                             <span className="flex items-center gap-2">
                                 <StatusDot online={member.online} />
