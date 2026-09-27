@@ -64,23 +64,24 @@ const OVERRULED_BY_MISMATCH: ReadonlySet<VrrpClusterHealth> = new Set<VrrpCluste
 ]);
 
 /**
- * How a cluster is doing. The states are counted over online members only -- an offline
- * member's state is its last report, not its present one -- with the address mismatch as the
- * documented exception, since a configuration is wrong whether or not its host answers.
+ * How a cluster is doing. The states are counted over live members only -- online, with
+ * keepalived reporting; any other member's state is its last report, not its present one --
+ * with the address mismatch as the documented exception, since a configuration is wrong
+ * whether or not its host answers.
  *
  * A running outage outranks a misconfiguration: `split-brain` and `no-master` keep their
  * place, and the cluster's page names the mismatch either way.
  */
 function healthOf(members: VrrpClusterMember[]): VrrpClusterHealth {
     const base = ((): VrrpClusterHealth => {
-        const online = members.filter((member) => member.online);
-        if (online.length === 0) return "unknown";
-        const masters = online.filter((member) => member.instance.state === "MASTER").length;
+        const live = members.filter((member) => member.online && member.reporting);
+        if (live.length === 0) return "unknown";
+        const masters = live.filter((member) => member.instance.state === "MASTER").length;
         if (masters > 1) return "split-brain";
         if (masters === 0) return "no-master";
         const troubled =
-            online.length < members.length ||
-            online.some((member) => member.instance.state === "FAULT") ||
+            live.length < members.length ||
+            live.some((member) => member.instance.state === "FAULT") ||
             members.length < 2;
         return troubled ? "degraded" : "ok";
     })();
@@ -135,7 +136,12 @@ export function buildVrrpClusters(
 
     for (const state of states) {
         const site = siteOf(state.clientId);
-        for (const instance of state.instances ?? []) {
+        // A host whose keepalived stopped or cannot be read reports no instances. It stays in
+        // its clusters with the ones it last reported, marked as not reporting -- dropping it
+        // would leave the rest looking healthy with a node gone.
+        const reporting = (state.instances ?? []).length > 0 || !state.lastKnownInstances?.length;
+        const instances = reporting ? (state.instances ?? []) : (state.lastKnownInstances ?? []);
+        for (const instance of instances) {
             const vrid = instance.vrid ?? null;
             const bucketKey = `${site ?? ""}|${vrid ?? "?"}`;
             let bucket = buckets.get(bucketKey);
@@ -148,6 +154,7 @@ export function buildVrrpClusters(
             const member: VrrpClusterMember = {
                 clientId: state.clientId,
                 online: online.has(state.clientId),
+                reporting,
                 instance,
             };
 

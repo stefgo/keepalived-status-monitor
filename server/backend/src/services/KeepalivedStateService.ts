@@ -1,14 +1,17 @@
 import {
     KeepalivedState,
+    KeepalivedStatus,
     KeepalivedStatusSchema,
     VrrpCluster,
+    VrrpInstance,
+    VrrpInstanceSchema,
     WS_EVENTS,
     buildVrrpClusters,
     firstIssue,
 } from "@kasm/shared";
 import { logger } from "@kasm/shared/node";
 import { ClientRepository } from "../repositories/ClientRepository.js";
-import { KeepalivedStateRepository } from "../repositories/KeepalivedStateRepository.js";
+import { KeepalivedStateRepository, type KeepalivedStateRow } from "../repositories/KeepalivedStateRepository.js";
 import { ProxyService } from "./ProxyService.js";
 
 /**
@@ -29,16 +32,16 @@ export class KeepalivedStateService {
             return;
         }
 
-        const state: KeepalivedState = {
-            ...parsed.data,
-            clientId,
-            receivedAt: new Date().toISOString(),
-        };
+        const reading = parsed.data;
+        const lastInstances = this.lastInstancesAfter(reading, KeepalivedStateRepository.findByClientId(clientId));
+        const receivedAt = new Date().toISOString();
         KeepalivedStateRepository.upsert(
             clientId,
-            JSON.stringify(parsed.data),
-            state.receivedAt,
+            JSON.stringify(reading),
+            receivedAt,
+            lastInstances ? JSON.stringify(lastInstances) : null,
         );
+        const state = this.toState(clientId, reading, receivedAt, lastInstances);
         ProxyService.broadcastToDashboard({
             type: WS_EVENTS.KEEPALIVED_STATE_UPDATE,
             payload: state,
@@ -47,12 +50,12 @@ export class KeepalivedStateService {
 
     static getByClientId(clientId: string): KeepalivedState | null {
         const row = KeepalivedStateRepository.findByClientId(clientId);
-        return row ? this.fromRow(row.client_id, row.status, row.received_at) : null;
+        return row ? this.fromRow(row) : null;
     }
 
     static getAll(): KeepalivedState[] {
         return KeepalivedStateRepository.findAll()
-            .map((row) => this.fromRow(row.client_id, row.status, row.received_at))
+            .map((row) => this.fromRow(row))
             .filter((state): state is KeepalivedState => state !== null);
     }
 
@@ -70,13 +73,56 @@ export class KeepalivedStateService {
     }
 
     /**
+     * What to keep as the host's last known instances after this reading. A reading with
+     * instances replaces them. One of a stopped or unreadable keepalived carries none and
+     * keeps the previous ones, so the host stays in its clusters. One of a running, readable
+     * keepalived without instances clears them: the host really left its clusters.
+     */
+    private static lastInstancesAfter(
+        reading: KeepalivedStatus,
+        previous: KeepalivedStateRow | undefined,
+    ): VrrpInstance[] | null {
+        if (reading.instances.length > 0) {
+            // The counters change with every reading and say nothing about membership.
+            return reading.instances.map((instance) => ({ ...instance, stats: undefined }));
+        }
+        const silent = !reading.running || !!reading.error;
+        return silent && previous ? this.parseInstances(previous.last_instances) : null;
+    }
+
+    /** The state as the dashboard gets it: the last known instances only where there are no current ones. */
+    private static toState(
+        clientId: string,
+        reading: KeepalivedStatus,
+        receivedAt: string,
+        lastInstances: VrrpInstance[] | null,
+    ): KeepalivedState {
+        const state: KeepalivedState = { ...reading, clientId, receivedAt };
+        if (reading.instances.length === 0 && lastInstances?.length) state.lastKnownInstances = lastInstances;
+        return state;
+    }
+
+    /** A column written by an older build, or damaged, counts as nothing known. */
+    private static parseInstances(json: string | null): VrrpInstance[] | null {
+        if (!json) return null;
+        try {
+            const parsed = VrrpInstanceSchema.array().safeParse(JSON.parse(json));
+            return parsed.success ? parsed.data : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Parsed again on the way out: the row was written by an older build, possibly, and
      * a document that no longer fits is dropped rather than handed to the dashboard.
      */
-    private static fromRow(clientId: string, status: string, receivedAt: string): KeepalivedState | null {
+    private static fromRow(row: KeepalivedStateRow): KeepalivedState | null {
         try {
-            const parsed = KeepalivedStatusSchema.safeParse(JSON.parse(status));
-            return parsed.success ? { ...parsed.data, clientId, receivedAt } : null;
+            const parsed = KeepalivedStatusSchema.safeParse(JSON.parse(row.status));
+            return parsed.success
+                ? this.toState(row.client_id, parsed.data, row.received_at, this.parseInstances(row.last_instances))
+                : null;
         } catch {
             return null;
         }

@@ -16,8 +16,13 @@ export interface VrrpInstanceRow {
     instance: VrrpInstance;
     /** Rendered in front of the instance name -- the host, where the view spans several. */
     host?: ReactNode;
-    /** Dims a row whose host is offline: its state is the last one reported, not the present one. */
+    /**
+     * Dims a row whose host is offline or whose keepalived reports nothing: its state is the
+     * last one reported, not the present one.
+     */
     stale?: boolean;
+    /** Rendered next to the state badge -- why the state is not a current one, where it is not. */
+    stateNote?: ReactNode;
     /** Where the row leads -- the instance's cluster, or its host. Links inside the row keep their own target. */
     href?: string;
     /** Rendered in the leading column, where the view has one (see `leadingHeader`). */
@@ -121,9 +126,12 @@ export const VrrpInstanceView = ({
             tableHeader: "State",
             sortable: true,
             sortValue: (row) => row.instance.state,
-            tableItemRender: ({ instance }) => (
+            tableItemRender: ({ instance, stateNote }) => (
                 <>
-                    <VrrpStateBadge state={instance.state} />
+                    <div className="flex flex-wrap items-center gap-1">
+                        <VrrpStateBadge state={instance.state} />
+                        {stateNote}
+                    </div>
                     <div className="mt-1">
                         <WantedState instance={instance} />
                     </div>
@@ -160,7 +168,7 @@ export const VrrpInstanceView = ({
     const fields: DataListDef<VrrpInstanceRow>[] = [
         {
             listLabel: null,
-            listItemRender: ({ instance, host, leading }) => (
+            listItemRender: ({ instance, host, leading, stateNote }) => (
                 <div className="flex flex-wrap items-center gap-2 py-1">
                     {hasLeading && leading}
                     {host && <span className="font-medium text-text-primary">{host}</span>}
@@ -168,6 +176,7 @@ export const VrrpInstanceView = ({
                         {instance.name}
                     </span>
                     <VrrpStateBadge state={instance.state} />
+                    {stateNote}
                     <WantedState instance={instance} />
                 </div>
             ),

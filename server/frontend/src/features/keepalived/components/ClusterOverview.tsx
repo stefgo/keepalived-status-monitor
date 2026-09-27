@@ -12,10 +12,10 @@ import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { StatusDot } from "../../clients/components/StatusDot";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterLabel, clusterPath, clusterVipLabel } from "../lib/vrrp";
+import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
-import { VrrpStateBadge } from "./VrrpStateBadge";
+import { SilentBadge, VrrpStateBadge } from "./VrrpStateBadge";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
@@ -182,7 +182,10 @@ export const ClusterOverview = () => {
                 row.kind === "cluster" ? (
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
-                    <VrrpStateBadge state={row.member.instance.state} />
+                    <div className="flex flex-wrap items-center gap-1">
+                        <VrrpStateBadge state={row.member.instance.state} />
+                        <SilentBadge member={row.member} />
+                    </div>
                 ),
         },
         {
@@ -229,13 +232,14 @@ export const ClusterOverview = () => {
                                         child.kind === "member" && (
                                             <li
                                                 key={child.key}
-                                                className={`flex flex-wrap items-center gap-2 ${child.member.online ? "" : "opacity-60"}`}
+                                                className={`flex flex-wrap items-center gap-2 ${memberStale(child.member) ? "opacity-60" : ""}`}
                                             >
                                                 <HostLink row={child} />
                                                 <span className="text-text-secondary">
                                                     {child.member.instance.name}
                                                 </span>
                                                 <VrrpStateBadge state={child.member.instance.state} />
+                                                <SilentBadge member={child.member} />
                                             </li>
                                         ),
                                 )}
@@ -272,9 +276,9 @@ export const ClusterOverview = () => {
                     ? clusterPath(row.cluster, clusters)
                         ? "align-top"
                         : "align-top cursor-default hover:bg-transparent"
-                    : row.member.online
-                      ? "align-top"
-                      : "align-top opacity-60"
+                    : memberStale(row.member)
+                      ? "align-top opacity-60"
+                      : "align-top"
             }
             // A cluster row opens the cluster's page, a host row the host. `from` is how the
             // cluster page knows where back is.

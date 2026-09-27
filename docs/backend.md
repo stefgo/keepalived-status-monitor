@@ -32,7 +32,8 @@ server/backend/src/
 │       ├── 03_scheduler_state.ts          # scheduler_state: last run and state per scheduler
 │       ├── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
 │       ├── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
-│       └── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
+│       ├── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
+│       └── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -150,7 +151,7 @@ The server's side of **outbound** clients, the ones the server dials.
 - `disconnectClient(clientId)` — Cancels a pending reconnect and resets the ladder; used before deleting, reconnecting or re-addressing a client.
 
 #### `KeepalivedStateService`
-- `handleUpdate(clientId, payload)` — One `KEEPALIVED_UPDATE`: parsed against `KeepalivedStatusSchema` (loose, so an agent that reports more is never dropped; an unknown state word becomes `UNKNOWN`), stored as the client's reading in `keepalived_state`, and broadcast as `KEEPALIVED_STATE_UPDATE` with `clientId` and `receivedAt`. A malformed reading is logged with the client id and the field and discarded; the last good one stays stored.
+- `handleUpdate(clientId, payload)` — One `KEEPALIVED_UPDATE`: parsed against `KeepalivedStatusSchema` (loose, so an agent that reports more is never dropped; an unknown state word becomes `UNKNOWN`), stored as the client's reading in `keepalived_state`, and broadcast as `KEEPALIVED_STATE_UPDATE` with `clientId` and `receivedAt`. A malformed reading is logged with the client id and the field and discarded; the last good one stays stored. A reading with instances also becomes the client's `last_instances`; one of a stopped or unreadable keepalived keeps the previous ones, one of a running, readable keepalived without instances clears them. Where the reading has none, the state carries them as `lastKnownInstances`, which keeps the host in its clusters.
 - `getAll()` / `getByClientId(clientId)` — The stored readings, parsed again on the way out so a row an older build wrote cannot reach the dashboard in a shape it does not expect.
 - `getClusters()` — `buildVrrpClusters` from `@kasm/shared` over every reading, the ids `ProxyService` has connected and the `site` of every client, which is part of the cluster key (`<site>|<vrid>|<network>` — the
 virtual addresses are payload, not identity). The dashboard runs the same function over what it was pushed, so the endpoint and the page cannot disagree.
@@ -330,6 +331,7 @@ The backend uses **SQLite3** via `better-sqlite3` (synchronous API) for fast, em
 | `client_id`   | TEXT PK | FK → `clients(id)`, cascades on delete. No `PRAGMA` is needed: better-sqlite3 is built with `SQLITE_DEFAULT_FOREIGN_KEYS=1`; `ClientController.delete` removes the row explicitly as well. |
 | `status`      | TEXT    | JSON: the agent's last `KEEPALIVED_UPDATE` as it passed `KeepalivedStatusSchema`. |
 | `received_at` | TEXT    | ISO timestamp the server received it.                                    |
+| `last_instances` | TEXT | JSON: the instances of the last reading that had any, without counters _(migration 07)_. Kept while keepalived is stopped or unreadable; `NULL` once a running, readable keepalived reports none. |
 
 One row per client, overwritten by every reading: the history of state changes is the
 activity list, reported by the agents themselves.

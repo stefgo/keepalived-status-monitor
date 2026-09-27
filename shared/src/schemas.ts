@@ -591,6 +591,12 @@ export const KeepalivedStatusSchema = z.looseObject({
 export const KeepalivedStateSchema = KeepalivedStatusSchema.extend({
     clientId: z.string().min(1),
     receivedAt: z.string().min(1),
+    /**
+     * The instances of the last reading that had any, set by the server while keepalived is
+     * stopped or unreadable -- the reading itself carries none then. What keeps the host in
+     * its clusters, marked as not reporting, instead of dropping out of them.
+     */
+    lastKnownInstances: z.array(VrrpInstanceSchema).nullish(),
 });
 
 // ── Activity ─────────────────────────────────────────────────────────────────

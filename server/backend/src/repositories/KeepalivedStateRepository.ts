@@ -1,10 +1,14 @@
 import db from "../core/Database.js";
 
-/** A row of `keepalived_state` (migration 01). `status` is the agent's reading as JSON. */
+/**
+ * A row of `keepalived_state` (migrations 01 and 07). `status` is the agent's reading as
+ * JSON, `last_instances` the instances of its last reading that had any.
+ */
 export interface KeepalivedStateRow {
     client_id: string;
     status: string;
     received_at: string;
+    last_instances: string | null;
 }
 
 export class KeepalivedStateRepository {
@@ -18,11 +22,12 @@ export class KeepalivedStateRepository {
             .get(clientId) as KeepalivedStateRow | undefined;
     }
 
-    static upsert(clientId: string, status: string, receivedAt: string): void {
+    static upsert(clientId: string, status: string, receivedAt: string, lastInstances: string | null): void {
         db.prepare(
-            `INSERT INTO keepalived_state (client_id, status, received_at) VALUES (?, ?, ?)
-             ON CONFLICT(client_id) DO UPDATE SET status = excluded.status, received_at = excluded.received_at`,
-        ).run(clientId, status, receivedAt);
+            `INSERT INTO keepalived_state (client_id, status, received_at, last_instances) VALUES (?, ?, ?, ?)
+             ON CONFLICT(client_id) DO UPDATE SET status = excluded.status, received_at = excluded.received_at,
+                last_instances = excluded.last_instances`,
+        ).run(clientId, status, receivedAt, lastInstances);
     }
 
     /**
