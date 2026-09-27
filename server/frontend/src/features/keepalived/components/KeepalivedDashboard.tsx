@@ -26,7 +26,7 @@ const showAttention = () => {
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
- * and hosts that need a look. A healthy fleet shows four numbers and a line saying so.
+ * and hosts that need a look. A healthy fleet shows the four numbers and nothing else.
  */
 export const KeepalivedDashboard = () => {
     const navigate = useNavigate();
@@ -83,7 +83,7 @@ export const KeepalivedDashboard = () => {
                     value={String(warnings)}
                     icon={AlertTriangle}
                     // It counts the clusters and hosts listed below, not activity events -- so
-                    // it leads there. With none, the line below says that everything is fine.
+                    // it leads there.
                     onClick={showAttention}
                 />
             </div>
@@ -114,17 +114,9 @@ export const KeepalivedDashboard = () => {
                     </Card>
                 )}
 
-                {attention.length > 0 ? (
-                    attention.map((cluster) => <ClusterCard key={cluster.key} cluster={cluster} />)
-                ) : (
-                    <Card padding="md">
-                        <p className="text-text-secondary">
-                            {clusters.length === 0
-                                ? "No VRRP instances reported yet. Register an agent on a host running keepalived to see it here."
-                                : "Every VRRP cluster has exactly one MASTER and all members reporting."}
-                        </p>
-                    </Card>
-                )}
+                {attention.map((cluster) => (
+                    <ClusterCard key={cluster.key} cluster={cluster} />
+                ))}
             </div>
         </div>
     );

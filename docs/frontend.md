@@ -248,7 +248,7 @@ last one reported rather than the present state — the server keeps it for exac
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
 count), MASTER (with the FAULT count) and warnings — then a card listing online hosts without a
 usable reading (keepalived stopped or unreadable), then every cluster whose health is not
-`ok`. A healthy fleet shows the numbers and one line saying so.
+`ok`. A healthy fleet shows the numbers and nothing else.
 
 ### ClusterOverview & ClusterCard (`features/keepalived`)
 
