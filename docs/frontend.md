@@ -37,6 +37,7 @@ src/
 │   │   └── components/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
+│   │       ├── MasterList.tsx            # The instances in MASTER, opened from the dashboard
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
 │   │       ├── ClusterDetail.tsx         # One cluster: details, hosts, counters, history
 │   │       ├── ClusterHealthBadge.tsx    # A cluster's health, explained in the tooltip
@@ -251,10 +252,11 @@ and above) — then a card listing online hosts without a usable reading (keepal
 unreadable), then every cluster whose health is not `ok`. A healthy fleet shows the numbers
 and nothing else.
 
-Hosts online, VRRP clusters and errors / warnings open their list right beneath the cards —
-`ClientList`, `ClusterOverview`, and `ActivityView` with the level filter on `warning` — and
-close it on a second click. Only one list is open at a time and switching clears the search,
-since all three keep it in the same `search` parameter. MASTER still leads to `/clusters`.
+Every card opens its list right beneath the cards — `ClientList`, `ClusterOverview`,
+`MasterList` (each instance in MASTER on an online host: host, VRID, virtual IPs, state and
+last transition; a row opens its cluster) and `ActivityView` with the level filter on
+`warning` — and closes it on a second click. Only one list is open at a time and switching
+clears the search, since all of them keep it in the same `search` parameter.
 
 ### ClusterOverview & ClusterCard (`features/keepalived`)
 

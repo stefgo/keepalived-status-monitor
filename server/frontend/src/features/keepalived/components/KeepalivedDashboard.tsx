@@ -14,12 +14,13 @@ import { ClientList } from "../../clients/components/ClientList";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterOverview } from "./ClusterOverview";
+import { MasterList } from "./MasterList";
 
 /**
  * The list a card opens beneath the cards. One at a time: the lists keep their search in
  * the same `search` parameter, so two open at once would filter each other.
  */
-type Panel = "hosts" | "clusters" | "activity";
+type Panel = "hosts" | "clusters" | "masters" | "activity";
 const PANEL_ID = "dashboard-panel";
 
 /**
@@ -94,8 +95,9 @@ export const KeepalivedDashboard = () => {
                     value={String(summary.masters)}
                     sub={summary.faults > 0 ? `${summary.faults} in FAULT` : undefined}
                     icon={Crown}
-                    // The cluster list shows who is MASTER where.
-                    onClick={() => navigate("/clusters")}
+                    onClick={() => togglePanel("masters")}
+                    selected={panel === "masters"}
+                    aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="Errors / Warnings"
@@ -116,6 +118,7 @@ export const KeepalivedDashboard = () => {
                         />
                     )}
                     {panel === "clusters" && <ClusterOverview />}
+                    {panel === "masters" && <MasterList />}
                     {panel === "activity" && <ActivityView initialLevel="warning" />}
                 </div>
             )}
