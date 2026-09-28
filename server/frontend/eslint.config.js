@@ -45,6 +45,10 @@ export default defineConfig([
             ecmaVersion: 2020,
             globals: globals.browser,
             parserOptions: {
+                // The editor's ESLint server loads this config and the root one in
+                // the same process; without an explicit root the parser sees two
+                // inferred candidates and refuses every file.
+                tsconfigRootDir: import.meta.dirname,
                 ecmaVersion: "latest",
                 ecmaFeatures: { jsx: true },
                 sourceType: "module",

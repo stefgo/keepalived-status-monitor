@@ -24,6 +24,10 @@ export default defineConfig([
             ecmaVersion: "latest",
             sourceType: "module",
             globals: globals.node,
+            // Explicit, because the editor's ESLint server also loads the frontend
+            // config in this process and the parser would otherwise see two
+            // inferred roots.
+            parserOptions: { tsconfigRootDir: import.meta.dirname },
         },
         rules: {
             // A `let` that a closure reads before anything assigns it cannot become a
