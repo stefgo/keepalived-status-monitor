@@ -251,7 +251,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         onChange={(e) => set("bodyTemplate", e.target.value)}
                         error={preview.error}
                         spellCheck={false}
-                        classNames={{ textarea: "font-mono text-xs" }}
+                        classNames={{ textarea: "font-mono text-xs sm:text-xs" }}
                     />
                     <div>
                         <label className="field-label">Preview (sample event)</label>
