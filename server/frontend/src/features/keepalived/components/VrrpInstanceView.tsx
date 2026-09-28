@@ -18,15 +18,15 @@ export interface VrrpInstanceRow {
     /** Rendered in front of the instance name -- the host, where the view spans several. */
     host?: ReactNode;
     /**
-     * Dims a row whose host is offline or whose keepalived reports nothing: its state is the
-     * last one reported, not the present one. Dimmed cell by cell, so `stateNote` is not.
+     * Dims a row whose host is offline or whose keepalived reports nothing: what it shows is
+     * the last report, not the present state. Dimmed cell by cell, so the state is not.
      */
     stale?: boolean;
     /**
-     * Rendered next to the state badge -- why the state is not a current one, where it is
-     * not. Never dimmed with its row: it is the part of it that is current.
+     * Rendered in place of the instance's state badge -- where the row's state is not a current
+     * one, what is current instead. Never dimmed with its row.
      */
-    stateNote?: ReactNode;
+    stateBadge?: ReactNode;
     /** Where the row leads -- the instance's cluster, or its host. Links inside the row keep their own target. */
     href?: string;
     /** Rendered in the leading column, where the view has one (see `leadingHeader`). */
@@ -39,8 +39,6 @@ interface VrrpInstanceViewProps {
     /** Off where every row belongs to the same virtual router. */
     showVrid?: boolean;
     title?: ReactNode;
-    /** Rendered in the card header next to the view toggle. */
-    extraActions?: ReactNode;
     /** Shown in place of the rows when there are none. */
     emptyMessage?: string;
     /**
@@ -65,18 +63,25 @@ export const Priority = ({ instance }: { instance: VrrpInstance }) => {
     );
 };
 
-/** The configured state, where keepalived was told to start in another one than it is in now. */
-const WantedState = ({ instance }: { instance: VrrpInstance }) =>
-    instance.wantedState && instance.wantedState !== "UNKNOWN" && instance.wantedState !== instance.state ? (
+/**
+ * The configured state, where keepalived was told to start in another one than it is in now.
+ * Not on a stale row: its state is the last one reported, and what it differs from is not news.
+ */
+const WantedState = ({ row: { instance, stale } }: { row: VrrpInstanceRow }) =>
+    !stale && instance.wantedState && instance.wantedState !== "UNKNOWN" && instance.wantedState !== instance.state ? (
         <span className="text-xs text-text-muted">configured {vrrpStateLabel(instance.wantedState)}</span>
     ) : null;
+
+/** The row's state: its `stateBadge` where it brings one, the instance's state otherwise. */
+const State = ({ row }: { row: VrrpInstanceRow }) =>
+    row.stateBadge ?? <VrrpStateBadge state={row.instance.state} />;
 
 export const Vips = ({ instance }: { instance: VrrpInstance }) =>
     instance.vips.length > 0 ? <>{instance.vips.map((vip) => <div key={vip}>{vip}</div>)}</> : <>–</>;
 
 const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTransition, { seconds: true });
 
-/** The dimming of a stale row, applied per cell rather than to the row -- see `stateNote`. */
+/** The dimming of a stale row, applied per cell rather than to the row -- see `stateBadge`. */
 const dim = (row: VrrpInstanceRow) => (row.stale ? "opacity-60" : "");
 
 /** A list field's content, dimmed where its row is stale. */
@@ -92,7 +97,6 @@ export const VrrpInstanceView = ({
     showHost = false,
     showVrid = true,
     title,
-    extraActions,
     emptyMessage = "No VRRP instances.",
     leadingHeader,
 }: VrrpInstanceViewProps) => {
@@ -140,14 +144,9 @@ export const VrrpInstanceView = ({
             sortValue: (row) => row.instance.state,
             tableItemRender: (row) => (
                 <>
-                    <div className="flex flex-wrap items-center gap-1">
-                        <span className={dim(row)}>
-                            <VrrpStateBadge state={row.instance.state} />
-                        </span>
-                        {row.stateNote}
-                    </div>
-                    <div className={cn("mt-1", dim(row))}>
-                        <WantedState instance={row.instance} />
+                    <State row={row} />
+                    <div className="mt-1">
+                        <WantedState row={row} />
                     </div>
                 </>
             ),
@@ -189,13 +188,8 @@ export const VrrpInstanceView = ({
                     <span className={cn(row.host ? "text-text-secondary" : "font-medium text-text-primary", dim(row))}>
                         {row.instance.name}
                     </span>
-                    <span className={dim(row)}>
-                        <VrrpStateBadge state={row.instance.state} />
-                    </span>
-                    {row.stateNote}
-                    <span className={dim(row)}>
-                        <WantedState instance={row.instance} />
-                    </span>
+                    <State row={row} />
+                    <WantedState row={row} />
                 </div>
             ),
         },
@@ -243,7 +237,6 @@ export const VrrpInstanceView = ({
     return (
         <DataMultiView
             title={title}
-            extraActions={extraActions}
             // One key for every instance view: the choice is about how to read instances,
             // not about a particular host or cluster.
             viewMode={{ persist: { key: "vrrpInstanceViewMode", scope: "local" } }}

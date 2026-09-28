@@ -1,8 +1,7 @@
-import { useCallback, useMemo } from "react";
-import { buildVrrpClusters, CLIENT_STATUS, type VrrpCluster } from "@kasm/shared";
+import { useMemo } from "react";
+import { buildVrrpClusters, CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
-import { clusterPath } from "../lib/vrrp";
 
 /**
  * The clusters as the server would compute them, recomputed here on every reading and every
@@ -23,11 +22,3 @@ export function useVrrpClusters() {
     }, [states, clients]);
 }
 
-/**
- * `clusterPath` against the clusters of the moment: whether a cluster needs `?net=` depends
- * on whether another one shares its site and VRID.
- */
-export function useClusterPath() {
-    const clusters = useVrrpClusters();
-    return useCallback((cluster: VrrpCluster) => clusterPath(cluster, clusters), [clusters]);
-}

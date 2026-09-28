@@ -8,13 +8,12 @@ export const VrrpStateBadge = ({ state }: { state: VrrpState }) => (
 );
 
 /**
- * Next to the state of a member whose state is not current: "Offline" where its agent is not
- * connected, "Not Active" where it is but keepalived on the host is stopped or unreadable.
- * The state beside it is then the last one reported, which this keeps from being read as
- * current; the tooltip names it too, for where this badge stands in for it. Rendered outside
- * the dimming of its row, so it stays legible.
+ * In place of the state of a member whose state is not current: "Offline" where its agent is
+ * not connected, "Not Active" where it is but keepalived on the host is stopped or unreadable.
+ * The last reported state goes into the tooltip, so it is not read as current. Rendered
+ * outside the dimming of its row, so it stays legible.
  */
-export const MemberStatusBadge = ({ member }: { member: VrrpClusterMember }) => {
+const MemberStatusBadge = ({ member }: { member: VrrpClusterMember }) => {
     const reading = useKeepalivedStore((s) => s.states[member.clientId]);
     const last = `last reported state: ${vrrpStateLabel(member.instance.state)}`;
     if (!member.online) {

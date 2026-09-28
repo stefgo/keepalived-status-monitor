@@ -1,12 +1,11 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
-import { Card, FOCUS_RING, StatCard, cn } from "@stefgo/react-ui-components";
+import { StatCard } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { useActivityStore } from "../../../stores/useActivityStore";
-import { clientName } from "../../../utils";
 import { ActivityView } from "../../activity/components/ActivityView";
 import { groupActivity } from "../../activity/lib/groupActivity";
 import { ClientList } from "../../clients/components/ClientList";
@@ -30,7 +29,7 @@ const toPanel = (value: string | null): Panel | null =>
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
- * and hosts that need a look. A healthy fleet shows the four numbers and nothing else.
+ * that need a look. A healthy fleet shows the four numbers and nothing else.
  */
 export const KeepalivedDashboard = () => {
     const navigate = useNavigate();
@@ -64,16 +63,11 @@ export const KeepalivedDashboard = () => {
         const online = clients.filter((client) => client.status === CLIENT_STATUS.ONLINE);
         const onlineStates = online.map((client) => states[client.id]).filter(Boolean);
         const instances = onlineStates.flatMap((state) => state.instances);
-        const troubledHosts = online.filter((client) => {
-            const state = states[client.id];
-            return state && (!state.running || state.error);
-        });
         return {
             online: online.length,
             instances: instances.length,
             masters: instances.filter((instance) => instance.state === "MASTER").length,
             faults: instances.filter((instance) => instance.state === "FAULT").length,
-            troubledHosts,
         };
     }, [clients, states]);
 
@@ -142,31 +136,6 @@ export const KeepalivedDashboard = () => {
             )}
 
             <div className="space-y-6">
-                {summary.troubledHosts.length > 0 && (
-                    <Card title="Hosts without a reading" titleAs="h3" padding="md">
-                        <ul className="space-y-2">
-                            {summary.troubledHosts.map((client) => {
-                                const state = states[client.id];
-                                return (
-                                    <li key={client.id} className="text-sm">
-                                        <button
-                                            type="button"
-                                            className={cn("rounded-sm font-medium text-text-primary hover:text-primary", FOCUS_RING)}
-                                            onClick={() => navigate(`/client/${client.id}`)}
-                                        >
-                                            {clientName(client)}
-                                        </button>
-                                        <span className="text-text-secondary">
-                                            {" — "}
-                                            {state?.running ? state.error : "keepalived is not running"}
-                                        </span>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </Card>
-                )}
-
                 {attention.map((cluster) => (
                     <ClusterCard key={cluster.key} cluster={cluster} />
                 ))}

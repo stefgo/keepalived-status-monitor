@@ -1,15 +1,13 @@
 import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
 import { Checkbox } from "@stefgo/react-ui-components";
 import type { VrrpCluster } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { clientName } from "../../../utils";
 import { StatusDot } from "../../clients/components/StatusDot";
-import { useClusterPath } from "../hooks/useVrrpClusters";
 import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { VrrpInstanceView } from "./VrrpInstanceView";
-import { MemberStatusBadge } from "./VrrpStateBadge";
+import { MemberStateBadge } from "./VrrpStateBadge";
 
 export interface ClusterCompare {
     /** Whether the member with this `memberKey` is compared. */
@@ -21,7 +19,7 @@ export interface ClusterCompare {
 interface ClusterCardProps {
     cluster: VrrpCluster;
     /**
-     * Replaces the cluster's addresses, VRID, site and health in the card header -- for the
+     * Replaces the cluster's VRID, addresses and health in the card header -- for the
      * cluster's own page, whose header says all of that already.
      */
     title?: ReactNode;
@@ -32,14 +30,11 @@ interface ClusterCardProps {
 /**
  * One virtual router and every host that takes part in it. The instance view is the card
  * itself: it brings its own, and a second one around it would nest two frames. A row opens
- * that host; the title opens the cluster's page.
+ * that host.
  */
 export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
-    const { pathname } = useLocation();
     const clients = useClientStore((s) => s.clients);
-    const clusterPath = useClusterPath();
-    const path = clusterPath(cluster);
-    const vipLabel = <span className="font-mono">{clusterVipLabel(cluster)}</span>;
+    const label = `VRID ${cluster.vrid ?? "?"}: ${clusterVipLabel(cluster)}`;
 
     const compared = compare ? cluster.members.filter((m) => compare.selected(memberKey(m))).length : 0;
 
@@ -53,25 +48,11 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
             title={
                 title ?? (
                     <span className="flex flex-wrap items-center gap-2">
-                        {path ? (
-                            <Link to={path} state={{ from: pathname }} className="hover:text-primary">
-                                {vipLabel}
-                            </Link>
-                        ) : (
-                            vipLabel
-                        )}
-                        <span className="text-sm font-normal text-text-muted">
-                            VRID {cluster.vrid ?? "?"}
-                        </span>
-                        {cluster.site && (
-                            <span className="text-sm font-normal text-text-muted">
-                                Site {cluster.site}
-                            </span>
-                        )}
+                        {label}
+                        <ClusterHealthBadge health={cluster.health} />
                     </span>
                 )
             }
-            extraActions={title === undefined && <ClusterHealthBadge health={cluster.health} />}
             leadingHeader={
                 compare && (
                     <Checkbox
@@ -94,7 +75,7 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                         href: `/client/${member.clientId}`,
                         instance: member.instance,
                         stale: memberStale(member),
-                        stateNote: <MemberStatusBadge member={member} />,
+                        stateBadge: <MemberStateBadge member={member} />,
                         host: (
                             <span className="flex items-center gap-2">
                                 <StatusDot online={member.online} />

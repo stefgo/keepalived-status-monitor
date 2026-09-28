@@ -35,7 +35,7 @@ src/
 │   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
 │   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the stores, recomputed live
 │   │   └── components/
-│   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, hosts without a reading, clusters in trouble
+│   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── MasterList.tsx            # The instances in MASTER, opened from the dashboard
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
@@ -256,8 +256,7 @@ last one reported rather than the present state — the server keeps it for exac
 
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
 count), MASTER (with the FAULT count) and errors / warnings (unseen activity rows at `warning`
-and above) — then a card listing online hosts without a usable reading (keepalived stopped or
-unreadable), then every cluster whose health is not `ok`. A healthy fleet shows the numbers
+and above) — then every cluster whose health is not `ok`. A healthy fleet shows the numbers
 and nothing else.
 
 Every card opens its list right beneath the cards — `ClientList`, `ClusterOverview`,
@@ -289,8 +288,8 @@ The search matches VRID, site, network, address, host and instance name and keep
 cluster when one of its hosts matches. The list view, which narrow screens always get, shows
 one entry per cluster with its hosts inside it; its addresses open the cluster's page.
 
-`ClusterCard` is the same cluster as a single card — the virtual addresses (a link to the
-cluster's page) and VRID as its title, a `VrrpInstanceView` with a host column as its body,
+`ClusterCard` is the same cluster as a single card — `VRID <vrid>: <virtual addresses>` and
+its health badge as its title, a `VrrpInstanceView` with a host column as its body,
 where a row opens the host. It leaves out the VRID (`showVrid={false}`), which is part of the
 cluster's identity and the same on every row. The virtual addresses are not: they belong to
 the host that carries them, and a member serving a short list is read off them. Like the
@@ -356,7 +355,11 @@ advertisement interval are in the list only, to keep the table narrow. Every car
 own toggle, and the choice is stored under one key (`vrrpInstanceViewMode`) for all of them.
 A narrow screen always gets the list. Rows keep the caller's order until a column (instance,
 state, priority) is sorted. A row with an `href` opens it and passes the current path as
-`from`, which the page it opens uses as the way back. `VrrpStateBadge` gives every state one colour, everywhere:
+`from`, which the page it opens uses as the way back. A row can bring its own state badge: the
+cluster card passes `MemberStateBadge`, so a member whose agent is offline or whose keepalived
+reports nothing shows "Offline" or "Not Active" in place of its state, with the last reported
+state in the tooltip and the rest of the row dimmed — as in the cluster list. The configured
+state is left out on such a row. `VrrpStateBadge` gives every state one colour, everywhere:
 MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the rest `neutral`.
 
 `Escape` on a detail page is handled by `hooks/useEscapeToLeave`. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
