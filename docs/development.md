@@ -9,11 +9,9 @@ Development is performed inside Docker containers to ensure a consistent, platfo
 ### Prerequisites
 
 - Docker and Docker Compose (or Docker Desktop)
-- A `.env` file in the root directory (excluded from git). Must contain at minimum:
-
-```env
-NPM_TOKEN=<your-token>
-```
+- A token that can read GitHub Packages, for `@stefgo/react-ui-components`, in `NPM_TOKEN`.
+  The commands below take it from the GitHub CLI (`gh auth token`); a `.env` file in the root
+  directory (excluded from git) with `NPM_TOKEN=<your-token>` works as well.
 
 ### Starting the Development Environment
 

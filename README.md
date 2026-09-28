@@ -23,9 +23,13 @@ next to each keepalived and a central Fastify/React server with a dashboard and 
 - **Failover history:** Every state change is recorded with keepalived's own timestamp and a
   severity — a MASTER stepping down is a warning, FAULT an error. The agent compares its
   readings itself, so a failover during a server outage is reported once it is back.
+- **Cluster events:** The server reports what no single host can see — a new master, a split
+  brain, a lost master — once every live host has confirmed it, and opens, updates and
+  resolves incidents for the clusters that are not healthy.
+- **Webhooks:** Events go to a chat channel, a push service or an endpoint of your own, each
+  webhook with a JSON body template of its own, filtered by level and event kind.
 - **Counters:** keepalived's per-instance statistics (advertisements, priority-zero packets,
-  authentication errors, …), on each instance's page next to those of the other hosts in its
-  cluster.
+  authentication errors, …), on each cluster's page, side by side for its hosts.
 - **Real-time:** Agents push their readings over WebSockets; the dashboard updates live.
 - **Nothing sensitive leaves the host:** The agent reads keepalived's state dump and passes on
   only the fields it names — `auth_pass` and the rest of the configuration stay on the host.
@@ -63,6 +67,7 @@ The full documentation is published at
 - [Backend Architecture](https://stefgo.github.io/keepalived-status-monitor/backend/) — Services, repositories, database schema, and authentication flows.
 - [Frontend Architecture](https://stefgo.github.io/keepalived-status-monitor/frontend/) — React feature structure, stores, and routing.
 - [Client Agent](https://stefgo.github.io/keepalived-status-monitor/client/) — Agent architecture and how it reads keepalived.
+- [Webhooks](https://stefgo.github.io/keepalived-status-monitor/webhooks/) — Reporting events to other services, body templates and examples.
 - [Development & Deployment](https://stefgo.github.io/keepalived-status-monitor/development/) — Dev environment setup, build pipeline, and multi-arch deployment.
 
 ## 🐳 Quick Start (Docker Compose)
@@ -121,7 +126,7 @@ services:
             - /tmp
         volumes:
             - ./client-config.yaml:/app/client/config.yaml
-            # The agent's own state: its last reading and unacknowledged activity.
+            # The agent's own state: its identity, last reading and unacknowledged activity.
             - client-data:/app/client/data
         restart: unless-stopped
         environment:
@@ -134,13 +139,15 @@ volumes:
 1. Copy `client/config.example.yaml` to `client-config.yaml`. If your `keepalived.conf` moves
    the dump files (`state_dump_file`, `stats_dump_file`), set the same paths under
    `keepalived:`. Make the file belong to root (`sudo chown root: client-config.yaml`):
-   the agent has no `DAC_OVERRIDE` and could not save its registration otherwise.
+   the agent has no `DAC_OVERRIDE` and could not write the server URL of a registration
+   back into it otherwise.
 2. In the server dashboard choose **Add Client** and pick "The agent connects to this server"
    to get a registration token — the wizard also takes the display name and allowed address
    the client should start with. Start the agent and open its web UI at
    `http://<host>:3011/register`. Enter the server URL, the token and the **setup PIN** the
-   agent prints to its log (`docker logs kasm-client`). The agent then writes the permanent
-   `authToken` to the config file.
+   agent prints to its log (`docker logs kasm-client`). The agent then stores the identity
+   the server issued — its client id and permanent `authToken` — as `identity.json` in its
+   data volume.
 3. Run `docker compose up -d`.
 
 ## 🔧 Development

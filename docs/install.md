@@ -166,6 +166,7 @@ file is no longer read.
 | `enableStatusPage` / `enableRegisterPage` | Serve the status page and the registration page with `POST /api/register` (both default `true`). The registration page closes by itself once the agent is registered. |
 | `allowSelfSignedCertificates` | Accept a server certificate that does not validate (self-signed), for registration and the WebSocket connection. Default `false`. |
 | `allowedNetworks` | IPv4 addresses or CIDR networks the **server** may dial this agent from, checked on `/ws/register` and `/ws/agent`. Empty (default) allows every address. The local web UI is not restricted by it. An invalid entry stops the agent with a log line naming it. |
+| `tls.cert` / `tls.key` | Serve the agent's web server over TLS, so the server can dial it as `wss://`. Unset (default): plain HTTP. A block that cannot be read ends the start. See [TLS to an Outbound Agent](#tls-to-an-outbound-agent). |
 
 #### Server Config (`server/config.yaml`)
 
@@ -194,6 +195,7 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 | `port`                     | —               | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set. The published port: `EXPOSE`, the compose port mapping and every agent's `serverUrl` have to follow it. |
 | `security`                 | `allowed_networks` | IPv4 addresses or CIDR networks an agent may open `/ws/agent` from, for all agents alike. Empty (default) allows every address. |
 |                            | `hsts`          | Send `Strict-Transport-Security` (default `false`). Enable only when the dashboard is served exclusively over HTTPS — browsers remember the header for months. Requires a restart. |
+|                            | `allow_self_signed_agent_certificates` | Accept a certificate the server cannot verify when it dials an outbound agent over `wss://` (default `false`). See [TLS to an Outbound Agent](#tls-to-an-outbound-agent). |
 
 ## First Login
 
@@ -282,9 +284,9 @@ server registers (outbound). An inbound agent's register page closes once it is 
 
 **`client-config.yaml` has to belong to root** (`sudo chown root: client-config.yaml`).
 Without `DAC_OVERRIDE` root in the container can write only files it owns; a file belonging
-to the operator's user stays readable, but the identity from registration is not saved
-(`Failed to save config.yaml` in the agent's log) and the agent has to be registered again
-after a restart.
+to the operator's user stays readable, but the server URL of a registration through the web
+UI is not written back (`Failed to save config.yaml` in the agent's log). The identity itself
+is not affected: it goes to `identity.json` in the data volume.
 
 None of this closes the two paths above. That takes a custom seccomp profile (Docker's default
 without `ptrace`, `process_vm_readv` and `process_vm_writev` — reading `/proc/<pid>/root`

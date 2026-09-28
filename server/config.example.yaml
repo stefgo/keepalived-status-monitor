@@ -39,7 +39,8 @@ settings:
     # (manual runs via the Settings page still work).
     token_cleanup_interval_hours: "24"
 
-    # Activity log: entries older than this many days are removed ("0" disables expiry).
+    # Activity log: entries older than this many days are removed. "0" does not disable
+    # expiry: it falls back to the default of 90 days.
     notification_retention_days: "90"
     # The most recent entries that are always kept, however old ("0" disables).
     notification_retention_count: "500"

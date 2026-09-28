@@ -26,7 +26,9 @@ server/backend/src/
 │       └── Heartbeat.ts                   # Shared ping/pong heartbeat for all WebSocket kinds
 ├── core/                                  # Core infrastructure
 │   ├── Database.ts                        # SQLite initialization & migration runner
+│   ├── HealthFile.ts                      # Writes the address the container HEALTHCHECK asks
 │   └── migrations/
+│       ├── context.ts                     # MigrationContext: the database Umzug hands a migration
 │       ├── 00_initial.ts                  # users, clients, registration_tokens, activity
 │       ├── 01_keepalived_state.ts         # keepalived_state: the last reading per client
 │       ├── 02_client_site.ts              # clients.site: part of the VRRP cluster key
@@ -40,6 +42,7 @@ server/backend/src/
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
+│   ├── HealthRepository.ts                # SELECT 1 for the liveness probe
 │   ├── KeepalivedStateRepository.ts       # keepalived_state access
 │   ├── SchedulerStateRepository.ts        # scheduler_state access
 │   ├── TokenRepository.ts
@@ -90,10 +93,11 @@ All routes are registered as a single Fastify plugin under the `/api` prefix. Pr
 - Session: `GET /api/v1/me` — id, username and expiry of the current session
 - Users: `GET/POST /api/v1/users`, `PUT/DELETE /api/v1/users/:userId`
 - Clients: `GET /api/v1/clients`, `POST /api/v1/clients/outbound`, `PUT/DELETE /api/v1/clients/:clientId`, `POST /api/v1/clients/:clientId/reconnect`
-- Tokens: `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/:token`
+- Tokens: `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/:tokenHash`
 - keepalived: `GET /api/v1/keepalived/states`, `GET /api/v1/keepalived/clusters`, `GET /api/v1/clients/:clientId/keepalived`, `POST /api/v1/clients/:clientId/keepalived/refresh`
 - Settings: `GET/PUT /api/v1/settings/cleanup`, `POST /api/v1/settings/cleanup/{invalid-tokens,notifications}`, `GET /api/v1/settings/scheduler-status`
 - Activity: `GET/DELETE /api/v1/activity`, `POST /api/v1/activity/seen`
+- Webhooks: `GET/POST /api/v1/webhooks`, `POST /api/v1/webhooks/test`, `PUT/DELETE /api/v1/webhooks/:webhookId`
 
 The full reference is in [api.md](api.md).
 
@@ -126,6 +130,7 @@ const { username, password, auth_methods } = parsed.data;
 | `KeepalivedController`  | Every client's last reading, the clusters built from them, one client's reading, asking one agent to read now. |
 | `ActivityController`    | The activity list, per-user seen state, deletion of all of it.               |
 | `SettingsController`    | Retrieve/update the `settings` block of `config.yaml` (never `security`), trigger manual cleanups. |
+| `WebhookController`     | Webhook CRUD and the test delivery of an unsaved configuration.               |
 | `WebSocketController`   | Dashboard and agent WebSocket lifecycle (auth, heartbeat, message routing).   |
 
 ### 3. Services (`src/services/`)
@@ -234,6 +239,8 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 | `ActivityRepository`     | `activity`, `activity_seen`              | Batch insert with primary-key dedup, seen state, deletion, retention. |
 | `SchedulerStateRepository` | `scheduler_state`                      | Mark a run started and finished, save and read the state a scheduler carries, turn runs cut off by a restart into `interrupted` ones. |
 | `WebhookRepository`      | `webhooks`                               | CRUD, the enabled ones for a dispatch, the result of the last delivery. |
+| `VrrpClusterRepository`  | `vrrp_cluster`                           | Read and upsert the confirmed row per cluster, delete the rows of clusters that are gone. |
+| `HealthRepository`       | —                                        | `SELECT 1` for `GET /api/health`; touches no table.              |
 
 ### 5. WebSocket Controller (`src/controllers/WebSocketController.ts`)
 
@@ -382,7 +389,8 @@ activity list, reported by the agents themselves.
 | `received_at`    | TEXT    | The server's clock. Tells a late arrival from a recent event, and exposes a wrong agent clock. |
 
 Indexed on `occurred_at DESC` and on `correlation_id`. There is no message column: the text
-is written in the frontend out of `kind` and `data`.
+is composed out of `kind` and `data` by `activityMessage` in `@kasm/shared`, for the dashboard
+and the webhooks alike.
 
 **`activity_seen`** _(migration 05)_
 
@@ -487,9 +495,11 @@ Checked are types and value ranges: whole numbers and `true`/`false` in `setting
 | `jwtExpiresIn`      | JWT session lifetime (e.g. `"24h"`). Defaults to `"12h"`; tokens always expire. Also enforced as `maxAge` on verification, so tokens issued without an expiry are retired by age. |
 | `oidc`              | OIDC provider settings (`enabled`, `issuer`, `client_id`, etc.).  |
 | `logLevel`          | pino level; `LOG_LEVEL` wins when set.                            |
+| `port`              | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set.   |
 | `settings`          | Operator settings (stored as strings, defaults in `AppSettingsSchema`): `token_*`, `notification_*`. See [Get Settings](api.md#get-settings). |
 | `security.allowed_networks`  | IPv4 addresses or CIDR ranges permitted to connect as agents. The per-client address lives in `clients.inbound_allowed_ip`, editable via `PUT /clients/:id`; network matching is `@kasm/shared`'s `network.ts`, shared with the agent and the client editor. |
 | `security.hsts`              | Send `Strict-Transport-Security` (default `false`). Read at startup. |
+| `security.allow_self_signed_agent_certificates` | Accept an outbound agent's certificate that does not verify, for `wss://` target addresses (default `false`). |
 
 ---
 

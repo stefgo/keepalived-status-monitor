@@ -1,3 +1,5 @@
+# 🖥️ Frontend Architecture
+
 This documentation describes in detail the architecture, components, and state management of the frontend (`server/frontend`). The application is a **Single Page Application (SPA)** based on React, Vite, TypeScript, and Tailwind CSS.
 
 ## 📂 Project Structure
@@ -67,8 +69,10 @@ src/
 │   │       └── UserDialog.tsx
 │   ├── settings/                         # The settings page's sections
 │   │   ├── sections.ts                   # The two tabs and the keys each one saves
+│   │   ├── lib/runResult.ts              # describeRunResult: a scheduler run's result in words
 │   │   └── components/
 │   │       ├── SettingsSections.tsx      # One component per section
+│   │       ├── SchedulerBox.tsx          # Status, last and next run of a scheduler, and Run Now
 │   │       └── SettingsParts.tsx         # Section header, field captions and the other shared pieces
 │   └── tokens/                           # Registration token management
 │       ├── confirmations.ts              # Delete-token text
@@ -96,6 +100,7 @@ src/
 │   ├── useActivityStore.ts               # The activity list and the per-user seen state
 │   ├── useSchedulerStore.ts              # Status of the schedulers the server runs
 │   └── useUIStore.ts                     # UI state (sidebar collapse, persisted)
+├── Main.tsx                              # Entry point: mounts the app
 └── utils.ts                              # General utility functions
 ```
 
@@ -223,7 +228,7 @@ Every question before an action, and every notice after a failed one, goes throu
 - An action whose outcome is worth waiting for — a delete — goes in `onConfirm`. The dialog stays open and busy until it settles; a rejection keeps it open with the error inside it, next to the button that retries. That is why the store's delete actions throw rather than reporting the failure themselves.
 - `alert(describeFailure(title, error))` from `utils.ts` reports a failure of an action that was not asked about first, such as the cleanups in Settings.
 
-**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`), one `describeX(...)` per action, returning the complete options including `variant`. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
+**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
 
 ### AddClientWizard (`features/clients/components/add-client`)
 
@@ -372,7 +377,7 @@ event is about and the facts of that kind.
 **The text is written in one place.** `activityText.ts` in `@kasm/shared` is the one place a
 wording exists — the webhooks send the same sentence as `{{event.message}}`: an agent
 reports `vrrp.state_changed` with the two states and nothing else, and the sentence —
-"VRRP instance VI_WEB: MASTER → BACKUP" — is composed from that. So an agent of an older version stays useful without knowing how today's
+"VRRP instance VI_WEB: Master → Backup" — is composed from that. So an agent of an older version stays useful without knowing how today's
 dashboard phrases things, a wording can be changed without asking a fleet of hosts to
 update, and the level filter works on `level` rather than on a search through prose. A
 kind this build does not know still gets a row — the fallback prints the kind itself, because
@@ -380,8 +385,9 @@ dropping the line would hide an observation nobody can make again.
 
 **Rows are groups.** `groupActivity.ts` folds the flat list by `correlationId`: a summarising
 event is the head, the rest are its expandable steps (`ActivityGroupSteps`, with an `N steps`
-badge). None of today's kinds carries a `correlationId`, so every row is a single event; the
-mechanism stays for kinds that will. The head carries the most
+badge). Today the VRRP incidents are grouped this way: `vrrp.incident_opened` heads its
+updates and its resolution, which share the incident's id; every other event is a row of its
+own. The head carries the most
 severe level in the group, so a run whose last step failed does not read as an untroubled
 one. Grouping is a lookup, not a guess — whoever caused the group put its id on every member
 — so nothing depends on arrival order and an event delayed by an offline stretch still lands
@@ -500,7 +506,7 @@ Always switch all three together; otherwise the compiler checks one version of t
 
 ## 📦 UI Library (`@stefgo/react-ui-components`)
 
-The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an exact version (4.1.0). Components used:
+The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an exact version (4.3.1). Components used:
 
 | Component / Type       | Usage                                                     |
 | :--------------------- | :-------------------------------------------------------- |

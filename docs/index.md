@@ -66,20 +66,25 @@ Details, the permissions this needs and the JSON dump alternative are in
 ## Clusters and their health
 
 The server — and the dashboard, with the same function from `shared` — groups the instances
-of all hosts into **clusters**: instances with the same VRID and the same virtual addresses
-answer for the same virtual router. A VRID alone is only unique per network segment, which is
-why the addresses are part of the key.
+of all hosts into **clusters**: instances with the same site, the same VRID and a shared
+network answer for the same virtual router. A VRID alone is only unique per broadcast domain,
+which is why the network the virtual addresses sit on is part of the key. The addresses
+themselves are not — they are what KASM watches, so hosts that disagree about them stay one
+cluster and are reported as such.
 
 | Health | Means |
 |---|---|
-| **Healthy** | Exactly one online member is MASTER, every member reports. |
+| **Healthy** | Exactly one live member (agent online, keepalived reporting) is MASTER, every member is live and none is in FAULT. |
 | **Degraded** | One MASTER holds, but a member is in FAULT, its agent is offline, its keepalived is stopped or unreadable, or it is the only member. |
-| **Unknown Master** | No online member with keepalived reporting is MASTER — the virtual addresses are not being served. |
-| **Split brain** | More than one member claims MASTER for the same virtual router. |
-| **Unknown** | No member is online with keepalived reporting. |
+| **Unknown Master** | No live member is MASTER — the virtual addresses are not being served. |
+| **Split brain** | More than one live member is MASTER for the same virtual router. |
+| **VIP mismatch** | The members do not all carry the same virtual addresses, so a failover changes which of them are up. |
+| **Unknown** | No member is live. |
 
 The dashboard lists the clusters that need attention; the **VRRP Clusters** page shows all of
-them.
+them. On top of each host's own state changes, the server reports what happens to a cluster
+as a whole — a new master, a split brain, and incidents that open, change and resolve; see
+[Activity](api.md#-activity).
 
 ## What it does
 
@@ -90,8 +95,12 @@ them.
   virtual addresses.
 - **Failover history** — every state change as an activity event with keepalived's own
   timestamp; MASTER stepping down is a warning, FAULT an error.
-- **Counters** — keepalived's per-instance statistics, on each instance's page next to those
-  of the other hosts in its cluster.
+- **Cluster events** — a new master, a split brain or a lost master, reported once every live
+  host has confirmed it, and incidents that open, change and resolve as one group.
+- **Webhooks** — events sent to a chat, a push service or an endpoint of your own, each with a
+  JSON body you write yourself.
+- **Counters** — keepalived's per-instance statistics, on each cluster's page, side by side
+  for its hosts.
 - **Nothing sensitive leaves the host** — only named fields are read; no Docker socket, no
   host file system mount.
 - **Secure communication** — agents register with a short-lived token and a setup PIN, then
@@ -124,9 +133,10 @@ them.
     ---
 
     Every REST endpoint and both WebSocket protocols, request and response shapes
-    included.
+    included — and webhooks that report events to other services.
 
-    [:octicons-arrow-right-24: API Reference](api.md)
+    [:octicons-arrow-right-24: API Reference](api.md) ·
+    [:octicons-arrow-right-24: Webhooks](webhooks.md)
 
 -   :material-source-branch: **Contribute to it**
 

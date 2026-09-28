@@ -34,6 +34,7 @@ client/src/
 │   ├── Connection.ts          # Persistent WebSocket connection & message routing
 │   ├── DataStore.ts           # The agent's data directory: atomic JSON read/write
 │   ├── ServerHttp.ts          # HTTP(S) requests to the server, certificate check decided per call
+│   ├── secrets.ts             # Constant-time comparison of the auth token and the registration secret
 │   ├── SetupPin.ts            # The PIN that guards registration, inbound and outbound
 │   └── Version.ts             # Agent version detection (VERSION file, git tags, git hash)
 ├── services/
@@ -91,6 +92,7 @@ identity with a `serverUrl` is `inbound` (the agent dials), an identity without 
 | `listenPort` | Port of the local web server (default `3011`). `KASM_CLIENT_PORT` wins over it. |
 | `enableStatusPage` | Serve `/status` (default `true`). |
 | `enableRegisterPage` | Serve `/register` and accept `POST /api/register` while the agent is unregistered (default `true`). Both close once it has an identity. |
+| `tls` | `cert` and `key` of a certificate the local web server presents, so the server can dial it as `wss://`. Unset (default): plain HTTP. See [Serving it over TLS](#serving-it-over-tls). |
 
 ### 2. WebSocket Connection (`src/core/Connection.ts`)
 
@@ -299,7 +301,7 @@ What the agent has seen, on its way to the server.
   an older version keeps reporting usable facts.
 - **At-least-once delivery.** The agent gives each event its id and keeps it until the server acknowledges that id with `ACTIVITY_ACK` — not until it has been sent. The queue is offered again on every reconnect, and a minute after a batch that went out but was not acknowledged — the server withholds the ack for what it failed to store. The id makes a second copy a no-op on the server. A failover while the server is unreachable is therefore on record once it is back. The queue holds at most 500 events; past that the oldest go first.
 
-### 6. Version Detection (`src/core/Version.ts`)### 6. Version Detection (`src/core/Version.ts`)
+### 6. Version Detection (`src/core/Version.ts`)
 
 Resolves the agent version with the following priority:
 

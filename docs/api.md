@@ -408,7 +408,7 @@ An empty `outboundTargetAddress` or `registrationSecret` is answered with `400` 
 | `displayName` | string | No       | The new display name for the client. |
 | `site` | string \| null | No | At most 100 characters, trimmed. `null` or an empty string clears it; leaving the field out keeps the stored value. |
 | `inboundAllowedIp` | string \| null | No | Inbound clients only. An IPv4 address or CIDR network restricts connections to it; `null` switches the check off; leaving the field out keeps the stored value. |
-| `outboundTargetAddress` | string | No | Outbound clients only. `host` or `host:port` the server dials; without a port, `:3011` is appended. Same rule as on `POST /clients/outbound`. |
+| `outboundTargetAddress` | string | No | Outbound clients only. `host`, `host:port` or `wss://host:port` the server dials; without a port, `:3011` is appended. Same rule as on `POST /clients/outbound`. |
 
 #### Response
 
@@ -1272,7 +1272,7 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 
 | Parameter  | Type   | Required | Description                                                  |
 | :--------- | :----- | :------- | :----------------------------------------------------------- |
-| `clientId` | string | **Yes**  | The server-issued `clientId` from the client's `config.yaml`. |
+| `clientId` | string | **Yes**  | The server-issued `clientId` from the client's `identity.json`. |
 | `token`    | string | **Yes**  | The permanent `authToken` from the client's `identity.json`.  |
 
 A request missing either half is closed with `4001 Authentication required`. The token may

@@ -200,6 +200,7 @@ See `docs/` for detailed documentation:
 - `docs/client.md` — Client agent architecture
 - `docs/development.md` — Development guidelines, the documentation site itself
 - `docs/install.md` — Build and setup
+- `docs/webhooks.md` — Webhooks: filters, body templates, examples
 
 ### The docs are rendered twice
 
