@@ -9,6 +9,7 @@ import {
     DataListDef,
     DataMultiView,
     DataTableDef,
+    Switch,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
@@ -20,12 +21,14 @@ interface WebhookListProps {
     onAdd: () => void;
     onEdit: (webhook: Webhook) => void;
     onDelete: (webhook: Webhook) => void;
+    onToggleEnabled: (webhook: Webhook, enabled: boolean) => void;
 }
 
-const Name = ({ webhook }: { webhook: Webhook }) => (
+/** The table has a column with a switch for the state; the list shows it as a badge. */
+const Name = ({ webhook, withState = false }: { webhook: Webhook; withState?: boolean }) => (
     <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">{webhook.name}</span>
-        {!webhook.enabled && (
+        {withState && !webhook.enabled && (
             <Badge variant="neutral" size="sm">
                 Disabled
             </Badge>
@@ -75,7 +78,7 @@ const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
 };
 
 /** The webhooks, built like every other list of the app. A row opens its editor. */
-export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete }: WebhookListProps) => {
+export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onToggleEnabled }: WebhookListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
     const filtered = useMemo(() => {
@@ -109,6 +112,17 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete }: We
         </div>
     );
 
+    // The switch sits in a clickable row; its click must not open the editor as well.
+    const renderEnabled = (webhook: Webhook) => (
+        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+            <Switch
+                value={webhook.enabled}
+                onChange={(enabled) => onToggleEnabled(webhook, enabled)}
+                aria-label={`${webhook.name} enabled`}
+            />
+        </div>
+    );
+
     const tableDef: DataTableDef<Webhook>[] = [
         {
             tableHeader: "Name",
@@ -117,12 +131,12 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete }: We
             tableItemRender: (w) => <Name webhook={w} />,
         },
         {
-            tableHeader: "Target",
-            tableItemRender: (w) => <Target webhook={w} />,
-        },
-        {
-            tableHeader: "Filter",
-            tableItemRender: (w) => <Filter webhook={w} />,
+            tableHeader: "Enabled",
+            tableHeaderClassName: "text-center",
+            tableCellClassName: "content-center",
+            sortable: true,
+            sortValue: (w) => (w.enabled ? 0 : 1),
+            tableItemRender: renderEnabled,
         },
         {
             tableHeader: "Last Delivery",
@@ -145,7 +159,7 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete }: We
                     listLabel: null,
                     listItemRender: (w) => (
                         <div className="py-1">
-                            <Name webhook={w} />
+                            <Name webhook={w} withState />
                         </div>
                     ),
                 },

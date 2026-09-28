@@ -57,6 +57,27 @@ export const WebhookOverview = () => {
             },
         });
 
+    // The switch moves at once; the reload afterwards shows what the server holds, which puts
+    // it back if the change was refused. PUT takes the whole webhook, so the row is sent as is.
+    const toggleEnabled = async (webhook: Webhook, enabled: boolean) => {
+        setWebhooks((list) => list.map((w) => (w.id === webhook.id ? { ...w, enabled } : w)));
+        try {
+            const res = await apiFetch(`/api/v1/webhooks/${webhook.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...webhook, enabled }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                console.error(data.error || `The server answered ${res.status}`);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setReloadCount((n) => n + 1);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <WebhookList
@@ -65,6 +86,7 @@ export const WebhookOverview = () => {
                 onAdd={() => open("/webhooks/new")}
                 onEdit={(webhook) => open(`/webhooks/${webhook.id}`)}
                 onDelete={requestDelete}
+                onToggleEnabled={toggleEnabled}
             />
         </div>
     );
