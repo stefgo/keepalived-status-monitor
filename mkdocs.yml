@@ -108,5 +108,6 @@ nav:
           - Client Agent: client.md
     - Reference:
           - REST & WebSocket API: api.md
+          - Webhooks: webhooks.md
     - Contributing:
           - Development & Deployment: development.md

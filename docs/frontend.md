@@ -51,8 +51,14 @@ src/
 │   │   │   ├── ActivityLevelIcon.tsx     # One icon per level, wherever an event is listed
 │   │   │   └── ActivityView.tsx          # The page at /activity
 │   │   └── lib/
-│   │       ├── activityText.ts           # kind + data -> the sentence a reader sees
 │   │       └── groupActivity.ts          # Folds the flat list into rows by correlationId
+│   ├── webhooks/                         # Webhooks: list and editor, each a page
+│   │   ├── confirmations.ts              # Delete-webhook text
+│   │   ├── lib/webhookForm.ts            # Draft <-> API shape, preview, placeholder list
+│   │   └── components/
+│   │       ├── WebhookOverview.tsx       # The page at /webhooks: loads, deletes, opens the editor
+│   │       ├── WebhookList.tsx           # DataMultiView of the targets and their last delivery
+│   │       └── WebhookEditor.tsx         # /webhooks/new and /webhooks/:id, with live preview and "Send Test"
 │   ├── users/                            # User management
 │   │   ├── confirmations.ts              # Delete-user and last-user texts
 │   │   └── components/
@@ -113,6 +119,8 @@ Routing is controlled via `react-router-dom` v7 in `App.tsx`.
 | `/activity`         | `AppLayout`     | The activity list.                                                  |
 | `/users`            | `AppLayout`     | User management.                                                    |
 | `/tokens`           | `AppLayout`     | Registration token management.                                      |
+| `/webhooks`         | `AppLayout`     | The webhooks events are reported to (`WebhookOverview`).            |
+| `/webhooks/new`, `/webhooks/:webhookId` | `AppLayout` | The `WebhookEditor`, adding or editing one webhook.  |
 | `/settings`         | `AppLayout`     | System settings (retention of tokens and activity).                 |
 
 All routes except `/login` are wrapped in a `ProtectedRoute` component that redirects unauthenticated users to `/login`.
@@ -358,7 +366,8 @@ MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the res
 The page at `/activity`. Its entries are structured events: a `kind`, a `level`, what the
 event is about and the facts of that kind.
 
-**The text is written here.** `activityText.ts` is the one place a wording exists: an agent
+**The text is written in one place.** `activityText.ts` in `@kasm/shared` is the one place a
+wording exists — the webhooks send the same sentence as `{{event.message}}`: an agent
 reports `vrrp.state_changed` with the two states and nothing else, and the sentence —
 "VRRP instance VI_WEB: MASTER → BACKUP" — is composed from that. So an agent of an older version stays useful without knowing how today's
 dashboard phrases things, a wording can be changed without asking a fleet of hosts to
@@ -408,6 +417,22 @@ Manages user accounts. Supports creating, editing, and deleting users via a `Use
 ### TokenOverview (`features/tokens`)
 
 Lists registration tokens via `TokenList` — a `DataMultiView` with search over token hash, display name and address — and deletes them after asking. Tokens are **issued in the `AddClientWizard`**, not here: that is where the two defaults a token carries — display name and allowed address — are entered, and a second entry point would only produce tokens without them. The list shows a token by the first 12 characters of its SHA-256 hash (the full hash in the tooltip), since the server keeps nothing else; the token itself is shown once, in the wizard's `TokenModal`. It shows both defaults per token, or "From the agent" for a token that carries neither.
+
+### WebhookOverview & WebhookEditor (`features/webhooks`)
+
+Its own entry in the sidebar, in the Administration group above Settings. `WebhookList` is a
+`DataMultiView` like every other list — search over name and URL, table and list view — and
+shows per webhook its target, its filters and how the last delivery ended, with the reason
+of a failure. A row, or its Edit action, opens the editor; Delete asks first.
+
+**The editor is a page, not a dialog**, at `/webhooks/new` and `/webhooks/:webhookId`. It
+leaves the way the `ClientEditor` does: the close button in the card's header, Escape, or
+Cancel, each asking first when there are unsaved edits, and going back to
+`location.state.from` or else to the list; Save goes back after storing. The webhook is read
+from `GET /api/v1/webhooks`; an id that is not there gets a `NotFoundCard`. The preview is
+rendered with `renderTemplate` from `@kasm/shared` — the code the server sends with — against
+a sample event, so the preview and the delivery cannot disagree. "Send Test" posts the
+unsaved draft to `/api/v1/webhooks/test`. See [Webhooks](webhooks.md) for the template syntax.
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 

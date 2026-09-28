@@ -46,6 +46,12 @@
     - [List Activity](#list-activity)
     - [Mark Seen](#mark-seen)
     - [Delete Activity](#delete-activity)
+- [Webhooks](#-webhooks)
+    - [List Webhooks](#list-webhooks)
+    - [Create Webhook](#create-webhook)
+    - [Update Webhook](#update-webhook)
+    - [Delete Webhook](#delete-webhook)
+    - [Send A Test Delivery](#send-a-test-delivery)
 - [Misc](#-misc)
     - [Health](#health)
     - [Reachability](#reachability)
@@ -882,8 +888,9 @@ Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`
 Everything that happened, as its originator reported it.
 
 An event carries no message. It carries a `kind`, a `level`, what it is about and the facts
-of that kind — the old and the new VRRP state, a priority, an error — and the text is composed in
-the frontend out of those. That is what lets an agent of an older version stay useful: it
+of that kind — the old and the new VRRP state, a priority, an error — and the text is composed
+out of those by `activityMessage` in `@kasm/shared`, for the dashboard and for
+[webhooks](webhooks.md) alike. That is what lets an agent of an older version stay useful: it
 reports the same facts and how they are worded is not its business. It also means filtering
 by `kind` and `level` is exact rather than a search through prose.
 
@@ -967,6 +974,86 @@ Over the dashboard WebSocket: a new event goes out as `ACTIVITY_APPENDED` with o
 stored for the first time (a repeat from the at-least-once delivery is not sent again); marking
 sends `ACTIVITY_SEEN` with the ids that turned seen, to the sessions of the calling user only;
 "Delete all" broadcasts `ACTIVITY_UPDATE` with an empty list.
+
+The same newly stored events are handed to the [webhooks](#-webhooks).
+
+---
+
+## 🪝 Webhooks
+
+Targets outside the dashboard that events are reported to, each with a JSON body template of
+its own. The template syntax, the context a template can read and examples for common services
+are on the [Webhooks](webhooks.md) page.
+
+A webhook as the API returns it:
+
+```json
+{
+    "id": "10d18932-…",
+    "name": "Ops channel",
+    "enabled": true,
+    "url": "https://hooks.example.com/services/…",
+    "method": "POST",
+    "headers": { "Authorization": "Bearer …" },
+    "bodyTemplate": "{ \"text\": \"{{event.message}}\" }",
+    "minLevel": "warning",
+    "kinds": ["vrrp.*", "keepalived.stopped"],
+    "timeoutMs": 10000,
+    "lastStatus": 200,
+    "lastError": null,
+    "lastAttemptAt": "2026-09-27T21:01:49.380Z",
+    "createdAt": "2026-09-27T20:58:12.004Z",
+    "updatedAt": null
+}
+```
+
+| Field | Description |
+| :---- | :---------- |
+| `url` | `http://` or `https://`. May contain placeholders, inserted as text. |
+| `method` | `POST` (default) or `PUT`. |
+| `headers` | Sent with every delivery; values may contain placeholders. `Content-Type: application/json` is always set. Returned in the clear. |
+| `bodyTemplate` | JSON with `{{…}}` placeholders, stored as written. Refused with `400` when it is not valid JSON or a placeholder does not parse. |
+| `minLevel` | The lowest level sent: `trace`, `info`, `warning` (default) or `error`. |
+| `kinds` | Kind patterns, `*` as wildcard. Empty sends every kind. |
+| `timeoutMs` | Per attempt, 1000–60000 (default 10000). |
+| `lastStatus` / `lastError` / `lastAttemptAt` | How the last delivery ended. Read-only. |
+
+### List Webhooks
+
+`GET /api/v1/webhooks` answers every webhook, ordered by name.
+
+### Create Webhook
+
+`POST /api/v1/webhooks` with the fields above except `id` and the read-only ones. Only
+`name`, `url` and `bodyTemplate` are required. Answers **201** with the stored webhook.
+
+### Update Webhook
+
+`PUT /api/v1/webhooks/:webhookId` with the same body as a create; it replaces the whole
+configuration. Answers the stored webhook, or **404**.
+
+### Delete Webhook
+
+`DELETE /api/v1/webhooks/:webhookId` answers `{ "success": true }`, or **404**.
+
+### Send A Test Delivery
+
+`POST /api/v1/webhooks/test` with the same body as a create — saved or not, so the editor can
+try a target before storing it. Renders a sample `vrrp.state_changed` event, sends it once
+without retries, and records nothing.
+
+```json
+{
+    "ok": true,
+    "status": 200,
+    "error": null,
+    "body": { "text": "[warning] lb-01: VRRP instance VI_1: Master → Backup" },
+    "response": "ok"
+}
+```
+
+`body` is what was sent, `response` the first 500 characters of the answer. A target that
+refuses is still a **200** here, with `ok: false`; **400** means the webhook itself is invalid.
 
 ---
 

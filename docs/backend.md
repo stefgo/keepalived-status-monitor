@@ -18,6 +18,7 @@ server/backend/src/
 │   ├── SettingsController.ts
 │   ├── TokenController.ts
 │   ├── UserController.ts
+│   ├── WebhookController.ts               # Webhook CRUD and test delivery
 │   ├── WebSocketController.ts
 │   └── websocket/
 │       ├── AgentMessageRouter.ts          # Dispatch table for messages from authenticated agents
@@ -33,14 +34,16 @@ server/backend/src/
 │       ├── 04_registration_token_hash.ts  # registration_tokens: store the SHA-256 hash only
 │       ├── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
 │       ├── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
-│       └── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
+│       ├── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
+│       └── 08_webhooks.ts                 # webhooks: targets events are reported to
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
 │   ├── KeepalivedStateRepository.ts       # keepalived_state access
 │   ├── SchedulerStateRepository.ts        # scheduler_state access
 │   ├── TokenRepository.ts
-│   └── UserRepository.ts
+│   ├── UserRepository.ts
+│   └── WebhookRepository.ts               # webhooks access, last delivery result
 ├── routes/
 │   └── api.ts                             # Fastify route registration (all endpoints)
 ├── services/                              # Business logic
@@ -53,7 +56,8 @@ server/backend/src/
 │   ├── ProxyService.ts                    # WebSocket connection management & broadcasting
 │   ├── ScheduledJob.ts                    # Timer, run bookkeeping and status of a scheduler
 │   ├── SettingsService.ts                 # Settings retrieval, update & persistence
-│   └── TokenCleanupService.ts             # Retention cleanup for invalid registration tokens
+│   ├── TokenCleanupService.ts             # Retention cleanup for invalid registration tokens
+│   └── WebhookService.ts                  # Renders and delivers events to the webhooks
 ├── types/
 │   └── fastify.d.ts                       # Fastify request/instance augmentations
 └── index.ts                               # Fastify server setup & entry point
@@ -159,17 +163,23 @@ virtual addresses are payload, not identity). The dashboard runs the same functi
 - **No failover logic here.** The agent compares its readings itself and reports every change as an activity event, with keepalived's own transition time. That keeps a failover during a server outage on record, which a server-side diff between two readings could not.
 
 #### `ActivityService`
-Activity events are structured facts — `kind`, `level`, a subject, a `data` object — recorded by whoever observed them. Nothing in the backend writes a sentence: the text is composed in the frontend out of `kind` and `data`, so an agent of an older version stays useful and filtering by kind and level is exact rather than a search through prose.
+Activity events are structured facts — `kind`, `level`, a subject, a `data` object — recorded by whoever observed them. Nothing in the backend writes a sentence of its own: the text is composed by `activityMessage` in `@kasm/shared` out of `kind` and `data` — for the dashboard and for the webhooks — so an agent of an older version stays useful and filtering by kind and level is exact rather than a search through prose.
 
 - `list(userId)` — Every event, newest first by `occurred_at`, with `seen` as that user has it.
 - `record(input)` — Records an event the **server** is the originator of. That is deliberately a short list: the connection state of an agent (`client.connected` / `client.disconnected`), a registration (`client.registered`), and a scheduler run that threw (`scheduler.failed`, `error`, with `scheduler`, `trigger` and `error`). Everything that happens *on* a host is reported by that host.
 - `handleBatch(clientId, payload)` — One `ACTIVITY` batch from an agent: validated, ingested, then acknowledged with `ACTIVITY_ACK`. Only the envelope is parsed as a whole; the events are parsed one by one. A batch whose envelope does not parse is dropped **without** an ack, so the agent keeps offering it — acknowledging what was never written would delete it on the only side that still had it. The one exception is an event that can never be stored: one that does not parse but carries an id is acknowledged without being stored and logged, because re-offering it changes nothing and the agent's in-order queue would stall behind it until its seven-day age limit.
 - `ingest(clientId, events)` — Stores the batch and returns the ids the agent may drop. `source` and `clientId` are overwritten from the connection: an agent may only ever speak about itself.
-- `record` and `ingest` broadcast `ACTIVITY_APPENDED` with the events they stored for the first time — never the full list, and never a repeat.
+- `record` and `ingest` broadcast `ACTIVITY_APPENDED` with the events they stored for the first time — never the full list, and never a repeat — and hand the same events to `WebhookService.dispatch`.
 - `markManySeen(ids, userId)` — Sends `ACTIVITY_SEEN` with the ids that turned seen to the sessions of that user only (`ProxyService.sendToUser`), and nothing when nothing changed.
 - `deleteAll` — Broadcasts `ACTIVITY_UPDATE` with an empty list to every dashboard.
 
 Delivery is at-least-once and the id comes from the originator, so a repeat is expected rather than an error: `ActivityRepository.insertMany` writes `ON CONFLICT DO NOTHING` inside one transaction, and the second copy of an event changes nothing. That is what puts a failover at three in the morning, with the server switched off, on record once the server is back.
+
+#### `WebhookService`
+Reports events to external targets, each with a JSON body template of its own (see [Webhooks](webhooks.md)).
+- `dispatch(records)` — Called with the events just stored, so a repeat from the agent's at-least-once delivery sends nothing twice. Returns at once; every enabled webhook whose `minLevel` and `kinds` an event passes gets a delivery queued behind it. Deliveries to one webhook run one after another, so a target sees events in order; past 100 waiting ones, new events are dropped for that webhook with a warning.
+- A delivery renders URL, headers and body with `renderTemplate` from `@kasm/shared`, sends them with the webhook's timeout, and retries twice (after 1 s and 5 s) when nothing answered, or on a 5xx or 429. The outcome goes to `last_status` / `last_error` / `last_attempt_at` and, on failure, to the log — **never to the activity list**, or a broken target would report its own failures to itself. There is no persistent queue: a restart during a retry loses that delivery; the event itself stays stored.
+- `test(webhook)` — Sends the sample event once with a configuration that need not be saved, and returns what was sent and what came back. No retries, nothing recorded.
 
 #### `ScheduledJob`
 The timer, the bookkeeping and the status of one server scheduler; both — `NotificationCleanupService` and `TokenCleanupService` — hold one and differ only in the work they do.
@@ -204,6 +214,7 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 | `KeepalivedStateRepository` | `keepalived_state`                    | Upsert, list and delete the last reading per client.             |
 | `ActivityRepository`     | `activity`, `activity_seen`              | Batch insert with primary-key dedup, seen state, deletion, retention. |
 | `SchedulerStateRepository` | `scheduler_state`                      | Mark a run started and finished, save and read the state a scheduler carries, turn runs cut off by a restart into `interrupted` ones. |
+| `WebhookRepository`      | `webhooks`                               | CRUD, the enabled ones for a dispatch, the result of the last delivery. |
 
 ### 5. WebSocket Controller (`src/controllers/WebSocketController.ts`)
 
@@ -385,6 +396,25 @@ One row per scheduler, written over on every run — there is no history. What i
 | `next_run_at`      | TEXT    | The run the timer has planned; NULL while the scheduler is off. Read at startup only while there is no last run. |
 
 > The running columns are kept apart from the `last_*` ones so the page goes on showing the last finished run while a run is in progress. A row that still has `running_since` at startup belongs to a run the server did not live to finish; `markInterrupted` turns it into the last run, `interrupted`.
+
+**`webhooks`** _(migration 08)_
+
+| Column            | Type    | Description                                                                   |
+| :---------------- | :------ | :---------------------------------------------------------------------------- |
+| `id`              | TEXT PK | UUID.                                                                         |
+| `name`            | TEXT    | Shown in the list and available as `{{webhook.name}}`.                        |
+| `enabled`         | INTEGER | `1` or `0`.                                                                   |
+| `url`             | TEXT    | Target, may contain placeholders.                                             |
+| `method`          | TEXT    | `POST` or `PUT`.                                                              |
+| `headers`         | TEXT    | JSON object; values may contain placeholders. Stored in the clear.            |
+| `body_template`   | TEXT    | The JSON template as the operator wrote it.                                   |
+| `min_level`       | TEXT    | Lowest level sent.                                                            |
+| `kinds`           | TEXT    | JSON array of kind patterns; empty means every kind.                          |
+| `timeout_ms`      | INTEGER | Per attempt.                                                                  |
+| `last_status`     | INTEGER | HTTP status of the last delivery; NULL when nothing answered.                 |
+| `last_error`      | TEXT    | Why the last delivery failed; NULL after a success.                           |
+| `last_attempt_at` | TEXT    | When it ended.                                                                |
+| `created_at` / `updated_at` | TEXT | Timestamps.                                                         |
 
 ---
 
