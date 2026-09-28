@@ -137,6 +137,10 @@ export const ACTIVITY_KINDS = [
     "vrrp.master_changed",
     "vrrp.split_brain",
     "vrrp.master_lost",
+    // Reported by the server once per incident of a cluster: while it is not healthy
+    "vrrp.incident_opened",
+    "vrrp.incident_updated",
+    "vrrp.incident_resolved",
 ] as const;
 
 /** The HTTP methods a webhook may send with. Both carry a body; GET does not. */

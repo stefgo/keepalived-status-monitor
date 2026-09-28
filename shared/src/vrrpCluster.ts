@@ -4,6 +4,8 @@ import type {
     VrrpCluster,
     VrrpClusterHealth,
     VrrpClusterMember,
+    VrrpIncidentHealth,
+    VrrpIncidentReason,
     VrrpInstance,
 } from "./types.js";
 
@@ -120,6 +122,122 @@ export function clusterCondition(cluster: VrrpCluster): {
                 ? "split-brain"
                 : "no-master";
     return { condition, live, masters, unseenMasters };
+}
+
+/** The health of a cluster as its incidents see it, and every finding behind it. */
+export interface VrrpIncidentState {
+    health: VrrpIncidentHealth;
+    /** Empty for `ok`. */
+    reasons: VrrpIncidentReason[];
+}
+
+/**
+ * How a cluster is doing as its incidents see it. `null` when nothing can be said.
+ *
+ * Unlike `healthOf`, a member whose agent is offline does not count at all: an agent going
+ * away says nothing about VRRP, whose keepalived goes on running without it. Its last report
+ * is neither a finding nor evidence -- not its roles, not its addresses. Only when no agent
+ * of the cluster is connected is the cluster itself out of sight, which is `unreachable`.
+ *
+ * - No live MASTER while an offline member last reported MASTER is `null`: that host may well
+ *   go on serving, and there is no telling -- the same rule `vrrp.master_lost` follows.
+ * - A cluster of one host is `degraded` by what it is configured as, counted over **every**
+ *   member: a two-host cluster with one agent offline is not a single-host cluster.
+ * - Addresses are compared among the online members only.
+ *
+ * `nameOf` names a member's host.
+ */
+export function clusterIncidentState(
+    cluster: VrrpCluster,
+    nameOf: (clientId: string) => string,
+): VrrpIncidentState | null {
+    const online = cluster.members.filter((member) => member.online);
+    if (online.length === 0) {
+        const hosts = cluster.members.map((member) => nameOf(member.clientId));
+        return {
+            health: "unreachable",
+            reasons: [{ type: "unreachable", hosts, text: `all agents offline: ${hosts.join(", ")}` }],
+        };
+    }
+
+    const { live, masters, unseenMasters } = clusterCondition(cluster);
+    if (masters.length === 0 && unseenMasters.length > 0) return null;
+
+    const reasons: VrrpIncidentReason[] = [];
+    if (masters.length > 1) {
+        const hosts = masters.map((member) => nameOf(member.clientId));
+        reasons.push({ type: "split-brain", hosts, text: `split brain: ${hosts.join(", ")} are MASTER` });
+    } else if (masters.length === 0) {
+        reasons.push({ type: "no-master", text: "no host is MASTER" });
+    }
+
+    let troubled = false;
+    for (const member of online) {
+        const host = nameOf(member.clientId);
+        const lastState = member.instance.state;
+        if (!member.reporting) {
+            troubled = true;
+            reasons.push({
+                type: "not-reporting",
+                host,
+                lastState,
+                text: `${host}: keepalived not reporting, last ${lastState}`,
+            });
+        } else if (lastState === "FAULT") {
+            troubled = true;
+            reasons.push({ type: "fault", host, text: `${host} in FAULT` });
+        }
+    }
+
+    if (cluster.members.length < 2 && live.length > 0) {
+        troubled = true;
+        reasons.push({ type: "single-member", text: "only one host in the cluster" });
+    }
+
+    const mismatched = mismatchedVips(online);
+    for (const { member, missing } of mismatched) {
+        const host = nameOf(member.clientId);
+        reasons.push({ type: "vip-mismatch", host, missing, text: `${host} lacks ${missing.join(", ")}` });
+    }
+
+    // A running outage outranks a misconfiguration, as in `healthOf`.
+    const health: VrrpIncidentHealth =
+        masters.length > 1
+            ? "split-brain"
+            : masters.length === 0
+              ? "no-master"
+              : mismatched.length > 0
+                ? "vip-mismatch"
+                : troubled
+                  ? "degraded"
+                  : "ok";
+    return { health, reasons };
+}
+
+/**
+ * What makes two reasons the same finding: its type, the host, and what it is about -- the
+ * masters of a split brain, the missing addresses of a mismatch. Not the host's last state and
+ * not the wording: "not reporting, last MASTER" and "not reporting, last BACKUP" are one
+ * finding.
+ */
+export function incidentReasonKey(reason: VrrpIncidentReason): string {
+    switch (reason.type) {
+        case "unreachable":
+        case "split-brain":
+            return `${reason.type}::${[...reason.hosts].sort().join(",")}`;
+        case "vip-mismatch":
+            return `vip-mismatch:${reason.host}:${[...reason.missing].sort().join(",")}`;
+        case "not-reporting":
+        case "fault":
+            return `${reason.type}:${reason.host}`;
+        default:
+            return reason.type;
+    }
+}
+
+/** The findings of a whole cluster as one comparable string, in a stable order. */
+export function incidentReasonsKey(reasons: VrrpIncidentReason[]): string {
+    return [...new Set(reasons.map(incidentReasonKey))].sort().join("\n");
 }
 
 /** One cluster while it is still being assembled, before it has a key and a health. */

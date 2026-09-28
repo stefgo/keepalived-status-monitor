@@ -41,16 +41,65 @@ function host(event: ActivityRecord): string {
     return str(event, "clientName") ?? "the client";
 }
 
+/**
+ * A block of a cluster event's data -- `cluster`, what was observed, or `incident`, how it was
+ * judged -- or an empty one.
+ */
+function block(event: ActivityRecord, key: "cluster" | "incident"): Record<string, unknown> {
+    const value = event.data?.[key];
+    return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function text(record: Record<string, unknown>, key: string): string | null {
+    const value = record[key];
+    return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function strings(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
 /** "VRID 51 (dc1)", for the server's cluster events. */
 function cluster(event: ActivityRecord): string {
-    const vrid = event.data?.vrid ?? event.subject?.vrid;
-    const site = str(event, "site");
+    const facts = block(event, "cluster");
+    const vrid = facts.vrid ?? event.subject?.vrid;
+    const site = text(facts, "site");
     return `VRID ${typeof vrid === "number" ? vrid : "?"}${site ? ` (${site})` : ""}`;
 }
 
-function names(event: ActivityRecord, key: string): string[] {
-    const value = event.data?.[key];
-    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+/** A cluster health as the incident events name it. */
+const HEALTH_LABELS: Record<string, string> = {
+    ok: "healthy",
+    degraded: "degraded",
+    "vip-mismatch": "VIP mismatch",
+    "split-brain": "split brain",
+    "no-master": "no master",
+    unreachable: "all agents offline",
+};
+
+function healthLabel(value: unknown): string {
+    return typeof value === "string" ? (HEALTH_LABELS[value] ?? value) : "?";
+}
+
+/** 42 s, 3 min, 2 h 5 min, 1 d 3 h. */
+function formatDuration(seconds: number): string {
+    const s = Math.max(0, Math.round(seconds));
+    if (s < 60) return `${s} s`;
+    const minutes = Math.floor(s / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return minutes % 60 > 0 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+    const days = Math.floor(hours / 24);
+    return hours % 24 > 0 ? `${days} d ${hours % 24} h` : `${days} d`;
+}
+
+/** The `text` of each reason of an incident event. */
+function reasonTexts(event: ActivityRecord): string[] {
+    const value = block(event, "incident").reasons;
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((reason) => (typeof reason === "object" && reason !== null ? (reason as { text?: unknown }).text : null))
+        .filter((text): text is string => typeof text === "string" && text.length > 0);
 }
 
 export function activityMessage(event: ActivityRecord): string {
@@ -87,19 +136,39 @@ export function activityMessage(event: ActivityRecord): string {
             return error ? `${what} failed: ${error}` : `${what} failed`;
         }
         case "vrrp.master_changed": {
-            const master = str(event, "master") ?? "?";
+            const master = text(block(event, "cluster"), "master") ?? "?";
             const previous = str(event, "previousMaster");
             return previous && previous !== master
                 ? `${cluster(event)}: ${master} is master now, was ${previous}`
                 : `${cluster(event)}: ${master} is master`;
         }
         case "vrrp.split_brain": {
-            const masters = names(event, "masters");
+            const masters = strings(block(event, "cluster").masters);
             return `${cluster(event)}: split brain${masters.length > 0 ? ` — ${masters.join(", ")}` : ""}`;
         }
         case "vrrp.master_lost": {
             const previous = str(event, "previousMaster");
             return `${cluster(event)}: no master${previous ? `, was ${previous}` : ""}`;
+        }
+        case "vrrp.incident_opened":
+            return `${cluster(event)}: incident opened, ${healthLabel(block(event, "incident").health)}`;
+        case "vrrp.incident_updated": {
+            const { health, previousHealth, added, cleared } = block(event, "incident");
+            if (previousHealth !== health) {
+                return `${cluster(event)}: incident now ${healthLabel(health)}, was ${healthLabel(previousHealth)}`;
+            }
+            if (strings(added).length > 0) return `${cluster(event)}: incident updated: ${strings(added).join("; ")}`;
+            if (strings(cleared).length > 0) {
+                return `${cluster(event)}: incident updated, cleared: ${strings(cleared).join("; ")}`;
+            }
+            return `${cluster(event)}: incident updated`;
+        }
+        case "vrrp.incident_resolved": {
+            const { resolution, durationSeconds } = block(event, "incident");
+            if (resolution === "removed") return `${cluster(event)}: incident closed, the cluster no longer exists`;
+            return typeof durationSeconds === "number"
+                ? `${cluster(event)}: recovered after ${formatDuration(durationSeconds)}`
+                : `${cluster(event)}: recovered`;
         }
         default:
             // A kind from an agent of another version. Better an unpolished line than none.
@@ -122,10 +191,15 @@ export function activityDetail(event: ActivityRecord): string | null {
         }
     }
 
-    if (event.kind.startsWith("vrrp.") && Array.isArray(event.data?.members)) {
+    // An open incident says why; a resolved one has no reasons and lists the hosts below.
+    const reasons = reasonTexts(event);
+    if (reasons.length > 0) return reasons.join("; ");
+
+    const facts = block(event, "cluster");
+    if (event.kind.startsWith("vrrp.") && Array.isArray(facts.members)) {
         // The other hosts of a cluster event, as the server saw them.
-        const master = str(event, "master");
-        const others = (event.data.members as unknown[])
+        const master = text(facts, "master");
+        const others = (facts.members as unknown[])
             .filter(
                 (m): m is { host: string; state: string; online?: unknown; reporting?: unknown } =>
                     typeof m === "object" &&

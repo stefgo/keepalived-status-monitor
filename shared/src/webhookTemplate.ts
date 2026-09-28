@@ -582,7 +582,21 @@ export function webhookAccepts(
 
 // ── Sample ───────────────────────────────────────────────────────────────────
 
-type SampleFacts = Pick<ActivityRecord, "kind" | "level" | "source" | "subject" | "data">;
+type SampleFacts = Pick<ActivityRecord, "kind" | "level" | "source" | "subject" | "data"> &
+    Partial<Pick<ActivityRecord, "correlationId">>;
+
+/** What every cluster sample shares: the cluster itself. */
+const SAMPLE_CLUSTER = { site: "dc1", vrid: 51, networks: ["10.0.0.0/24"], vips: ["10.0.0.10/24", "10.0.0.11/24"] };
+
+/** The hosts of the incident samples: lb-02 has taken over, keepalived on lb-01 has stopped. */
+const SAMPLE_INCIDENT_MEMBERS = [
+    { host: "lb-02", clientId: "sample-client-2", instanceName: "VI_1", state: "MASTER",
+      priority: 90, effectivePriority: 90, online: true, reporting: true,
+      readAt: "2026-09-28T10:00:05.300Z", vips: ["10.0.0.10/24", "10.0.0.11/24"] },
+    { host: "lb-01", clientId: "sample-client", instanceName: "VI_1", state: "MASTER",
+      priority: 100, effectivePriority: 100, online: true, reporting: false,
+      readAt: "2026-09-28T10:00:05.100Z", vips: ["10.0.0.10/24", "10.0.0.11/24"] },
+];
 
 /** One per shape of `data`, so a preview can show a loop over what the webhook will receive. */
 const SAMPLES: SampleFacts[] = [
@@ -597,24 +611,82 @@ const SAMPLES: SampleFacts[] = [
         kind: "vrrp.master_changed",
         level: "info",
         source: "server",
-        subject: { instanceName: "VI_1", vrid: 51, interface: "eth0" },
+        subject: { instanceName: "VI_1", vrid: 51 },
         data: {
-            site: "dc1",
-            vrid: 51,
-            networks: ["10.0.0.0/24"],
-            vips: ["10.0.0.10/24", "10.0.0.11/24"],
-            health: "ok",
-            master: "lb-01",
-            masters: ["lb-01"],
+            cluster: {
+                ...SAMPLE_CLUSTER,
+                health: "ok",
+                master: "lb-01",
+                masters: ["lb-01"],
+                members: [
+                    { host: "lb-01", clientId: "sample-client", instanceName: "VI_1", state: "MASTER",
+                      priority: 100, effectivePriority: 100, online: true, reporting: true,
+                      readAt: "2026-09-28T10:00:05.200Z", vips: ["10.0.0.10/24", "10.0.0.11/24"] },
+                    { host: "lb-02", clientId: "sample-client-2", instanceName: "VI_1", state: "BACKUP",
+                      priority: 90, effectivePriority: 90, online: true, reporting: true,
+                      readAt: "2026-09-28T10:00:05.050Z", vips: ["10.0.0.10/24", "10.0.0.11/24"] },
+                ],
+            },
             previousMaster: "lb-02",
-            members: [
-                { host: "lb-01", clientId: "sample-client", instanceName: "VI_1", state: "MASTER",
-                  priority: 100, effectivePriority: 100, online: true, reporting: true,
-                  readAt: "2026-09-28T10:00:01.200Z" },
-                { host: "lb-02", clientId: "sample-client-2", instanceName: "VI_1", state: "BACKUP",
-                  priority: 90, effectivePriority: 90, online: true, reporting: true,
-                  readAt: "2026-09-28T10:00:01.050Z" },
-            ],
+        },
+    },
+    {
+        kind: "vrrp.incident_opened",
+        level: "warning",
+        source: "server",
+        correlationId: "11111111-1111-4111-8111-111111111111",
+        subject: { instanceName: "VI_1", vrid: 51 },
+        data: {
+            cluster: {
+                ...SAMPLE_CLUSTER,
+                health: "degraded",
+                master: "lb-02",
+                masters: ["lb-02"],
+                members: SAMPLE_INCIDENT_MEMBERS,
+            },
+            incident: {
+                id: "11111111-1111-4111-8111-111111111111",
+                health: "degraded",
+                previousHealth: "ok",
+                reasons: [
+                    { type: "not-reporting", host: "lb-01", lastState: "MASTER",
+                      text: "lb-01: keepalived not reporting, last MASTER" },
+                ],
+                history: ["degraded"],
+                openedAt: "2026-09-28T10:00:00.400Z",
+                confirmedAt: "2026-09-28T10:00:05.300Z",
+            },
+        },
+    },
+    {
+        kind: "vrrp.incident_resolved",
+        level: "info",
+        source: "server",
+        correlationId: "11111111-1111-4111-8111-111111111111",
+        subject: { instanceName: "VI_1", vrid: 51 },
+        data: {
+            cluster: {
+                ...SAMPLE_CLUSTER,
+                health: "ok",
+                master: "lb-02",
+                masters: ["lb-02"],
+                members: [
+                    SAMPLE_INCIDENT_MEMBERS[0],
+                    { ...SAMPLE_INCIDENT_MEMBERS[1], state: "BACKUP", reporting: true, readAt: "2026-09-28T10:03:09.000Z" },
+                ],
+            },
+            incident: {
+                id: "11111111-1111-4111-8111-111111111111",
+                health: "ok",
+                previousHealth: "degraded",
+                reasons: [],
+                history: ["degraded"],
+                openedAt: "2026-09-28T10:00:00.400Z",
+                confirmedAt: "2026-09-28T10:03:09.100Z",
+                resolvedAt: "2026-09-28T10:03:04.900Z",
+                durationSeconds: 184,
+                resolution: "recovered",
+            },
         },
     },
     {
@@ -628,7 +700,7 @@ const SAMPLES: SampleFacts[] = [
 
 /**
  * The event a preview and a test delivery are rendered with: the first sample one of the
- * webhook's kinds matches, else a VRRP state change.
+ * webhook's kinds matches, else a VRRP state change. `vrrp.incident_*` gets the opening.
  */
 export function sampleWebhookRecord(kinds: string[] = []): ActivityRecord {
     const now = new Date().toISOString();

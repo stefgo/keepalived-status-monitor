@@ -51,8 +51,8 @@ A path must start with `event`, `client` or `webhook`; anything else is refused 
 the webhook is saved, as is a template that is not valid JSON or longer than 64 KiB. The
 editor page shows a live preview rendered with a sample event, and **Send Test** delivers that
 sample to the target. The sample follows the webhook's event kinds: the first of
-`vrrp.state_changed`, `vrrp.master_changed` and `keepalived.stopped` one of them matches,
-`vrrp.state_changed` when none does.
+`vrrp.state_changed`, `vrrp.master_changed`, `vrrp.incident_opened`, `vrrp.incident_resolved`
+and `keepalived.stopped` one of them matches, `vrrp.state_changed` when none does.
 
 ### What a template can read
 
@@ -66,7 +66,7 @@ sample to the target. The sample follows the webhook's event kinds: the first of
 | `event.receivedAt` | When the server received it |
 | `event.source` | `agent` or `server` |
 | `event.id` | Unique id of the event |
-| `event.correlationId` | Groups events that belong together; mostly `null` |
+| `event.correlationId` | Groups events that belong together: the id of a VRRP incident; else mostly `null` |
 | `event.subject` | `{ instanceName, vrid, interface }` for VRRP events; single fields as `event.subject.vrid` |
 | `event.data` | The facts of the kind, e.g. `{ from, to, priority, effectivePriority }`; single fields as `event.data.to` |
 | `client.name` | Display name, else hostname |
@@ -78,7 +78,7 @@ sample to the target. The sample follows the webhook's event kinds: the first of
 `client` is `null` for an event the server reports about itself (`scheduler.failed`); use
 `default(...)` where that matters. Which fields `event.data` carries per kind is listed in
 the [Activity reference](api.md#-activity). An array element is reached by its position:
-`event.data.members.0.host`.
+`event.data.cluster.members.0.host`.
 
 ### Filters
 
@@ -93,8 +93,8 @@ placeholder does, URL and headers included.
 | `upper`, `lower` | Text in upper or lower case |
 
 ```text
-{{event.data.vips | join(", ")}}                    → 10.0.0.10/24, 10.0.0.11/24
-{{event.data.members | map("host") | join(", ")}}   → lb-01, lb-02
+{{event.data.cluster.vips | join(", ")}}                    → 10.0.0.10/24, 10.0.0.11/24
+{{event.data.cluster.members | map("host") | join(", ")}}   → lb-01, lb-02
 {{client.name | default("server") | upper}}         → LB-01
 ```
 
@@ -133,11 +133,11 @@ is the element; `each(name, index)` adds its position, counted from 0:
 
 ```json
 {
-    "hosts": { "$map": "event.data.members", "each(m)": { "host": "{{m.host}}", "state": "{{m.state}}" } }
+    "hosts": { "$map": "event.data.cluster.members", "each(m)": { "host": "{{m.host}}", "state": "{{m.state}}" } }
 }
 ```
 
-The path names the array without braces (`"{{event.data.members}}"` is accepted too) and
+The path names the array without braces (`"{{event.data.cluster.members}}"` is accepted too) and
 may carry filters. Anything but an array gives `[]`. Loops nest, and an inner one can read the
 outer one's name. A name may not be `event`, `client`, `webhook` or one already in use.
 
@@ -148,7 +148,7 @@ outer one's name. A name may not be `event`, `client`, `webhook` or one already 
 {
     "content": {
         "$join": {
-            "$map": "event.data.members",
+            "$map": "event.data.cluster.members",
             "each(m)": {
                 "$if": "m.online",
                 "then": "- {{m.host}}: {{m.state}} ({{m.priority}})",
@@ -209,34 +209,46 @@ outer one's name. A name may not be `event`, `client`, `webhook` or one already 
 }
 ```
 
-**Failover summary** — one message per change of a VRRP cluster, with the new master and the
-state of every host. Event kinds `vrrp.master_changed, vrrp.split_brain, vrrp.master_lost`,
+VRRP clusters report two things (see [Cluster events](api.md#-activity)): who holds them —
+`vrrp.master_changed`, `vrrp.split_brain`, `vrrp.master_lost`, all `info`, their history — and
+how they are doing, `vrrp.incident_*`, the kinds to alert on. All of them carry
+`event.data.cluster`, the cluster as every live host confirmed it; the role events add
+`event.data.previousMaster`, the incidents `event.data.incident`.
+
+**Failover summary** — one message per change of who holds a VRRP cluster, with the new master
+and the state of every host. Event kinds `vrrp.master_changed, vrrp.split_brain, vrrp.master_lost`,
 minimum level `info`:
 
 ```json
 {
     "text": "{{event.message}}",
-    "vrid": "{{event.data.vrid}}",
-    "site": "{{event.data.site}}",
-    "vips": "{{event.data.vips | join(\", \")}}",
-    "master": "{{event.data.master}}",
+    "vrid": "{{event.data.cluster.vrid}}",
+    "site": "{{event.data.cluster.site}}",
+    "vips": "{{event.data.cluster.vips | join(\", \")}}",
+    "master": "{{event.data.cluster.master}}",
     "previous": { "$if": "event.data.previousMaster", "then": "{{event.data.previousMaster}}" },
-    "health": "{{event.data.health}}",
+    "health": "{{event.data.cluster.health}}",
     "hosts": {
-        "$map": "event.data.members",
+        "$map": "event.data.cluster.members",
         "each(m)": { "host": "{{m.host}}", "state": "{{m.state}}", "online": "{{m.online}}" }
     }
 }
 ```
 
-`event.data.members` holds `host`, `state`, `priority`, `effectivePriority`, `online`,
-`reporting` and `readAt` per member; `"hosts": "{{event.data.members}}"` sends all of it. These events are made by the server once the readings of all hosts agree
-— see [Cluster events](api.md#-activity). With the agents' notify FIFO or notify endpoint
-switched on, that is within a second of the failover; with the timer alone, up to
-`pollInterval`.
+`event.data.cluster.members` holds `host`, `state`, `priority`, `effectivePriority`, `online`,
+`reporting`, `readAt` and `vips` per member; `"hosts": "{{event.data.cluster.members}}"` sends
+all of it. `event.data.cluster.health` is the dashboard's health. A new master is reported some
+5 s after the failover, once every live host has confirmed it.
+
+**Incidents** — one message when a cluster stops being healthy, one whenever its health or its
+findings change (`event.data.incident.added` / `cleared` name what changed), one when it is
+`ok` again. An agent going offline is no incident; all agents of a cluster offline for 60 s is
+one (`unreachable`). `event.data.incident.health` is the incident's own health. Event kinds `vrrp.incident_*`, minimum
+level `info` — the all-clear is `info`. `event.correlationId` is the same on all messages of
+one incident, for a target that threads them.
 
 **[Log Notifier](https://github.com/stefgo/ha-log-notifier) for Home Assistant** — URL
-`https://<ha>/api/lognotifier/ingest/<channel token>`, event kinds `vrrp.master_changed`,
+`https://<ha>/api/lognotifier/ingest/<channel token>`, event kinds `vrrp.incident_*`,
 minimum level `info`. Log Notifier reads KASM's levels as its own and renders `content` as
 Markdown:
 
@@ -246,16 +258,37 @@ Markdown:
     "title": "{{event.message}}",
     "content": {
         "$join": [
-            "**{{event.data.master}}** is master now",
-            { "$if": "event.data.previousMaster", "then": ", was **{{event.data.previousMaster}}**" },
-            "\n\n- Site: {{event.data.site | default('–')}}\n- VIPs: {{event.data.vips | join(', ')}}\n- Health: {{event.data.health}}\n\n",
+            {
+                "$if": "event.kind == 'vrrp.incident_resolved'",
+                "then": "**Resolved** ({{event.data.incident.resolution}}), was {{event.data.incident.history | join(' → ')}}",
+                "else": {
+                    "$join": [
+                        {
+                            "$if": "event.kind == 'vrrp.incident_updated'",
+                            "then": {
+                                "$join": [
+                                    { "$join": { "$map": "event.data.incident.added", "each(t)": "- 🆕 {{t}}\n" } },
+                                    { "$join": { "$map": "event.data.incident.cleared", "each(t)": "- ✅ {{t}}\n" } },
+                                    "\n**Open now**\n\n"
+                                ]
+                            }
+                        },
+                        { "$join": { "$map": "event.data.incident.reasons", "each(r)": "- ⚠️ {{r.text}}" }, "with": "\n" }
+                    ]
+                }
+            },
+            "\n\n- Site: {{event.data.cluster.site | default('–')}}\n- VIPs: {{event.data.cluster.vips | join(', ')}}\n- Health: **{{event.data.incident.health | default('–')}}**\n- Master: {{event.data.cluster.master | default('–')}}\n\n**Hosts**\n\n",
             {
                 "$join": {
-                    "$map": "event.data.members",
+                    "$map": "event.data.cluster.members",
                     "each(m)": {
                         "$if": "m.online",
-                        "then": "- **{{m.host}}**: {{m.state}} ({{m.effectivePriority}})",
-                        "else": "- **{{m.host}}**: offline"
+                        "then": {
+                            "$if": "m.reporting",
+                            "then": "- **{{m.host}}**: {{m.state}} ({{m.effectivePriority}})",
+                            "else": "- **{{m.host}}**: keepalived not reporting, last {{m.state}}"
+                        },
+                        "else": "- **{{m.host}}**: offline, last {{m.state}}"
                     }
                 },
                 "with": "\n"
@@ -263,7 +296,7 @@ Markdown:
         ]
     },
     "source": "kasm",
-    "tags": ["kasm", "{{event.kind}}", "{{event.data.site | default('no-site')}}"],
+    "tags": ["kasm", "{{event.kind}}", "vrid-{{event.data.cluster.vrid}}", "{{event.data.cluster.site | default('no-site')}}"],
     "timestamp": "{{event.occurredAt}}"
 }
 ```

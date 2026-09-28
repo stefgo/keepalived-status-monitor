@@ -920,30 +920,88 @@ the agent happened to read it.
 | `client.connected` / `client.disconnected` | server | `trace` | `connectionMode`, `version`, `clientName` |
 | `client.registered` | server | `info` | `hostname`, `clientName` |
 | `scheduler.failed` | server | `error` | `scheduler`, `trigger`, `error`; no client |
-| `vrrp.master_changed` | server | `info`, `warning` when the cluster is not healthy afterwards | cluster summary, see below |
-| `vrrp.split_brain` / `vrrp.master_lost` | server | `error` | cluster summary, see below |
+| `vrrp.master_changed` | server | `info` | `cluster`, `previousMaster`, see below |
+| `vrrp.split_brain` / `vrrp.master_lost` | server | `info` | `cluster`, `previousMaster`, see below |
+| `vrrp.incident_opened` / `vrrp.incident_updated` | server | `warning` | `cluster`, `incident`, see below |
+| `vrrp.incident_resolved` | server | `info` | `cluster`, `incident`, see below |
 
 `subject` of the agent's VRRP events is `{ instanceName, vrid, interface }`.
 
-**Cluster events.** The three `vrrp.*` kinds from the server describe a VRRP cluster as a
-whole, which no single host can see — under VRRP only the master speaks. They come on top of
-the hosts' own `vrrp.state_changed`, one per change of the cluster:
+**Cluster events.** The `vrrp.*` kinds from the server describe a VRRP cluster as a whole,
+which no single host can see — under VRRP only the master speaks. They come on top of the
+hosts' own `vrrp.state_changed`, and answer two questions:
 
-- `vrrp.master_changed` — exactly one live member (agent online, keepalived reporting) is
-  MASTER, and it is another host than before, or the cluster had a split brain or no master.
-- `vrrp.split_brain` — more than one live MASTER; `vrrp.master_lost` — live members, none of
-  them MASTER, while no offline member last reported MASTER.
+- **Who holds the cluster** — its history, all `info`:
+  - `vrrp.master_changed` — exactly one live member (agent online, keepalived reporting) is
+    MASTER, and it is another host than before, or the cluster had a split brain or no master.
+  - `vrrp.split_brain` — more than one live MASTER.
+  - `vrrp.master_lost` — live members, none of them MASTER, while no offline member last
+    reported MASTER.
+- **How it is doing** — its incidents, the kinds to alert on:
+  - `vrrp.incident_opened` (`warning`) — the incident health (below) turned from `ok` into any
+    other.
+  - `vrrp.incident_updated` (`warning`) — while the incident is open, the health turned into
+    another, or the findings changed: a second host in FAULT leaves the health `degraded`, but
+    it is reported. A host's last state changing while keepalived is not reporting there is
+    not a new finding.
+  - `vrrp.incident_resolved` (`info`) — the health is `ok` again, or the cluster no longer
+    exists (client deleted, site or network changed).
 
-There is no waiting period. A new master is reported as soon as it is the only live one —
-during a failover that is when the old master's next reading arrives or its agent is gone. A
-split brain or a missing master counts only once every member it is about has delivered
-another reading after VRRP's master down interval (3 × `advert_int` + 1 s) and it still
-holds. How fast an event comes therefore depends on how fast the readings do: at once with
-the agents' [notify triggers](client.md#triggers), within `pollInterval` otherwise.
+  The events of one incident share its id as their `correlationId`; the activity list shows
+  them as one group.
 
-`clientId` and `subject.instanceName` name the new master (the first master of a split brain,
-the previous master of `vrrp.master_lost`), so the event shows in the cluster's history.
-`occurredAt` of a new master is keepalived's `Last transition`. `data`:
+To be alerted, subscribe to `vrrp.incident_*`; to follow failovers, to `vrrp.master_changed`.
+
+**The incident health** is counted differently from the dashboard's `health`: **an agent that
+is offline does not count.** Losing an agent says nothing about VRRP — keepalived runs on
+without it — so neither the agent's absence nor its last report is a finding. Only a cluster
+with no connected agent at all is one, because it can no longer be seen. The dashboard keeps
+showing an offline member as `degraded`.
+
+| Condition, over the members whose agent is connected | Incident health |
+| :---------------------------------------------------- | :-------------- |
+| No agent of the cluster connected | `unreachable` |
+| More than one live MASTER | `split-brain` |
+| No live MASTER, while an offline member last reported MASTER | *no statement* — nothing changes |
+| No live MASTER | `no-master` |
+| The members disagree about the addresses | `vip-mismatch` |
+| keepalived not reporting on a host, a member in FAULT, or a cluster of one host (counted over every member) | `degraded` |
+| none of these | `ok` |
+
+**One confirmation for both.** What a cluster is seen as — who holds it and how it is doing —
+is compared with what was last confirmed. A difference is pending first, and counts once
+**every live member** has delivered another reading after VRRP's master down interval
+(3 × `advert_int` + 1 s) since it was first seen. The events of that change are made at that
+moment, all of them at once, roles first, and all carry the same `cluster`: a state each live
+host has confirmed after VRRP settled — no leftover MASTER of the host that just handed over.
+A change that goes away before that is not reported, so the split brain of a moment during a
+failover never is. A member that stops being live owes no reading.
+
+When the interval is over, the server asks the members that still owe a reading for one
+(`REQUEST_STATE_UPDATE`, as [Refresh](#refresh-a-clients-reading) does). An agent sends an
+unchanged reading on its own only every 30 s, so this is what makes a confirmation take the
+interval and about a second — some 5 s with keepalived's defaults — rather than up to half a
+minute. The request is sent once per pending change; if it is lost, the agent's next reading
+confirms just the same. A new master is therefore reported some 5 s after the failover, dated
+by keepalived's `Last transition`.
+
+`unreachable` has no agent to deliver a reading. It counts once it has lasted **60 s**, long
+enough for agents to reconnect after a short break in the network (their first retry comes
+after 5–8 s). A cluster whose agents come back within that time reports nothing.
+
+*No statement* changes nothing, and so does a cluster with no live member for its roles; an
+open incident stays open. A cluster seen for the first time takes its roles as they are,
+without an event, and starts its health from `ok`, so one that is already unhealthy opens an
+incident. Right after the server starts, nothing is evaluated until every client with a
+reading has reconnected, or 60 s have passed, so a cluster whose agents are merely not back
+yet does not read as unreachable.
+
+`clientId` and `subject.instanceName` name, for a role event, the new master (the first master
+of a split brain, the previous master of `vrrp.master_lost`); for an incident, the master, else
+a live member — so the event shows in the cluster's history. `occurredAt` is when the confirmed
+state was first seen, for a new master keepalived's `Last transition`.
+
+`data.cluster` — what was observed, the same in all six kinds:
 
 ```json
 {
@@ -951,21 +1009,61 @@ the previous master of `vrrp.master_lost`), so the event shows in the cluster's 
     "health": "ok",
     "master": "lb-02",
     "masters": ["lb-02"],
-    "previousMaster": "lb-01",
     "members": [
         { "host": "lb-02", "clientId": "…", "instanceName": "VI_1", "state": "MASTER",
           "priority": 100, "effectivePriority": 100, "online": true, "reporting": true,
-          "readAt": "2026-09-28T10:00:01.200Z" },
+          "readAt": "2026-09-28T10:00:05.200Z", "vips": ["10.0.0.10/24"] },
         { "host": "lb-01", "clientId": "…", "instanceName": "VI_1", "state": "BACKUP",
           "priority": 90, "effectivePriority": 90, "online": true, "reporting": true,
-          "readAt": "2026-09-28T10:00:01.050Z" }
+          "readAt": "2026-09-28T10:00:05.050Z", "vips": ["10.0.0.10/24"] }
     ]
 }
 ```
 
-`master` is null unless there is exactly one. `members[].state` of a member that is offline
-or not reporting is its last report, and `readAt` says how old that is.
-`correlationId` groups events that belong together; none of the kinds above uses it yet.
+`health` is always the dashboard's. `master` is null unless there is exactly one.
+`members[].state` of a member that is offline or not reporting is its last report, and
+`readAt` says how old that is.
+
+**Role events** add `data.previousMaster`: the last host that was master alone before this
+change, null if there was none.
+
+**Incident events** add `data.incident` — how the cluster was judged:
+
+```json
+{
+    "id": "…",
+    "health": "degraded",
+    "previousHealth": "ok",
+    "reasons": [
+        { "type": "not-reporting", "host": "lb-01", "lastState": "MASTER",
+          "text": "lb-01: keepalived not reporting, last MASTER" }
+    ],
+    "history": ["degraded"],
+    "openedAt": "2026-09-28T10:00:00.400Z",
+    "confirmedAt": "2026-09-28T10:00:05.300Z"
+}
+```
+
+| `reasons[].type` | Further fields |
+| :--------------- | :------------- |
+| `unreachable` | `hosts` — every host of the cluster, none with its agent connected |
+| `split-brain` | `hosts` — the live MASTERs |
+| `no-master` | — |
+| `not-reporting` | `host`, `lastState` — keepalived stopped or unreadable, agent connected |
+| `fault` | `host` |
+| `vip-mismatch` | `host`, `missing` — the addresses it lacks, among the connected members |
+| `single-member` | — |
+
+- `id` is the `correlationId`; `health` the incident health, `previousHealth` the one before
+  this event.
+- Every reason carries `text`, the finding as a sentence. `reasons` is empty on
+  `vrrp.incident_resolved`.
+- `history` lists every health the incident was confirmed in.
+- `vrrp.incident_updated` adds `added` and `cleared`: the `text` of each finding that is new,
+  and of each that went away, since the previous event of the incident.
+- `vrrp.incident_resolved` adds `resolvedAt` (when `ok` was first seen), `durationSeconds` and
+  `resolution`: `recovered`, with `health` `ok`, or `removed`, with `health` null and
+  `cluster` as the last confirmation saw it.
 
 ### List Activity
 

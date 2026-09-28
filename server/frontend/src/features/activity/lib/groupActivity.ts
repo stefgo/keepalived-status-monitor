@@ -18,8 +18,8 @@ export interface ActivityGroup {
     unseen: boolean;
 }
 
-/** Which kinds stand for a whole operation and are therefore the head of their group. None yet: every event the agents report so far stands on its own. */
-const GROUP_HEADS = new Set<string>();
+/** Which kinds stand for a whole operation and are therefore the head of their group: the opening of a VRRP incident heads its updates and its resolution. */
+const GROUP_HEADS = new Set<string>(["vrrp.incident_opened"]);
 
 function maxLevel(events: ActivityRecord[]): ActivityLevel {
     let worst: ActivityLevel = ACTIVITY_LEVELS[0];

@@ -36,7 +36,7 @@ server/backend/src/
 │       ├── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
 │       ├── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
 │       ├── 08_webhooks.ts                 # webhooks: targets events are reported to
-│       └── 09_vrrp_cluster_state.ts       # vrrp_cluster_state: the confirmed state per cluster
+│       └── 09_vrrp_cluster.ts             # vrrp_cluster: what was confirmed per cluster, roles and incident
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -44,6 +44,7 @@ server/backend/src/
 │   ├── SchedulerStateRepository.ts        # scheduler_state access
 │   ├── TokenRepository.ts
 │   ├── UserRepository.ts
+│   ├── VrrpClusterRepository.ts           # vrrp_cluster access
 │   └── WebhookRepository.ts               # webhooks access, last delivery result
 ├── routes/
 │   └── api.ts                             # Fastify route registration (all endpoints)
@@ -52,7 +53,9 @@ server/backend/src/
 │   ├── SessionCookie.ts                   # The httpOnly session cookie and the readable flag beside it
 │   ├── ClientConnector.ts                 # Dials an outbound client's agent
 │   ├── KeepalivedStateService.ts          # Store readings, broadcast them, build clusters
-│   ├── ClusterEventService.ts             # vrrp.master_changed / split_brain / master_lost
+│   ├── ClusterSnapshot.ts                 # The clusters one evaluation looks at, the summary events carry
+│   ├── ClusterEventService.ts             # vrrp.master_changed / split_brain / master_lost, vrrp.incident_*
+│   ├── ReadingRequests.ts                 # Asks agents for the readings a pending cluster state waits for
 │   ├── ActivityService.ts                 # Activity ingest, dedup, ack + dashboard broadcast
 │   ├── NotificationCleanupService.ts      # Retention cleanup for the activity list
 │   ├── ProxyService.ts                    # WebSocket connection management & broadcasting
@@ -178,9 +181,18 @@ Activity events are structured facts — `kind`, `level`, a subject, a `data` ob
 Delivery is at-least-once and the id comes from the originator, so a repeat is expected rather than an error: `ActivityRepository.insertMany` writes `ON CONFLICT DO NOTHING` inside one transaction, and the second copy of an event changes nothing. That is what puts a failover at three in the morning, with the server switched off, on record once the server is back.
 
 #### `ClusterEventService`
-Reports what happens to a VRRP cluster as a whole — `vrrp.master_changed`, `vrrp.split_brain`, `vrrp.master_lost` — through `ActivityService.record`, so the dashboards and the webhooks get them like any other event. The one place the server reports something it derived: under VRRP only the master speaks, so the state of every member is known only where every reading arrives.
-- `start()` — Subscribes to `KeepalivedStateService.onReadingStored` and `ProxyService.onConnectionChange` (listeners rather than calls, so neither service imports this one back). Called once in `index.ts`, before any agent can connect.
-- `evaluate(trigger)` — Builds the clusters and compares each with its row in `vrrp_cluster_state`, with `clusterCondition` from `@kasm/shared` (live = online and reporting). **No timer:** a new master is reported as soon as it is the only live one; a split brain or a missing master becomes pending and is confirmed once every member it is about has delivered a reading after the master down interval (3 × `advert_int` + 1 s) and it still holds. No master while an offline member last reported MASTER says nothing — that host may still serve. A cluster seen for the first time is stored without an event; rows of clusters that no longer exist are deleted. Errors are logged and never reach the reading or connection that triggered the evaluation.
+Reports what happens to a VRRP cluster as a whole, through `ActivityService.record`, so the dashboards and the webhooks get it like any other event. The one place the server reports something it derived: under VRRP only the master speaks, so the state of every member is known only where every reading arrives. A cluster's state is two things, confirmed together in one row of `vrrp_cluster`:
+
+- **Who holds it** — `clusterCondition` from `@kasm/shared` (live = online and reporting): one MASTER, several, none. Its changes are the history: `vrrp.master_changed`, `vrrp.split_brain`, `vrrp.master_lost`, all `info`, with `data.previousMaster`.
+- **How it is doing** — `clusterIncidentState` from `@kasm/shared`: a health of its own, in which a member whose agent is offline does not count and a cluster without any connected agent is `unreachable`, plus the findings behind it, compared by `incidentReasonsKey` (type, host and subject, not a host's last state). Anything but `ok` is an incident: `vrrp.incident_opened` / `vrrp.incident_updated` (`warning`), `vrrp.incident_resolved` (`info`), with the incident's id as `correlationId` and `data.incident`. The dashboard's `cluster.health` is not used.
+
+- `start()` — Subscribes to `KeepalivedStateService.onReadingStored` and `ProxyService.onConnectionChange` (listeners rather than calls, so neither service imports this one back), and starts the start-up guard: nothing is evaluated until every client with a keepalived reading has connected again, or 60 s after start. Called once in `index.ts`, before any agent can connect.
+- `evaluate(trigger)` — Takes one `ClusterSnapshot` (clusters, host names, when each reading arrived) and compares, per cluster, what it is seen as — role, master, incident health, findings — with its row. Where nothing can be said, the confirmed part is kept: the roles while no member is live, both parts while no live member is MASTER but an offline one last reported MASTER. Roles seen for the first time are taken silently; the health starts from `ok`. A difference is **one** pending state, owed a reading by every live member after the master down interval (3 × `advert_int` + 1 s) — `unreachable`, which no agent can pay for, after 60 s (`UNREACHABLE_CONFIRM_MS`). Once the time is up, `PendingFollowUps` asks the members for their readings, or looks again where none owes one (`{ recheck: true }`). A pending state that goes away is dropped unsaid; a member that stops being live owes nothing. On confirmation, the events of the change are made at once from the difference between the old state and the new — roles first — all with the same `data.cluster` (`describeCluster`). A cluster that disappears with an incident open gets `vrrp.incident_resolved` with `resolution: "removed"`, `data.cluster` as the last confirmation saw it and `incident.health` null; its row is deleted. Errors are logged and never reach the reading or connection that triggered the evaluation.
+
+#### `ReadingRequests`
+Asks agents for the readings a pending cluster state waits for. An agent sends an unchanged reading on its own only every 30 s (`RESEND_AFTER_MS`), on top of its poll interval; asked, it reads at once and sends the reading regardless (`KeepalivedService.refresh`).
+- `requestReadings(clientIds)` — Sends `REQUEST_STATE_UPDATE` to each connected client, at most once per client and second, since several clusters may wait for one reading. A client gone offline is skipped; offline, it owes nothing.
+- `PendingFollowUps` — The one follow-up of each pending cluster state. `schedule(clusterKey, since, afterMs, action)` runs `action` at `since` + `afterMs` (at once if that is past); `ClusterEventService` passes the minimum age plus `READING_REQUEST_MARGIN_MS` (250 ms), so a requested reading is surely past it. Planning the same state again — keyed by `since` — changes nothing, so every evaluation can plan and the first one after a restart restores the plan, and a follow-up that ran does not run twice. `cancel` / `cancelExcept` drop the plans of states that were confirmed, dropped or whose cluster is gone. In memory only; a lost request just leaves the confirmation to the agent's own next reading.
 
 #### `WebhookService`
 Reports events to external targets, each with a JSON body template of its own (see [Webhooks](webhooks.md)).
@@ -404,19 +416,25 @@ One row per scheduler, written over on every run — there is no history. What i
 
 > The running columns are kept apart from the `last_*` ones so the page goes on showing the last finished run while a run is in progress. A row that still has `running_since` at startup belongs to a run the server did not live to finish; `markInterrupted` turns it into the last run, `interrupted`.
 
-**`vrrp_cluster_state`** _(migration 09)_
+**`vrrp_cluster`** _(migration 09)_
 
-What `ClusterEventService` last confirmed per cluster, so a restart neither reports every cluster anew nor misses a failover that happened in between.
+What `ClusterEventService` last confirmed per cluster — who holds it and how it is doing, in one row — so a restart neither reports every cluster anew nor misses a change that happened in between. Replaces `vrrp_cluster_state` and `vrrp_cluster_incident`, which were never released; migration 09 drops them.
 
-| Column              | Type    | Description                                                                 |
-| :------------------ | :------ | :-------------------------------------------------------------------------- |
-| `cluster_key`       | TEXT PK | `VrrpCluster.key`: site, VRID and network.                                 |
-| `condition`         | TEXT    | Confirmed: `single`, `split-brain` or `no-master`.                          |
-| `master_client_id` / `master_instance` / `master_host` | TEXT | The last host that was master alone; kept while there is none, as the "previous master" of the next change. |
-| `pending_condition` | TEXT    | A split brain or missing master seen but not confirmed yet.                 |
-| `pending_since`     | TEXT    | When it was first seen.                                                     |
-| `pending_waiting`   | TEXT    | JSON: the members (`clientId\ninstance`) whose next reading is still owed.  |
-| `updated_at`        | TEXT    | Last write.                                                                 |
+| Column             | Type    | Description                                                                  |
+| :----------------- | :------ | :--------------------------------------------------------------------------- |
+| `cluster_key`      | TEXT PK | `VrrpCluster.key`: site, VRID and network.                                  |
+| `condition`        | TEXT    | Confirmed role: `single`, `split-brain` or `no-master`; NULL until anything could be said. |
+| `master_client_id` / `master_instance` / `master_host` | TEXT | The last host that was master alone; kept while there is none, as the `previousMaster` of the next change. |
+| `health`           | TEXT    | Confirmed incident health: `ok`, `degraded`, `vip-mismatch`, `split-brain`, `no-master` or `unreachable`. |
+| `reasons`          | TEXT    | JSON: the confirmed findings, for the comparison and for `added` / `cleared`. |
+| `incident_id`      | TEXT    | The open incident, its `correlationId`; NULL while `ok`.                     |
+| `opened_at`        | TEXT    | When the open incident was first seen.                                       |
+| `history`          | TEXT    | JSON: every health the open incident was confirmed in, oldest first.        |
+| `last_cluster`     | TEXT    | JSON: `data.cluster` of the last confirmation, for a cluster that disappears. |
+| `pending_state`    | TEXT    | JSON: what the cluster was seen as — role, master, health, findings key — not confirmed yet. |
+| `pending_since`    | TEXT    | When it was first seen.                                                      |
+| `pending_waiting`  | TEXT    | JSON: the members (`clientId\ninstance`) whose next reading is still owed.   |
+| `updated_at`       | TEXT    | Last write.                                                                  |
 
 **`webhooks`** _(migration 08)_
 

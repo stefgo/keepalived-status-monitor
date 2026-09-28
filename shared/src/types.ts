@@ -164,6 +164,28 @@ export interface VrrpCluster {
     health: VrrpClusterHealth;
 }
 
+/**
+ * How a cluster is doing as its incidents see it. Unlike `VrrpClusterHealth`, a member whose
+ * agent is offline does not count: keepalived goes on running without it. Only when no agent
+ * of the cluster is connected is it `unreachable`.
+ */
+export type VrrpIncidentHealth = "ok" | "degraded" | "vip-mismatch" | "split-brain" | "no-master" | "unreachable";
+
+/**
+ * Why a cluster is not `ok`, one entry per finding, as a VRRP incident carries them. `text` is
+ * the finding as a reader sees it, so a webhook template can list the reasons with one loop
+ * instead of a condition per type.
+ */
+export type VrrpIncidentReason = { text: string } & (
+    | { type: "unreachable"; hosts: string[] }
+    | { type: "split-brain"; hosts: string[] }
+    | { type: "no-master" }
+    | { type: "not-reporting"; host: string; lastState: string }
+    | { type: "fault"; host: string }
+    | { type: "vip-mismatch"; host: string; missing: string[] }
+    | { type: "single-member" }
+);
+
 // ── Activity ─────────────────────────────────────────────────────────────────
 
 export type ActivitySource = (typeof ACTIVITY_SOURCES)[number];
