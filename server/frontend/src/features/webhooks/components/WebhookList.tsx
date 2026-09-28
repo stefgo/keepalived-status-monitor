@@ -34,7 +34,7 @@ const Name = ({ webhook }: { webhook: Webhook }) => (
 );
 
 const Target = ({ webhook }: { webhook: Webhook }) => (
-    <span className="block max-w-md truncate font-mono text-xs text-text-muted" title={webhook.url}>
+    <span className="block max-w-md truncate text-sm text-text-muted" title={webhook.url}>
         {webhook.method} {webhook.url}
     </span>
 );
