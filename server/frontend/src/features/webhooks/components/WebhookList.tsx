@@ -77,7 +77,7 @@ const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
     );
 };
 
-/** The webhooks, built like every other list of the app. A row opens its editor. */
+/** The webhooks, built like every other list of the app. Only the edit button opens the editor. */
 export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onToggleEnabled }: WebhookListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
@@ -89,32 +89,29 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
 
     // One set of actions for both views, so the table and the list cannot drift apart.
     const renderActions = (webhook: Webhook) => (
-        <div onClick={(e) => e.stopPropagation()}>
-            <DataAction
-                rowId={webhook.id}
-                actions={[
-                    {
-                        icon: Edit2,
-                        onClick: () => onEdit(webhook),
-                        color: "blue",
-                        tooltip: "Edit",
-                    },
-                ]}
-                menuEntries={[
-                    {
-                        label: "Delete",
-                        icon: Trash2,
-                        onClick: () => onDelete(webhook),
-                        variant: "danger",
-                    },
-                ]}
-            />
-        </div>
+        <DataAction
+            rowId={webhook.id}
+            actions={[
+                {
+                    icon: Edit2,
+                    onClick: () => onEdit(webhook),
+                    color: "blue",
+                    tooltip: "Edit",
+                },
+            ]}
+            menuEntries={[
+                {
+                    label: "Delete",
+                    icon: Trash2,
+                    onClick: () => onDelete(webhook),
+                    variant: "danger",
+                },
+            ]}
+        />
     );
 
-    // The switch sits in a clickable row; its click must not open the editor as well.
     const renderEnabled = (webhook: Webhook) => (
-        <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-center">
             <Switch
                 value={webhook.enabled}
                 onChange={(enabled) => onToggleEnabled(webhook, enabled)}
@@ -206,7 +203,6 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
             searchPlaceholder="Search webhooks…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No webhooks yet. Add one to report events to an external service."
-            onRowClick={onEdit}
             pagination={pagination(PAGE_SIZE.page)}
         />
     );
