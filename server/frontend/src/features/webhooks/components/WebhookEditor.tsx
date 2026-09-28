@@ -229,7 +229,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                     onChange={(e) => set("headers", e.target.value)}
                     placeholder="Authorization: Bearer …"
                     hint="One Name: value per line. Content-Type: application/json is always sent."
-                    className="font-mono text-xs"
+                    classNames={{ textarea: "font-mono text-xs" }}
                 />
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -240,7 +240,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         onChange={(e) => set("bodyTemplate", e.target.value)}
                         error={preview.error}
                         spellCheck={false}
-                        className="font-mono text-xs"
+                        classNames={{ textarea: "font-mono text-xs" }}
                     />
                     <div>
                         <label className="field-label">Preview (sample event)</label>
