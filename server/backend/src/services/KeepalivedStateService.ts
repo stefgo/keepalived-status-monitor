@@ -16,11 +16,19 @@ import { ProxyService } from "./ProxyService.js";
 
 /**
  * The last keepalived reading of every client: stored, handed to the dashboards, and grouped
- * into VRRP clusters. Failover events are not made here -- the agent compares its readings
- * itself and reports them as activity, so a change it saw while the server was away is not
- * lost.
+ * into VRRP clusters. A host's own failover events are not made here -- the agent compares its
+ * readings itself and reports them as activity, so a change it saw while the server was away
+ * is not lost. What happens to a cluster as a whole is `ClusterEventService`'s, which is told
+ * about every stored reading through `onReadingStored`.
  */
 export class KeepalivedStateService {
+    /** Told after every stored reading; see `ProxyService.onConnectionChange` for why a listener. */
+    private static readingListeners: ((clientId: string) => void)[] = [];
+
+    static onReadingStored(listener: (clientId: string) => void): void {
+        this.readingListeners.push(listener);
+    }
+
     /** Called by the agent message router for every KEEPALIVED_UPDATE. */
     static handleUpdate(clientId: string, payload: unknown): void {
         const parsed = KeepalivedStatusSchema.safeParse(payload);
@@ -46,6 +54,7 @@ export class KeepalivedStateService {
             type: WS_EVENTS.KEEPALIVED_STATE_UPDATE,
             payload: state,
         });
+        for (const listener of this.readingListeners) listener(clientId);
     }
 
     static getByClientId(clientId: string): KeepalivedState | null {

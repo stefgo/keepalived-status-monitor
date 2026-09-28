@@ -36,6 +36,8 @@ interface ServerEventInput {
     kind: ActivityKind;
     level: ActivityLevel;
     clientId?: string | null;
+    /** When it happened, if not now -- a cluster change dated by keepalived's transition. */
+    occurredAt?: string;
     correlationId?: string | null;
     subject?: ActivitySubject | null;
     data?: Record<string, unknown> | null;
@@ -55,7 +57,7 @@ export class ActivityService {
     static record(input: ServerEventInput): ActivityRecord {
         const event: ActivityEvent = {
             id: randomUUID(),
-            occurredAt: new Date().toISOString(),
+            occurredAt: input.occurredAt ?? new Date().toISOString(),
             source: "server",
             clientId: input.clientId ?? null,
             kind: input.kind,

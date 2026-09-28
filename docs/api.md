@@ -919,8 +919,51 @@ the agent happened to read it.
 | `keepalived.unreadable` | agent | `error` | `error` |
 | `client.connected` / `client.disconnected` | server | `trace` | `connectionMode`, `version`, `clientName` |
 | `client.registered` | server | `info` | `hostname`, `clientName` |
+| `vrrp.master_changed` | server | `info`, `warning` when the cluster is not healthy afterwards | cluster summary, see below |
+| `vrrp.split_brain` / `vrrp.master_lost` | server | `error` | cluster summary, see below |
 
 `subject` of the agent's VRRP events is `{ instanceName, vrid, interface }`.
+
+**Cluster events.** The three `vrrp.*` kinds from the server describe a VRRP cluster as a
+whole, which no single host can see — under VRRP only the master speaks. They come on top of
+the hosts' own `vrrp.state_changed`, one per change of the cluster:
+
+- `vrrp.master_changed` — exactly one live member (agent online, keepalived reporting) is
+  MASTER, and it is another host than before, or the cluster had a split brain or no master.
+- `vrrp.split_brain` — more than one live MASTER; `vrrp.master_lost` — live members, none of
+  them MASTER, while no offline member last reported MASTER.
+
+There is no waiting period. A new master is reported as soon as it is the only live one —
+during a failover that is when the old master's next reading arrives or its agent is gone. A
+split brain or a missing master counts only once every member it is about has delivered
+another reading after VRRP's master down interval (3 × `advert_int` + 1 s) and it still
+holds. How fast an event comes therefore depends on how fast the readings do: at once with
+the agents' [notify triggers](client.md#triggers), within `pollInterval` otherwise.
+
+`clientId` and `subject.instanceName` name the new master (the first master of a split brain,
+the previous master of `vrrp.master_lost`), so the event shows in the cluster's history.
+`occurredAt` of a new master is keepalived's `Last transition`. `data`:
+
+```json
+{
+    "site": "dc1", "vrid": 51, "networks": ["10.0.0.0/24"], "vips": ["10.0.0.10/24"],
+    "health": "ok",
+    "master": "lb-02",
+    "masters": ["lb-02"],
+    "previousMaster": "lb-01",
+    "members": [
+        { "host": "lb-02", "clientId": "…", "instanceName": "VI_1", "state": "MASTER",
+          "priority": 100, "effectivePriority": 100, "online": true, "reporting": true,
+          "readAt": "2026-09-28T10:00:01.200Z" },
+        { "host": "lb-01", "clientId": "…", "instanceName": "VI_1", "state": "BACKUP",
+          "priority": 90, "effectivePriority": 90, "online": true, "reporting": true,
+          "readAt": "2026-09-28T10:00:01.050Z" }
+    ]
+}
+```
+
+`master` is null unless there is exactly one. `members[].state` of a member that is offline
+or not reporting is its last report, and `readAt` says how old that is.
 `correlationId` groups events that belong together; none of the kinds above uses it yet.
 
 ### List Activity

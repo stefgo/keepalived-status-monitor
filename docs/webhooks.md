@@ -115,6 +115,28 @@ the [Activity reference](api.md#-activity).
 }
 ```
 
+**Failover summary** — one message per change of a VRRP cluster, with the new master and the
+state of every host. Event kinds `vrrp.master_changed, vrrp.split_brain, vrrp.master_lost`,
+minimum level `info`:
+
+```json
+{
+    "text": "{{event.message}}",
+    "vrid": "{{event.data.vrid}}",
+    "site": "{{event.data.site}}",
+    "master": "{{event.data.master}}",
+    "previous": "{{event.data.previousMaster}}",
+    "health": "{{event.data.health}}",
+    "hosts": "{{event.data.members}}"
+}
+```
+
+`hosts` arrives as an array with `host`, `state`, `priority`, `online`, `reporting` and
+`readAt` per member. These events are made by the server once the readings of all hosts agree
+— see [Cluster events](api.md#-activity). With the agents' notify FIFO or notify endpoint
+switched on, that is within a second of the failover; with the timer alone, up to
+`pollInterval`.
+
 **Your own endpoint**, with the complete event
 
 ```json

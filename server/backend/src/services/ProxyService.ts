@@ -19,6 +19,20 @@ export class ProxyService {
      */
     private static clientCapabilities = new Map<string, Set<string>>();
 
+    /**
+     * Told whenever an agent connects or its connection ends. A listener rather than a call
+     * into the service that cares, which would import this one right back.
+     */
+    private static connectionListeners: ((clientId: string) => void)[] = [];
+
+    static onConnectionChange(listener: (clientId: string) => void): void {
+        this.connectionListeners.push(listener);
+    }
+
+    private static notifyConnectionChange(clientId: string): void {
+        for (const listener of this.connectionListeners) listener(clientId);
+    }
+
     static registerClient(clientId: string, socket: WebSocket, capabilities: string[] = []) {
         const existing = this.connectedClients.get(clientId);
         if (existing) {
@@ -26,6 +40,7 @@ export class ProxyService {
         }
         this.connectedClients.set(clientId, socket);
         this.clientCapabilities.set(clientId, new Set(capabilities));
+        this.notifyConnectionChange(clientId);
     }
 
     /** Whether the agent currently connected under this id declared that capability. */
@@ -55,6 +70,7 @@ export class ProxyService {
         if (this.connectedClients.get(clientId) === socket) {
             this.connectedClients.delete(clientId);
             this.clientCapabilities.delete(clientId);
+            this.notifyConnectionChange(clientId);
         }
     }
 

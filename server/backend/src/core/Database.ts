@@ -18,6 +18,7 @@ import { migration05 } from "./migrations/05_activity_seen.js";
 import { migration06 } from "./migrations/06_scheduler_next_run.js";
 import { migration07 } from "./migrations/07_keepalived_last_instances.js";
 import { migration08 } from "./migrations/08_webhooks.js";
+import { migration09 } from "./migrations/09_vrrp_cluster_state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // server/src/core -> server/data
@@ -46,6 +47,7 @@ const migrator = new Umzug<Database.Database>({
         { name: "06_scheduler_next_run", up: migration06.up, down: migration06.down },
         { name: "07_keepalived_last_instances", up: migration07.up, down: migration07.down },
         { name: "08_webhooks", up: migration08.up, down: migration08.down },
+        { name: "09_vrrp_cluster_state", up: migration09.up, down: migration09.down },
     ],
     context: db,
     storage: {

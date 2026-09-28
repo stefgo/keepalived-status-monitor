@@ -241,6 +241,10 @@ block; any combination works, as long as one is on.
 | Notify FIFO | `notifyFifo` (`KASM_NOTIFY_FIFO`) | the time a dump takes | `vrrp_notify_fifo` in keepalived.conf |
 | Notify endpoint | `notifyToken` (`KASM_NOTIFY_TOKEN`) | the time a dump takes | a notify script and a token file — see [Installation](install.md#faster-failover-detection) |
 
+The latency matters beyond the host's own list: the server's cluster events
+(`vrrp.master_changed` and the like, see [API](api.md#-activity)) are made once the readings
+of all hosts agree, so they come as fast as the slowest of them.
+
 **The FIFO and the endpoint only trigger.** What a FIFO line or a request body says is logged
 at debug level and otherwise ignored; the reading is where the state comes from. A line in a
 format a newer keepalived writes, or one that is lost, costs latency and nothing else — and

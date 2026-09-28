@@ -35,7 +35,8 @@ server/backend/src/
 │       ├── 05_activity_seen.ts            # activity.seen_by -> activity_seen table
 │       ├── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
 │       ├── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
-│       └── 08_webhooks.ts                 # webhooks: targets events are reported to
+│       ├── 08_webhooks.ts                 # webhooks: targets events are reported to
+│       └── 09_vrrp_cluster_state.ts       # vrrp_cluster_state: the confirmed state per cluster
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
@@ -51,6 +52,7 @@ server/backend/src/
 │   ├── SessionCookie.ts                   # The httpOnly session cookie and the readable flag beside it
 │   ├── ClientConnector.ts                 # Dials an outbound client's agent
 │   ├── KeepalivedStateService.ts          # Store readings, broadcast them, build clusters
+│   ├── ClusterEventService.ts             # vrrp.master_changed / split_brain / master_lost
 │   ├── ActivityService.ts                 # Activity ingest, dedup, ack + dashboard broadcast
 │   ├── NotificationCleanupService.ts      # Retention cleanup for the activity list
 │   ├── ProxyService.ts                    # WebSocket connection management & broadcasting
@@ -166,7 +168,7 @@ virtual addresses are payload, not identity). The dashboard runs the same functi
 Activity events are structured facts — `kind`, `level`, a subject, a `data` object — recorded by whoever observed them. Nothing in the backend writes a sentence of its own: the text is composed by `activityMessage` in `@kasm/shared` out of `kind` and `data` — for the dashboard and for the webhooks — so an agent of an older version stays useful and filtering by kind and level is exact rather than a search through prose.
 
 - `list(userId)` — Every event, newest first by `occurred_at`, with `seen` as that user has it.
-- `record(input)` — Records an event the **server** is the originator of. That is deliberately a short list: the connection state of an agent (`client.connected` / `client.disconnected`), a registration (`client.registered`), and a scheduler run that threw (`scheduler.failed`, `error`, with `scheduler`, `trigger` and `error`). Everything that happens *on* a host is reported by that host.
+- `record(input)` — Records an event the **server** is the originator of. That is deliberately a short list: the connection state of an agent (`client.connected` / `client.disconnected`), a registration (`client.registered`), and a scheduler run that threw (`scheduler.failed`, `error`, with `scheduler`, `trigger` and `error`). Everything that happens *on* a host is reported by that host. The one addition is `ClusterEventService`, whose events describe a cluster as a whole, which no host can see.
 - `handleBatch(clientId, payload)` — One `ACTIVITY` batch from an agent: validated, ingested, then acknowledged with `ACTIVITY_ACK`. Only the envelope is parsed as a whole; the events are parsed one by one. A batch whose envelope does not parse is dropped **without** an ack, so the agent keeps offering it — acknowledging what was never written would delete it on the only side that still had it. The one exception is an event that can never be stored: one that does not parse but carries an id is acknowledged without being stored and logged, because re-offering it changes nothing and the agent's in-order queue would stall behind it until its seven-day age limit.
 - `ingest(clientId, events)` — Stores the batch and returns the ids the agent may drop. `source` and `clientId` are overwritten from the connection: an agent may only ever speak about itself.
 - `record` and `ingest` broadcast `ACTIVITY_APPENDED` with the events they stored for the first time — never the full list, and never a repeat — and hand the same events to `WebhookService.dispatch`.
@@ -174,6 +176,11 @@ Activity events are structured facts — `kind`, `level`, a subject, a `data` ob
 - `deleteAll` — Broadcasts `ACTIVITY_UPDATE` with an empty list to every dashboard.
 
 Delivery is at-least-once and the id comes from the originator, so a repeat is expected rather than an error: `ActivityRepository.insertMany` writes `ON CONFLICT DO NOTHING` inside one transaction, and the second copy of an event changes nothing. That is what puts a failover at three in the morning, with the server switched off, on record once the server is back.
+
+#### `ClusterEventService`
+Reports what happens to a VRRP cluster as a whole — `vrrp.master_changed`, `vrrp.split_brain`, `vrrp.master_lost` — through `ActivityService.record`, so the dashboards and the webhooks get them like any other event. The one place the server reports something it derived: under VRRP only the master speaks, so the state of every member is known only where every reading arrives.
+- `start()` — Subscribes to `KeepalivedStateService.onReadingStored` and `ProxyService.onConnectionChange` (listeners rather than calls, so neither service imports this one back). Called once in `index.ts`, before any agent can connect.
+- `evaluate(trigger)` — Builds the clusters and compares each with its row in `vrrp_cluster_state`, with `clusterCondition` from `@kasm/shared` (live = online and reporting). **No timer:** a new master is reported as soon as it is the only live one; a split brain or a missing master becomes pending and is confirmed once every member it is about has delivered a reading after the master down interval (3 × `advert_int` + 1 s) and it still holds. No master while an offline member last reported MASTER says nothing — that host may still serve. A cluster seen for the first time is stored without an event; rows of clusters that no longer exist are deleted. Errors are logged and never reach the reading or connection that triggered the evaluation.
 
 #### `WebhookService`
 Reports events to external targets, each with a JSON body template of its own (see [Webhooks](webhooks.md)).
@@ -396,6 +403,20 @@ One row per scheduler, written over on every run — there is no history. What i
 | `next_run_at`      | TEXT    | The run the timer has planned; NULL while the scheduler is off. Read at startup only while there is no last run. |
 
 > The running columns are kept apart from the `last_*` ones so the page goes on showing the last finished run while a run is in progress. A row that still has `running_since` at startup belongs to a run the server did not live to finish; `markInterrupted` turns it into the last run, `interrupted`.
+
+**`vrrp_cluster_state`** _(migration 09)_
+
+What `ClusterEventService` last confirmed per cluster, so a restart neither reports every cluster anew nor misses a failover that happened in between.
+
+| Column              | Type    | Description                                                                 |
+| :------------------ | :------ | :-------------------------------------------------------------------------- |
+| `cluster_key`       | TEXT PK | `VrrpCluster.key`: site, VRID and network.                                 |
+| `condition`         | TEXT    | Confirmed: `single`, `split-brain` or `no-master`.                          |
+| `master_client_id` / `master_instance` / `master_host` | TEXT | The last host that was master alone; kept while there is none, as the "previous master" of the next change. |
+| `pending_condition` | TEXT    | A split brain or missing master seen but not confirmed yet.                 |
+| `pending_since`     | TEXT    | When it was first seen.                                                     |
+| `pending_waiting`   | TEXT    | JSON: the members (`clientId\ninstance`) whose next reading is still owed.  |
+| `updated_at`        | TEXT    | Last write.                                                                 |
 
 **`webhooks`** _(migration 08)_
 

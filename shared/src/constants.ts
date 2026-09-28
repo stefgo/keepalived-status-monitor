@@ -133,6 +133,10 @@ export const ACTIVITY_KINDS = [
     "client.disconnected",
     "client.registered",
     "scheduler.failed",
+    // Reported by the server about a whole cluster, which no single host can see
+    "vrrp.master_changed",
+    "vrrp.split_brain",
+    "vrrp.master_lost",
 ] as const;
 
 /** The HTTP methods a webhook may send with. Both carry a body; GET does not. */

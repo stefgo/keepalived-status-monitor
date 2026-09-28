@@ -89,6 +89,39 @@ function healthOf(members: VrrpClusterMember[]): VrrpClusterHealth {
     return OVERRULED_BY_MISMATCH.has(base) && mismatchedVips(members).length > 0 ? "vip-mismatch" : base;
 }
 
+/**
+ * Who holds a cluster, counted like `healthOf`: over live members only. `single` has exactly
+ * one MASTER, `unknown` has no live member. Unlike the health it ignores the addresses, since
+ * it says who serves them rather than whether they agree.
+ */
+export type VrrpClusterCondition = "single" | "split-brain" | "no-master" | "unknown";
+
+export function clusterCondition(cluster: VrrpCluster): {
+    condition: VrrpClusterCondition;
+    live: VrrpClusterMember[];
+    masters: VrrpClusterMember[];
+    /**
+     * Members whose agent is offline and whose last report was MASTER. Nobody can tell
+     * whether they still are: keepalived goes on serving while its agent is away.
+     */
+    unseenMasters: VrrpClusterMember[];
+} {
+    const live = cluster.members.filter((member) => member.online && member.reporting);
+    const masters = live.filter((member) => member.instance.state === "MASTER");
+    const unseenMasters = cluster.members.filter(
+        (member) => !member.online && member.instance.state === "MASTER",
+    );
+    const condition: VrrpClusterCondition =
+        live.length === 0
+            ? "unknown"
+            : masters.length === 1
+              ? "single"
+              : masters.length > 1
+                ? "split-brain"
+                : "no-master";
+    return { condition, live, masters, unseenMasters };
+}
+
 /** One cluster while it is still being assembled, before it has a key and a health. */
 interface Group {
     networks: string[];

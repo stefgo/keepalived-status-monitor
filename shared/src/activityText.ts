@@ -41,6 +41,18 @@ function host(event: ActivityRecord): string {
     return str(event, "clientName") ?? "the client";
 }
 
+/** "VRID 51 (dc1)", for the server's cluster events. */
+function cluster(event: ActivityRecord): string {
+    const vrid = event.data?.vrid ?? event.subject?.vrid;
+    const site = str(event, "site");
+    return `VRID ${typeof vrid === "number" ? vrid : "?"}${site ? ` (${site})` : ""}`;
+}
+
+function names(event: ActivityRecord, key: string): string[] {
+    const value = event.data?.[key];
+    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
 export function activityMessage(event: ActivityRecord): string {
     switch (event.kind) {
         case "vrrp.state_changed": {
@@ -74,6 +86,21 @@ export function activityMessage(event: ActivityRecord): string {
             const what = scheduler ? (SCHEDULER_NAMES[scheduler] ?? scheduler) : "A scheduled job";
             return error ? `${what} failed: ${error}` : `${what} failed`;
         }
+        case "vrrp.master_changed": {
+            const master = str(event, "master") ?? "?";
+            const previous = str(event, "previousMaster");
+            return previous && previous !== master
+                ? `${cluster(event)}: ${master} is master now, was ${previous}`
+                : `${cluster(event)}: ${master} is master`;
+        }
+        case "vrrp.split_brain": {
+            const masters = names(event, "masters");
+            return `${cluster(event)}: split brain${masters.length > 0 ? ` — ${masters.join(", ")}` : ""}`;
+        }
+        case "vrrp.master_lost": {
+            const previous = str(event, "previousMaster");
+            return `${cluster(event)}: no master${previous ? `, was ${previous}` : ""}`;
+        }
         default:
             // A kind from an agent of another version. Better an unpolished line than none.
             return event.kind;
@@ -93,6 +120,29 @@ export function activityDetail(event: ActivityRecord): string | null {
                 ? `priority ${priority}, effective ${effective}`
                 : `priority ${priority}`;
         }
+    }
+
+    if (event.kind.startsWith("vrrp.") && Array.isArray(event.data?.members)) {
+        // The other hosts of a cluster event, as the server saw them.
+        const master = str(event, "master");
+        const others = (event.data.members as unknown[])
+            .filter(
+                (m): m is { host: string; state: string; online?: unknown; reporting?: unknown } =>
+                    typeof m === "object" &&
+                    m !== null &&
+                    typeof (m as { host?: unknown }).host === "string" &&
+                    typeof (m as { state?: unknown }).state === "string",
+            )
+            .filter((m) => m.host !== master)
+            // A state that is only the last report is not named as if it were the present one.
+            .map((m) =>
+                m.online === false
+                    ? `${m.host} offline`
+                    : m.reporting === false
+                      ? `${m.host} not reporting`
+                      : `${m.host} ${vrrpStateLabel(m.state)}`,
+            );
+        if (others.length > 0) return others.join(", ");
     }
 
     return null;
