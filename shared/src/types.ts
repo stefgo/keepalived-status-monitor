@@ -33,6 +33,8 @@ import {
     ActivitySubjectSchema,
     DashboardMessageSchema,
     SchedulerStatusUpdateSchema,
+    WebhookInputSchema,
+    WebhookSchema,
 } from "./schemas.js";
 
 export type RegistrationPayload = z.infer<typeof RegistrationPayloadSchema>;
@@ -177,8 +179,9 @@ export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 export type ActivitySubject = z.infer<typeof ActivitySubjectSchema>;
 
 /**
- * One event as its originator sent it. There is no message in here: the text is written in
- * the frontend out of `kind` and `data`. That is what lets an agent of an older version
+ * One event as its originator sent it. There is no message in here: the text is written by
+ * `activityMessage` (activityText.ts) out of `kind` and `data`, for the dashboard and the
+ * webhooks alike. That is what lets an agent of an older version
  * stay useful -- it reports the same facts, and how they are worded is not its business --
  * and what makes filtering by kind and level exact instead of a search over sentences.
  */
@@ -186,6 +189,22 @@ export type ActivityEvent = z.infer<typeof ActivityEventSchema>;
 
 /** An event as the server holds it. See `ActivityRecordSchema` for what the two times mean. */
 export type ActivityRecord = z.infer<typeof ActivityRecordSchema>;
+
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+
+export type WebhookInput = z.input<typeof WebhookInputSchema>;
+export type Webhook = z.infer<typeof WebhookSchema>;
+
+/** `POST /api/v1/webhooks/:id/test`: what was sent, and what came back. */
+export interface WebhookTestResult {
+    ok: boolean;
+    status: number | null;
+    error: string | null;
+    /** The rendered body, as it went out. */
+    body: unknown;
+    /** The start of the target's answer, for seeing why it refused. */
+    response: string | null;
+}
 
 // ── Schedulers ───────────────────────────────────────────────────────────────
 

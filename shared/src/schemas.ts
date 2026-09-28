@@ -9,9 +9,11 @@ import {
     SCHEDULER_RUN_STATUSES,
     SCHEDULER_TRIGGERS,
     VRRP_STATES,
+    WEBHOOK_METHODS,
     WS_EVENTS,
 } from "./constants.js";
 import { normaliseTargetAddress } from "./targetAddress.js";
+import { placeholderError, webhookTemplateError } from "./webhookTemplate.js";
 
 /**
  * A single IPv4 address or an IPv4 network in CIDR notation. IPv4 only: addresses are
@@ -689,6 +691,56 @@ export const ActivityRecordSchema = ActivityEventSchema.extend({
      * answer; who else has seen it is not part of the record.
      */
     seen: z.boolean(),
+});
+
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+
+/** RFC 9110 token characters: what a header name may consist of. */
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+/**
+ * `POST /api/v1/webhooks`, `PUT /api/v1/webhooks/:id` and the body of a preview. The body
+ * template stays a string: it is stored as the operator wrote it, indentation included, and
+ * only checked here -- see webhookTemplate.ts for what it may contain.
+ */
+export const WebhookInputSchema = z.object({
+    name: z.string().trim().min(1, "A name is required").max(100),
+    enabled: z.boolean().default(true),
+    url: z
+        .string()
+        .trim()
+        .regex(/^https?:\/\/\S+$/i, "Must be an http:// or https:// URL")
+        .refine((url) => placeholderError(url) === null, {
+            error: (issue) => placeholderError(issue.input) ?? "Invalid placeholder",
+        }),
+    method: z.enum(WEBHOOK_METHODS).default("POST"),
+    headers: z
+        .record(z.string().regex(HEADER_NAME, "Not a valid header name"), z.string())
+        .default({})
+        .refine((headers) => placeholderError(Object.values(headers)) === null, {
+            error: (issue) => placeholderError(Object.values(issue.input as object)) ?? "Invalid placeholder",
+        }),
+    bodyTemplate: z
+        .string()
+        .min(1, "A body template is required")
+        .refine((source) => webhookTemplateError(source) === null, {
+            error: (issue) => webhookTemplateError(issue.input as string) ?? "Invalid template",
+        }),
+    minLevel: z.enum(ACTIVITY_LEVELS).default("warning"),
+    /** Kind patterns such as `vrrp.*`; empty means every kind. */
+    kinds: z.array(z.string().trim().min(1)).default([]),
+    timeoutMs: z.number().int().min(1000).max(60000).default(10000),
+});
+
+/** A webhook as the API returns it: what was configured, and how its last delivery went. */
+export const WebhookSchema = WebhookInputSchema.extend({
+    id: z.string(),
+    /** The HTTP status of the last attempt; null when it never got an answer. */
+    lastStatus: z.number().nullable(),
+    lastError: z.string().nullable(),
+    lastAttemptAt: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string().nullable(),
 });
 
 // ── Schedulers ───────────────────────────────────────────────────────────────

@@ -135,6 +135,9 @@ export const ACTIVITY_KINDS = [
     "scheduler.failed",
 ] as const;
 
+/** The HTTP methods a webhook may send with. Both carry a body; GET does not. */
+export const WEBHOOK_METHODS = ["POST", "PUT"] as const;
+
 /**
  * The background jobs the server runs on a timer. Each keeps one row in `scheduler_state`:
  * its last finished run and whatever it has to remember from one run to the next.
