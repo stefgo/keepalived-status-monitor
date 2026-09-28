@@ -10,7 +10,7 @@ import {
     type DataTableDef,
     type EntityDetail,
 } from "@stefgo/react-ui-components";
-import { mismatchedVips, type VrrpCluster } from "@kasm/shared";
+import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivityStore } from "../../../stores/useActivityStore";
@@ -19,7 +19,6 @@ import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
-import { activityDetail, activityMessage } from "../../activity/lib/activityText";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import {
     clusterNetworkKey,

@@ -1,6 +1,5 @@
 import { AlertCircle, AlertTriangle, Footprints, Info } from "lucide-react";
-import { ActivityLevel, ActivityRecord } from "@kasm/shared";
-import { activityMessage } from "../lib/activityText";
+import { ActivityLevel, ActivityRecord, activityMessage } from "@kasm/shared";
 import { formatTime } from "../../../utils";
 
 const stepIcon: Record<ActivityLevel, React.ReactNode> = {

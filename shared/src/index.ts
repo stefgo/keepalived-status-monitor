@@ -5,3 +5,4 @@ export * from "./validation.js";
 export * from "./network.js";
 export * from "./targetAddress.js";
 export * from "./vrrpCluster.js";
+export * from "./activityText.js";

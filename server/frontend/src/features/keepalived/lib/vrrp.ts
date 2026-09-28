@@ -35,14 +35,8 @@ export function vrrpStateVariant(state: VrrpState): NonNullable<BadgeProps["vari
     }
 }
 
-/**
- * How a state reads on screen: `MASTER` → `Master`. keepalived and the wire keep the upper
- * case; only the text a reader sees changes. Takes a plain string, because the activity
- * list gets its states from agents of any version.
- */
-export function vrrpStateLabel(state: string): string {
-    return state.charAt(0).toUpperCase() + state.slice(1).toLowerCase();
-}
+// Lives in shared, next to the activity wording that uses it too.
+export { vrrpStateLabel } from "@kasm/shared";
 
 export const CLUSTER_HEALTH: Record<
     VrrpClusterHealth,

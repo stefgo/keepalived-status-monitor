@@ -1,8 +1,7 @@
-import { ActivityRecord } from "@kasm/shared";
-import { vrrpStateLabel } from "../../keepalived/lib/vrrp";
+import type { ActivityRecord } from "./types.js";
 
 /**
- * Turns an event into the sentence a reader sees.
+ * Turns an event into the sentence a reader sees -- on the dashboard and in a webhook alike.
  *
  * This is the one place a wording exists. An agent reports `vrrp.state_changed` with the two
  * states and nothing else, so an agent of an older version stays useful without knowing how
@@ -12,6 +11,15 @@ import { vrrpStateLabel } from "../../keepalived/lib/vrrp";
  * A kind nobody here knows still has to read as something: the fallback prints the kind
  * itself, because dropping the line would hide an observation that cannot be made again.
  */
+
+/**
+ * How a state reads on screen: `MASTER` → `Master`. keepalived and the wire keep the upper
+ * case; only the text a reader sees changes. Takes a plain string, because the activity
+ * list gets its states from agents of any version.
+ */
+export function vrrpStateLabel(state: string): string {
+    return state.charAt(0).toUpperCase() + state.slice(1).toLowerCase();
+}
 
 /** The server's schedulers as the settings page names them. */
 const SCHEDULER_NAMES: Record<string, string> = {
