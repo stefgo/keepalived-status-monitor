@@ -52,7 +52,8 @@ keepalived:
     # Read the JSON dump instead of the text dump. Only for a keepalived built with
     # --enable-json; set it to the number `keepalived --signum=JSON` prints on the host.
     jsonSignal:
-    # Milliseconds to wait for keepalived to write a dump (default: 3000)
+    # Milliseconds to wait for keepalived to write a dump (default: 3000). Without an answer
+    # the signal is sent once more, so a failed reading takes twice as long.
     dumpTimeoutMs: 3000
 
 # Accept a server certificate that does not validate (e.g. self-signed) for registration and

@@ -218,7 +218,9 @@ that is what the agent uses — on start, on every connection to the server, on 
    signal replaces `SIGUSR1` and the JSON dump is read instead of the text one.
 3. **Wait for the file.** A dump counts as written once its modification time is newer than
    before the signal and its size has stopped changing — a read in the middle of the write
-   would parse half a dump. `keepalived.dumpTimeoutMs` bounds the wait.
+   would parse half a dump. `keepalived.dumpTimeoutMs` bounds the wait. Without an answer
+   the signal is sent once more — keepalived drops a signal that arrives while it reloads —
+   and only a second timeout makes the reading an error.
 4. **Read it through `/proc/<pid>/root`.** That path is keepalived's own view of the file
    system, so a systemd `PrivateTmp=true` changes nothing and the host's `/tmp` does not have
    to be mounted. It needs `SYS_PTRACE` (and, under AppArmor, an unconfined profile).

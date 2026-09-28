@@ -161,7 +161,7 @@ file is no longer read.
 | `keepalived.notifyToken` | Token for `POST /api/keepalived/notify`, which a keepalived notify script calls; at least 16 characters. Unset by default: the endpoint does not exist. |
 | `keepalived.dataFile` / `statsFile` / `jsonFile` | Where keepalived writes its dumps, as keepalived sees the path (defaults `/tmp/keepalived.data`, `.stats`, `.json`). Match `state_dump_file`, `stats_dump_file` and `json_dump_file` if `keepalived.conf` sets them. |
 | `keepalived.jsonSignal` | Read the JSON dump instead of the text dump: the number `keepalived --signum=JSON` prints on the host. Only for a keepalived built with `--enable-json`. Unset by default. |
-| `keepalived.dumpTimeoutMs` | How long to wait for keepalived to write a dump (default `3000`). |
+| `keepalived.dumpTimeoutMs` | How long to wait for keepalived to write a dump (default `3000`); the signal is sent once more before a reading fails. |
 | `listenPort` | Port of the local web server (default `3011`); `KASM_CLIENT_PORT` wins over it. |
 | `enableStatusPage` / `enableRegisterPage` | Serve the status page and the registration page with `POST /api/register` (both default `true`). The registration page closes by itself once the agent is registered. |
 | `allowSelfSignedCertificates` | Accept a server certificate that does not validate (self-signed), for registration and the WebSocket connection. Default `false`. |

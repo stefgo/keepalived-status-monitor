@@ -29,6 +29,13 @@ const RESEND_AFTER_MS = 30_000;
 /** How often the dump file is checked for a new version after the signal. */
 const DUMP_POLL_MS = 50;
 
+/**
+ * How often a signal is sent before a dump counts as missing. keepalived drops a signal that
+ * arrives while it reloads and restarts its VRRP child, and one lost signal must not be
+ * reported as a keepalived that cannot be read.
+ */
+const DUMP_ATTEMPTS = 2;
+
 type Listener = (status: KeepalivedStatus) => void;
 
 /**
@@ -288,23 +295,30 @@ export function findKeepalivedPid(): number | null {
  * Sends one signal and waits for keepalived to rewrite the file it answers with. "Rewritten"
  * means a newer mtime than before the signal and a size that has stopped changing -- a read
  * in the middle of the write would parse half a dump.
+ *
+ * Without an answer the signal is sent once more (`DUMP_ATTEMPTS`). The mtime to beat stays
+ * the one from before the first signal, so a late answer to that one counts as well.
  */
 async function signalAndRead(pid: number, signal: NodeJS.Signals | number, file: string): Promise<string> {
     const target = path.join(PROC_DIR, String(pid), "root", file);
     const before = statOrNull(target)?.mtimeMs ?? 0;
+    const timeoutMs = config.keepalived.dumpTimeoutMs;
 
-    process.kill(pid, signal);
+    for (let attempt = 1; attempt <= DUMP_ATTEMPTS; attempt++) {
+        if (attempt > 1) logger.debug({ pid, file, attempt }, "No dump from keepalived yet, signalling again");
+        process.kill(pid, signal);
 
-    const deadline = Date.now() + config.keepalived.dumpTimeoutMs;
-    let lastSize = -1;
-    while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, DUMP_POLL_MS));
-        const stat = statOrNull(target);
-        if (!stat || stat.mtimeMs <= before) continue;
-        if (stat.size === lastSize && stat.size > 0) return fs.readFileSync(target, "utf-8");
-        lastSize = stat.size;
+        const deadline = Date.now() + timeoutMs;
+        let lastSize = -1;
+        while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, DUMP_POLL_MS));
+            const stat = statOrNull(target);
+            if (!stat || stat.mtimeMs <= before) continue;
+            if (stat.size === lastSize && stat.size > 0) return fs.readFileSync(target, "utf-8");
+            lastSize = stat.size;
+        }
     }
-    throw new Error(`keepalived did not write ${file} within ${config.keepalived.dumpTimeoutMs} ms`);
+    throw new Error(`keepalived did not write ${file} within ${DUMP_ATTEMPTS} × ${timeoutMs} ms`);
 }
 
 /**
