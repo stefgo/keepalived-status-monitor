@@ -191,6 +191,10 @@ On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading an
 
 ### ManagedClients (`features/clients`)
 
+![The client list with two online agents](assets/screenshots/clients.png)
+
+*The client list at `/clients`: online dot, name and site per client, the row menu on the right.*
+
 The container component for the client management view. Coordinates between the client list, the editor and the add-client wizard.
 
 - **Functionality**:
@@ -232,6 +236,10 @@ Every question before an action, and every notice after a failed one, goes throu
 
 ### AddClientWizard (`features/clients/components/add-client`)
 
+![Step 1 of the Add Client wizard: which side opens the connection](assets/screenshots/add-client.png)
+
+*Step 1 of the wizard: the choice between an agent that connects inbound and one the server dials.*
+
 One flow for both connection modes, built on `Wizard` from `@stefgo/react-ui-components`. Step 1 is the decision about which side opens the connection; step 2 is the branch that follows from it. As two separate entry points this was a decision the operator had to have made before reaching a form.
 
 It lives in the workspace rather than in a modal, because the two branches end in different things: a token to carry to another machine, or a connection attempt that may fail with a reason worth reading.
@@ -257,6 +265,10 @@ groups. A row opens the page of the instance's cluster, where its counters are. 
 offline client keeps its reading on screen**, dimmed and with a line saying that it is the
 last one reported rather than the present state — the server keeps it for exactly that.
 
+![The detail page of client lb-01 with its VRRP instances and sync group](assets/screenshots/client-detail.png)
+
+*A client's page: keepalived's state in the header, the last reading's instances and sync groups below.*
+
 ### KeepalivedDashboard (`features/keepalived`)
 
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
@@ -272,7 +284,15 @@ clears the search, since all of them keep it in the same `search` parameter. The
 is kept in the `panel` parameter (`hosts`, `clusters`, `masters`, `activity`), so it survives
 a reload and a shared link opens it too.
 
+![The dashboard with its four stat cards and the cluster list opened beneath them](assets/screenshots/dashboard-light.png)
+
+*The dashboard with the VRRP clusters card opened (`/?panel=clusters`): two healthy clusters, each with its MASTER and BACKUP.*
+
 ### ClusterOverview & ClusterCard (`features/keepalived`)
+
+![The cluster tree with VRID 51 and 52 expanded](assets/screenshots/clusters.png)
+
+*`/clusters` in tree mode: the virtual router on the first level, its hosts ordered by effective priority on the second.*
 
 `/clusters` is one `DataMultiView` in tree mode, the clusters needing attention first. The
 first level is the virtual router — VRID, virtual addresses and the health badge
@@ -350,6 +370,10 @@ A cluster no host reports any more shows a `NotFoundCard` leading back to the cl
 The instance page this one replaced, `/client/:clientId/instance/:instanceName`, is kept as
 a redirect to the instance's cluster, so old links still land.
 
+![The page of cluster VRID 51 with its hosts, counters and recent activity](assets/screenshots/cluster-detail.png)
+
+*The page of one cluster: header, hosts, the counters of the selected hosts and the cluster's recent activity.*
+
 ### VrrpInstanceView & VrrpStateBadge (`features/keepalived`)
 
 One view for a host's instances and for a cluster's members: instance (with its sync group),
@@ -373,6 +397,10 @@ MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the res
 
 The page at `/activity`. Its entries are structured events: a `kind`, a `level`, what the
 event is about and the facts of that kind.
+
+![The activity list after a failover, filtered to all entries at info and above](assets/screenshots/activity.png)
+
+*The activity after a failover of VRID 51, with the filters on *all* and *info*: the role events of the cluster and the state changes of each host.*
 
 **The text is written in one place.** `activityText.ts` in `@kasm/shared` is the one place a
 wording exists — the webhooks send the same sentence as `{{event.message}}`: an agent
@@ -434,6 +462,10 @@ Its own entry in the sidebar, in the Administration group above Settings. `Webho
 shows per webhook its target, its filters and how the last delivery ended, with the reason
 of a failure. A row, or its Edit action, opens the editor; Delete asks first.
 
+![The webhook list with two webhooks](assets/screenshots/webhooks.png)
+
+*The webhook list; neither of these two has been sent yet.*
+
 **The editor is a page, not a dialog**, at `/webhooks/new` and `/webhooks/:webhookId`. It
 leaves the way the `ClientEditor` does: the close button in the card's header, Escape, or
 Cancel, each asking first when there are unsaved edits, and going back to
@@ -474,6 +506,10 @@ it (`vrrp`); an offline client shows `–`, because capabilities belong to the b
 wire, and a connected agent that declares none shows "None".
 
 ---
+
+![The Client Tokens tab of the settings page](assets/screenshots/settings.png)
+
+*The Client Tokens tab: retention and interval of the cleanup, the scheduler's state and a manual run.*
 
 ## 🎨 Styling & Theming
 

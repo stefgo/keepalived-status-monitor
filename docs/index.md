@@ -11,6 +11,12 @@ agent runs next to keepalived on each host; a central Fastify/React server colle
 agents read and shows every VRRP instance, grouped into the clusters they form. KASM changes
 nothing in keepalived — it watches.
 
+<figure>
+  <img src="assets/screenshots/dashboard-light.png#gh-light-mode-only" alt="The KASM dashboard: hosts online, VRRP clusters, MASTER and warnings, with both clusters and their hosts listed beneath">
+  <img src="assets/screenshots/dashboard-dark.png#gh-dark-mode-only" alt="The KASM dashboard: hosts online, VRRP clusters, MASTER and warnings, with both clusters and their hosts listed beneath">
+  <figcaption>The dashboard of two keepalived nodes that form two VRRP clusters — each node MASTER of one, BACKUP of the other.</figcaption>
+</figure>
+
 ## How the pieces fit together
 
 Three parties are involved:

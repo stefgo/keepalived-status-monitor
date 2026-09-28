@@ -201,6 +201,10 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 
 On the first start, if no users exist in the database, the backend automatically creates an `admin` user with the password `admin`.
 
+![The sign-in form](assets/screenshots/login-form.png)
+
+*The sign-in form. With OIDC configured it offers single sign-on as well.*
+
 > **Change this password immediately after first login** via the user management UI or the `PUT /api/v1/users/:userId` endpoint.
 > The server logs a warning on startup when it creates this account.
 

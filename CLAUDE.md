@@ -49,6 +49,7 @@ npm run build            # Build all workspaces
 npm run clean            # Clean build artifacts
 npm run lint             # ESLint over shared, client and server/backend
 npm run lint:frontend    # ESLint over server/frontend (its own config)
+npm run screenshots      # docs/assets/screenshots from a running server (see docs/development.md)
 
 # Frontend only (server/frontend)
 npm run lint                 # ESLint

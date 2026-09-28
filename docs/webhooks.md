@@ -7,6 +7,10 @@ with placeholders for the data of the event that triggered it.
 Webhooks are managed on the **Webhooks** page in the sidebar, under Administration. The API is described under
 [Webhooks in the API reference](api.md#-webhooks).
 
+![The webhook editor with a Gotify template and its rendered preview](assets/screenshots/webhook-editor.png)
+
+*The editor: target, filters and headers above, the body template beside its preview, rendered against a sample event.*
+
 ## When a webhook fires
 
 Every event the server stores for the first time goes to every enabled webhook whose

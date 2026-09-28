@@ -20,7 +20,8 @@
         "build": "npm run build -w shared && npm run build -w client -w server/backend -w server/frontend",
         "clean": "rimraf shared/dist client/dist server/backend/dist server/dist/public",
         "lint": "eslint .",
-        "lint:frontend": "npm run lint -w server/frontend"
+        "lint:frontend": "npm run lint -w server/frontend",
+        "screenshots": "node scripts/screenshots.mjs"
     },
     "devDependencies": {
         "@commitlint/cli": "^21.2.2",

@@ -325,6 +325,12 @@ Registration is a one-time setup step performed via the local web UI:
 6. The client saves the identity to `identity.json` in its data directory, and the server URL to `config.yaml` — the latter only if it differs from what is already there. If either write fails, the register page says so: the agent is connected, but it would come back unregistered.
 7. The client connects via WebSocket straight away.
 
+Once registered, `/` leads to the status page instead:
+
+![The agent's status page: connection mode, server, token, connection, keepalived and change detection](assets/screenshots/agent-status.png)
+
+*The status page of a registered agent. It says whether keepalived was read and how changes are picked up — here polling plus the notify FIFO.*
+
 ### Outbound registration
 
 The server registers the agent itself when it cannot be reached from the agent:

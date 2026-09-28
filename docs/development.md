@@ -91,10 +91,61 @@ commit builds no image.
 
 ### Screenshots
 
-There are none yet. The screenshot generator of the project KASM started from
-(`scripts/screenshots`, Playwright against fixtures) was left behind with the Docker views
-it captured; it can come back with VRRP fixtures. Until then, `index.md` describes the
-dashboard in words.
+The pictures in `docs/assets/screenshots/` are taken by `npm run screenshots`
+([`scripts/screenshots.mjs`](https://github.com/stefgo/keepalived-status-monitor/blob/main/scripts/screenshots.mjs)),
+which drives Chromium through Playwright against a running server — no fixtures, the real
+application with real readings. Playwright is not a dependency of any workspace; the script
+loads it from the directory in `PLAYWRIGHT_DIR`:
+
+```bash
+npm install --prefix /tmp/kasm-pw playwright
+npx --prefix /tmp/kasm-pw playwright install chromium
+```
+
+The data comes from the dev stack. Keep it apart from your own dev database with an override
+that puts the server's `data` directory and both agents' `/data` on fresh volumes, for example
+`compose.shots.yaml`:
+
+```yaml
+services:
+    server-dev:
+        volumes: [shots-server-data:/app/server/backend/data]
+    client-a:
+        volumes: [shots-client-a-data:/data]
+    client-b:
+        volumes: [shots-client-b-data:/data]
+volumes:
+    shots-server-data:
+    shots-client-a-data:
+    shots-client-b-data:
+```
+
+1. `docker compose -f compose.dev.yaml -f compose.shots.yaml up --build -d`
+2. Register both agents with a token each, named `lb-01` and `lb-02` (see the header of
+   `compose.dev.yaml`), and add a webhook or two.
+3. Fail over once so the activity has a history: `docker stop kasm-keepalived-a`, wait,
+   then `docker start kasm-keepalived-a kasm-client-a` — stopping the node stops its agent,
+   which shares its namespaces.
+4. `PLAYWRIGHT_DIR=/tmp/kasm-pw npm run screenshots`
+
+Every page is captured at 1440×900 with a device scale factor of 2, in the light theme; the
+dashboard is taken once more in dark. `docs/stylesheets/extra.css` scales them back down and
+cuts `login-*` and `agent-*`, which are one narrow card each, to their own width.
+
+Both renderers switch the dashboard pair on the same markers: GitHub and Material alike show
+an image whose `src` ends in `#gh-light-mode-only` or `#gh-dark-mode-only` in that colour
+scheme only. Other pages show the light picture alone.
+
+The version in the header is whatever the served bundle was built from, and a working tree
+with changes in it builds as `-dirty`. Build the frontend with the version set, so the
+pictures carry the commit they show:
+
+```bash
+VITE_APP_VERSION="0.0.0+$(git rev-parse --short HEAD)" npm run build -w server/frontend
+```
+
+`POST /api/login` allows 10 attempts per 15 minutes and the script signs in twice per run;
+`docker restart kasm-server-dev` resets the counter.
 
 ## Build Management
 
@@ -312,6 +363,7 @@ All scripts are defined in the root `package.json` and target individual workspa
 | `start:client`   | Start client agent in production mode.                      |
 | `build`          | Build `shared` first, then `client`, `server/backend` and `server/frontend`. |
 | `clean`          | Remove compiled output from `shared`, `client`, and `server`. |
+| `screenshots`    | Capture `docs/assets/screenshots/` from a running server, see [Screenshots](#screenshots). |
 
 There is no `start:frontend`. The frontend builds into `server/dist/public` and is served by the backend, so `start:server` covers it. To serve a production bundle on its own, use `npm run preview -w server/frontend`.
 

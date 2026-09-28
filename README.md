@@ -10,6 +10,9 @@ The **Keepalived Status Monitor** (KASM) watches every host in your infrastructu
 virtual address — and tells you when that changes. It consists of a lightweight Node.js agent
 next to each keepalived and a central Fastify/React server with a dashboard and API.
 
+![The KASM dashboard with two VRRP clusters](docs/assets/screenshots/dashboard-light.png#gh-light-mode-only)
+![The KASM dashboard with two VRRP clusters](docs/assets/screenshots/dashboard-dark.png#gh-dark-mode-only)
+
 ## 🚀 Features
 
 - **VRRP at a glance:** Every VRRP instance on every host with its state (MASTER, BACKUP,
