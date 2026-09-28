@@ -254,7 +254,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                     <summary className="cursor-pointer font-medium text-text-primary">
                         Available placeholders
                     </summary>
-                    <p className="mt-2 text-xs text-text-muted max-w-prose">
+                    <p className="mt-2 text-xs text-text-muted">
                         A string that is only a placeholder, such as <code>"{"{{event.data}}"}"</code>,
                         becomes the value with its type. Inside longer text it is inserted as text.{" "}
                         <code>{'{{client.name | default("server")}}'}</code> stands in for a missing value;
