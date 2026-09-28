@@ -431,7 +431,8 @@ Cancel, each asking first when there are unsaved edits, and going back to
 `location.state.from` or else to the list; Save goes back after storing. The webhook is read
 from `GET /api/v1/webhooks`; an id that is not there gets a `NotFoundCard`. The preview is
 rendered with `renderTemplate` from `@kasm/shared` — the code the server sends with — against
-a sample event, so the preview and the delivery cannot disagree. "Send Test" posts the
+the sample event for the draft's kinds (`sampleWebhookRecord`, the one "Send Test" sends; its
+kind is named above the preview), so the preview and the delivery cannot disagree. "Send Test" posts the
 unsaved draft to `/api/v1/webhooks/test`. See [Webhooks](webhooks.md) for the template syntax.
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)

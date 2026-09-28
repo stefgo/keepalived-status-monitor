@@ -919,6 +919,7 @@ the agent happened to read it.
 | `keepalived.unreadable` | agent | `error` | `error` |
 | `client.connected` / `client.disconnected` | server | `trace` | `connectionMode`, `version`, `clientName` |
 | `client.registered` | server | `info` | `hostname`, `clientName` |
+| `scheduler.failed` | server | `error` | `scheduler`, `trigger`, `error`; no client |
 | `vrrp.master_changed` | server | `info`, `warning` when the cluster is not healthy afterwards | cluster summary, see below |
 | `vrrp.split_brain` / `vrrp.master_lost` | server | `error` | cluster summary, see below |
 
@@ -1055,7 +1056,7 @@ A webhook as the API returns it:
 | `url` | `http://` or `https://`. May contain placeholders, inserted as text. |
 | `method` | `POST` (default) or `PUT`. |
 | `headers` | Sent with every delivery; values may contain placeholders. `Content-Type: application/json` is always set. Returned in the clear. |
-| `bodyTemplate` | JSON with `{{…}}` placeholders, stored as written. Refused with `400` when it is not valid JSON or a placeholder does not parse. |
+| `bodyTemplate` | JSON with `{{…}}` placeholders, filters and `$if`/`$map`/`$join` directives (see [Webhooks](webhooks.md#templates)), stored as written, at most 64 KiB. Refused with `400` when it is not valid JSON or a placeholder or directive does not parse. |
 | `minLevel` | The lowest level sent: `trace`, `info`, `warning` (default) or `error`. |
 | `kinds` | Kind patterns, `*` as wildcard. Empty sends every kind. |
 | `timeoutMs` | Per attempt, 1000–60000 (default 10000). |
@@ -1082,7 +1083,8 @@ configuration. Answers the stored webhook, or **404**.
 ### Send A Test Delivery
 
 `POST /api/v1/webhooks/test` with the same body as a create — saved or not, so the editor can
-try a target before storing it. Renders a sample `vrrp.state_changed` event, sends it once
+try a target before storing it. Renders the sample event for the webhook's `kinds` (see
+[Webhooks](webhooks.md#templates); `vrrp.state_changed` when none matches), sends it once
 without retries, and records nothing.
 
 ```json

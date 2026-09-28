@@ -42,14 +42,17 @@ parsed JSON, never as text, so a quote or a brace in an event's data cannot brea
 | :--------- | :------ |
 | `"{{event.data}}"` — a string that is only one placeholder | The value **with its type**: an object stays an object, a number a number, a missing value `null`. |
 | `"Host {{client.name}} is {{event.data.to}}"` — a placeholder inside text | Text. A missing value is empty, an object is written as JSON. |
-| `{{client.name \| default("server")}}` | The fallback when the value is missing, `null` or empty. The fallback is a JSON value: `"text"`, `0`, `null`. |
+| `{{client.name \| default("server")}}` | The fallback when the value is missing, `null` or empty. The fallback is a JSON value (`"text"`, `0`, `null`) or text in single quotes (`'text'`). More [filters](#filters) below. |
 | `{ "{{event.kind}}": … }` | Placeholders work in keys too, as text. |
 
 Placeholders also work in the **URL** and in **header values**, always as text.
 
 A path must start with `event`, `client` or `webhook`; anything else is refused when
-the webhook is saved, as is a template that is not valid JSON. The editor page shows a live
-preview rendered with a sample event, and **Send Test** delivers that sample to the target.
+the webhook is saved, as is a template that is not valid JSON or longer than 64 KiB. The
+editor page shows a live preview rendered with a sample event, and **Send Test** delivers that
+sample to the target. The sample follows the webhook's event kinds: the first of
+`vrrp.state_changed`, `vrrp.master_changed` and `keepalived.stopped` one of them matches,
+`vrrp.state_changed` when none does.
 
 ### What a template can read
 
@@ -74,7 +77,98 @@ preview rendered with a sample event, and **Send Test** delivers that sample to 
 
 `client` is `null` for an event the server reports about itself (`scheduler.failed`); use
 `default(...)` where that matters. Which fields `event.data` carries per kind is listed in
-the [Activity reference](api.md#-activity).
+the [Activity reference](api.md#-activity). An array element is reached by its position:
+`event.data.members.0.host`.
+
+### Filters
+
+Filters follow the path, separated by `|`, and run left to right. They work everywhere a
+placeholder does, URL and headers included.
+
+| Filter | Does |
+| :----- | :--- |
+| `default(<value>)` | The value when the one before is missing, `null` or empty |
+| `join(", ")` | An array as text, its items separated by the given text (`", "` when left out). Objects in it are written as JSON. |
+| `map("host")` | From an array of objects, the one field of each: `[{host: "lb-01"}, …]` → `["lb-01", …]` |
+| `upper`, `lower` | Text in upper or lower case |
+
+```text
+{{event.data.vips | join(", ")}}                    → 10.0.0.10/24, 10.0.0.11/24
+{{event.data.members | map("host") | join(", ")}}   → lb-01, lb-02
+{{client.name | default("server") | upper}}         → LB-01
+```
+
+A filter handed a value it cannot work on — `join` on a number, `upper` on an object — passes
+it on unchanged. An unknown filter is refused when the webhook is saved.
+
+### Conditions and loops
+
+For what a single placeholder cannot say — a line only when there was a previous master, one
+line per host — a template uses **directives**: JSON objects with a key starting with `$`.
+They borrow their names from [JSON-e](https://json-e.js.org/), and like everything else they
+work on the parsed JSON, so they cannot break it either.
+
+**`$if`** — takes `then` when the condition holds, else `else`:
+
+```json
+{
+    "previous": { "$if": "event.data.previousMaster", "then": "was {{event.data.previousMaster}}", "else": "first master" }
+}
+```
+
+A branch that is left out drops what the directive stands for: the key in an object, the
+item in an array (`null` for a whole template). The condition is one of
+
+| Condition | Holds when |
+| :-------- | :--------- |
+| `path` | the value is there and not `null`, `""`, `false`, `0` or an empty array |
+| `!path` | it is not |
+| `path == 'MASTER'`, `path != 'MASTER'` | the value is, or is not, equal to the one given — as a JSON value (`"MASTER"`, `51`, `true`, `null`) or text in single quotes. `51` and `'51'` are not equal. |
+
+There is nothing beyond these: no `and`, no `or`, no arithmetic. Two conditions are two
+nested `$if`s.
+
+**`$map`** — one item per element of an array, rendered with `each(name)`, in which `name`
+is the element; `each(name, index)` adds its position, counted from 0:
+
+```json
+{
+    "hosts": { "$map": "event.data.members", "each(m)": { "host": "{{m.host}}", "state": "{{m.state}}" } }
+}
+```
+
+The path names the array without braces (`"{{event.data.members}}"` is accepted too) and
+may carry filters. Anything but an array gives `[]`. Loops nest, and an inner one can read the
+outer one's name. A name may not be `event`, `client`, `webhook` or one already in use.
+
+**`$join`** — renders what it holds and joins the resulting array into text, separated by
+`with` (nothing when left out). That is how a loop becomes a message:
+
+```json
+{
+    "content": {
+        "$join": {
+            "$map": "event.data.members",
+            "each(m)": {
+                "$if": "m.online",
+                "then": "- {{m.host}}: {{m.state}} ({{m.priority}})",
+                "else": "- {{m.host}}: offline"
+            }
+        },
+        "with": "\n"
+    }
+}
+```
+
+→ `"- lb-01: MASTER (100)\n- lb-02: offline"`
+
+- An object holding a directive may hold only that directive's own keys (`then`/`else`,
+  `each(…)`, `with`); two directives in one object are refused.
+- Directives nest at most 8 deep. A loop only ever runs over an array the event carries,
+  so a template always finishes.
+- A key that has to reach the target starting with `$if`, `$map` or `$join` is written with a
+  second `$`: `"$$if"` is sent as `"$if"`. Other `$` keys, such as `$schema`, are sent as
+  written.
 
 ## Examples
 
@@ -124,18 +218,55 @@ minimum level `info`:
     "text": "{{event.message}}",
     "vrid": "{{event.data.vrid}}",
     "site": "{{event.data.site}}",
+    "vips": "{{event.data.vips | join(\", \")}}",
     "master": "{{event.data.master}}",
-    "previous": "{{event.data.previousMaster}}",
+    "previous": { "$if": "event.data.previousMaster", "then": "{{event.data.previousMaster}}" },
     "health": "{{event.data.health}}",
-    "hosts": "{{event.data.members}}"
+    "hosts": {
+        "$map": "event.data.members",
+        "each(m)": { "host": "{{m.host}}", "state": "{{m.state}}", "online": "{{m.online}}" }
+    }
 }
 ```
 
-`hosts` arrives as an array with `host`, `state`, `priority`, `online`, `reporting` and
-`readAt` per member. These events are made by the server once the readings of all hosts agree
+`event.data.members` holds `host`, `state`, `priority`, `effectivePriority`, `online`,
+`reporting` and `readAt` per member; `"hosts": "{{event.data.members}}"` sends all of it. These events are made by the server once the readings of all hosts agree
 — see [Cluster events](api.md#-activity). With the agents' notify FIFO or notify endpoint
 switched on, that is within a second of the failover; with the timer alone, up to
 `pollInterval`.
+
+**[Log Notifier](https://github.com/stefgo/ha-log-notifier) for Home Assistant** — URL
+`https://<ha>/api/lognotifier/ingest/<channel token>`, event kinds `vrrp.master_changed`,
+minimum level `info`. Log Notifier reads KASM's levels as its own and renders `content` as
+Markdown:
+
+```json
+{
+    "level": "{{event.level}}",
+    "title": "{{event.message}}",
+    "content": {
+        "$join": [
+            "**{{event.data.master}}** is master now",
+            { "$if": "event.data.previousMaster", "then": ", was **{{event.data.previousMaster}}**" },
+            "\n\n- Site: {{event.data.site | default('–')}}\n- VIPs: {{event.data.vips | join(', ')}}\n- Health: {{event.data.health}}\n\n",
+            {
+                "$join": {
+                    "$map": "event.data.members",
+                    "each(m)": {
+                        "$if": "m.online",
+                        "then": "- **{{m.host}}**: {{m.state}} ({{m.effectivePriority}})",
+                        "else": "- **{{m.host}}**: offline"
+                    }
+                },
+                "with": "\n"
+            }
+        ]
+    },
+    "source": "kasm",
+    "tags": ["kasm", "{{event.kind}}", "{{event.data.site | default('no-site')}}"],
+    "timestamp": "{{event.occurredAt}}"
+}
+```
 
 **Your own endpoint**, with the complete event
 

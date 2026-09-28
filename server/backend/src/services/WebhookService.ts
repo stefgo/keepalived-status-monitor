@@ -171,11 +171,11 @@ export class WebhookService {
     }
 
     /**
-     * Sends the sample event once, with what the editor holds -- saved or not -- and reports
+     * Sends the sample event for the webhook's kinds once, with what the editor holds -- saved or not -- and reports
      * the answer. No retries and no stored result: the operator is watching.
      */
     static async test(webhook: WebhookFields): Promise<WebhookTestResult> {
-        const request = render(webhook, sampleWebhookRecord(), SAMPLE_WEBHOOK_CLIENT);
+        const request = render(webhook, sampleWebhookRecord(webhook.kinds), SAMPLE_WEBHOOK_CLIENT);
         const delivery = await send(webhook, request);
         return {
             ok: delivery.error === null,

@@ -99,8 +99,8 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
     const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
     const preview = useMemo(
-        () => previewBody(draft.bodyTemplate, draft.name || "webhook"),
-        [draft.bodyTemplate, draft.name],
+        () => previewBody(draft.bodyTemplate, draft.name || "webhook", draft.kinds),
+        [draft.bodyTemplate, draft.name, draft.kinds],
     );
 
     const set = <K extends keyof WebhookDraft>(key: K, value: WebhookDraft[K]) =>
@@ -254,7 +254,9 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         classNames={{ textarea: "font-mono text-xs sm:text-xs" }}
                     />
                     <div>
-                        <label className="field-label">Preview (sample event)</label>
+                        <label className="field-label">
+                            Preview (sample <span className="font-mono">{preview.kind}</span>)
+                        </label>
                         <pre className="mt-1 h-[calc(100%-1.5rem)] min-h-40 overflow-auto rounded-lg border border-border bg-app-bg p-3 text-xs font-mono text-text-primary">
                             {preview.body ?? "–"}
                         </pre>
@@ -279,6 +281,27 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                             </div>
                         ))}
                     </dl>
+                    <p className="mt-3 text-xs text-text-muted">
+                        <span className="font-medium text-text-primary">Filters</span> follow the path and chain:{" "}
+                        <code>{"{{event.data.members | map(\"host\") | join(\", \")}}"}</code>. There are{" "}
+                        <code>default</code>, <code>join</code>, <code>map</code>, <code>upper</code> and{" "}
+                        <code>lower</code>.
+                    </p>
+                    <p className="mt-2 text-xs text-text-muted">
+                        <span className="font-medium text-text-primary">Conditions and loops</span> are objects:{" "}
+                        <code>{'{"$if": "event.data.previousMaster", "then": …, "else": …}'}</code>,{" "}
+                        <code>{'{"$map": "event.data.members", "each(m)": "{{m.host}}"}'}</code> and{" "}
+                        <code>{'{"$join": …, "with": "\\n"}'}</code>. The preview renders the sample of the
+                        first matching event kind.{" "}
+                        <a
+                            href="https://stefgo.github.io/keepalived-status-monitor/webhooks/#conditions-and-loops"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                        >
+                            Reference
+                        </a>
+                    </p>
                 </details>
 
                 {testResult && (

@@ -73,23 +73,36 @@ export function inputFrom(draft: WebhookDraft): WebhookInput {
         headers,
         bodyTemplate: draft.bodyTemplate,
         minLevel: draft.minLevel,
-        kinds: draft.kinds
-            .split(",")
-            .map((kind) => kind.trim())
-            .filter((kind) => kind.length > 0),
+        kinds: parseKinds(draft.kinds),
         timeoutMs: Math.round((parseFloat(draft.timeoutSeconds) || 10) * 1000),
     };
 }
 
-/** The body the sample event would produce, or why there is none. */
-export function previewBody(template: string, webhookName: string): { body?: string; error?: string } {
+/** The kind patterns of the comma separated field. */
+export function parseKinds(text: string): string[] {
+    return text
+        .split(",")
+        .map((kind) => kind.trim())
+        .filter((kind) => kind.length > 0);
+}
+
+/**
+ * The body the sample event would produce, or why there is none. The sample is the one for
+ * the webhook's kinds, as the test delivery sends it; `kind` says which it was.
+ */
+export function previewBody(
+    template: string,
+    webhookName: string,
+    kinds: string,
+): { kind: string; body?: string; error?: string } {
+    const record = sampleWebhookRecord(parseKinds(kinds));
     const error = webhookTemplateError(template);
-    if (error) return { error };
+    if (error) return { kind: record.kind, error };
     try {
-        const context = buildWebhookContext(sampleWebhookRecord(), SAMPLE_WEBHOOK_CLIENT, webhookName);
-        return { body: JSON.stringify(renderTemplate(JSON.parse(template), context), null, 2) };
+        const context = buildWebhookContext(record, SAMPLE_WEBHOOK_CLIENT, webhookName);
+        return { kind: record.kind, body: JSON.stringify(renderTemplate(JSON.parse(template), context), null, 2) };
     } catch (e) {
-        return { error: (e as Error).message };
+        return { kind: record.kind, error: (e as Error).message };
     }
 }
 

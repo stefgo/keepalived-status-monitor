@@ -723,6 +723,7 @@ export const WebhookInputSchema = z.object({
     bodyTemplate: z
         .string()
         .min(1, "A body template is required")
+        .max(65536, "A body template may be at most 64 KiB")
         .refine((source) => webhookTemplateError(source) === null, {
             error: (issue) => webhookTemplateError(issue.input as string) ?? "Invalid template",
         }),

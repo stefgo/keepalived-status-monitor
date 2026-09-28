@@ -186,7 +186,7 @@ Reports what happens to a VRRP cluster as a whole — `vrrp.master_changed`, `vr
 Reports events to external targets, each with a JSON body template of its own (see [Webhooks](webhooks.md)).
 - `dispatch(records)` — Called with the events just stored, so a repeat from the agent's at-least-once delivery sends nothing twice. Returns at once; every enabled webhook whose `minLevel` and `kinds` an event passes gets a delivery queued behind it. Deliveries to one webhook run one after another, so a target sees events in order; past 100 waiting ones, new events are dropped for that webhook with a warning.
 - A delivery renders URL, headers and body with `renderTemplate` from `@kasm/shared`, sends them with the webhook's timeout, and retries twice (after 1 s and 5 s) when nothing answered, or on a 5xx or 429. The outcome goes to `last_status` / `last_error` / `last_attempt_at` and, on failure, to the log — **never to the activity list**, or a broken target would report its own failures to itself. There is no persistent queue: a restart during a retry loses that delivery; the event itself stays stored.
-- `test(webhook)` — Sends the sample event once with a configuration that need not be saved, and returns what was sent and what came back. No retries, nothing recorded.
+- `test(webhook)` — Sends the sample event for the webhook's kinds once with a configuration that need not be saved, and returns what was sent and what came back. No retries, nothing recorded.
 
 #### `ScheduledJob`
 The timer, the bookkeeping and the status of one server scheduler; both — `NotificationCleanupService` and `TokenCleanupService` — hold one and differ only in the work they do.
