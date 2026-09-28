@@ -7,7 +7,6 @@ export const WS_EVENTS = {
     AUTH_SUCCESS: "AUTH_SUCCESS",
     AUTH_FAILURE: "AUTH_FAILURE",
 
-    GET_VERSION: "GET_VERSION", // Client <-> Server
     REQUEST_STATE_UPDATE: "REQUEST_STATE_UPDATE", // Server → Client: read keepalived now
 
     // Server -> Dashboard
