@@ -6,9 +6,9 @@ import {
     ActionButton,
     Button,
     Card,
-    Checkbox,
     Input,
     Select,
+    Switch,
     Textarea,
     useConfirm,
 } from "@stefgo/react-ui-components";
@@ -173,16 +173,25 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         onChange={(e) => set("name", e.target.value)}
                         placeholder="Ops channel"
                     />
-                    <div className="flex items-end pb-2">
-                        <Checkbox
-                            label="Enabled"
-                            checked={draft.enabled}
-                            onChange={(e) => set("enabled", e.target.checked)}
-                        />
+                    {/* Switch only lays its label out inline; this one is stacked like the other fields. */}
+                    <div>
+                        <label
+                            htmlFor="webhook-enabled"
+                            className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1"
+                        >
+                            Enabled
+                        </label>
+                        <div className="flex h-[42px] items-center">
+                            <Switch
+                                id="webhook-enabled"
+                                value={draft.enabled}
+                                onChange={(enabled) => set("enabled", enabled)}
+                            />
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-[8rem_1fr] gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-[8rem_1fr_12rem] gap-4">
                     <Select
                         label="Method"
                         value={draft.method}
@@ -196,22 +205,6 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         placeholder="https://hooks.example.com/…"
                         hint="Placeholders are allowed here too, and inserted as text."
                     />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Select
-                        label="Minimum Level"
-                        value={draft.minLevel}
-                        onChange={(e) => set("minLevel", e.target.value as WebhookDraft["minLevel"])}
-                        options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: level }))}
-                    />
-                    <Input
-                        label="Event Kinds"
-                        value={draft.kinds}
-                        onChange={(e) => set("kinds", e.target.value)}
-                        placeholder="all kinds"
-                        hint="Comma separated, * as wildcard: vrrp.*, keepalived.stopped"
-                    />
                     <Input
                         label="Timeout (Seconds)"
                         type="number"
@@ -219,6 +212,24 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         max="60"
                         value={draft.timeoutSeconds}
                         onChange={(e) => set("timeoutSeconds", e.target.value)}
+                        hint="Per attempt, 1–60. A timeout is retried up to twice."
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                        label="Minimum Level"
+                        value={draft.minLevel}
+                        onChange={(e) => set("minLevel", e.target.value as WebhookDraft["minLevel"])}
+                        options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: level }))}
+                        hint="Events below this level are not sent."
+                    />
+                    <Input
+                        label="Event Kinds"
+                        value={draft.kinds}
+                        onChange={(e) => set("kinds", e.target.value)}
+                        placeholder="all kinds"
+                        hint="Comma separated, * as wildcard: vrrp.*, keepalived.stopped"
                     />
                 </div>
 
