@@ -72,12 +72,7 @@ export class ActivityService {
         let dropped = 0;
         for (const entry of stored) {
             const parsed = ActivityEventSchema.safeParse(entry);
-            if (!parsed.success) {
-                dropped++;
-                continue;
-            }
-            const occurred = Date.parse(parsed.data.occurredAt);
-            if (!Number.isNaN(occurred) && occurred < oldest) {
+            if (!parsed.success || isExpired(parsed.data, oldest)) {
                 dropped++;
                 continue;
             }
@@ -167,6 +162,7 @@ export class ActivityService {
     static flush(): void {
         this.load();
         this.clearRetry();
+        this.expire();
         if (this.queue.length === 0 || !this.send) return;
         if (!this.send([...this.queue])) return;
         this.retryTimer = setTimeout(() => {
@@ -187,9 +183,31 @@ export class ActivityService {
         if (this.queue.length === 0) this.clearRetry();
     }
 
+    /**
+     * Drops what has been queued longer than MAX_QUEUE_AGE_MS. `load` does the same, but only
+     * once per process: an agent that stays up through a fortnight without its server, and
+     * sees fewer than MAX_QUEUED events in that time, would otherwise deliver the first
+     * morning's events on reconnect. Checked before every send, so nothing expired goes out.
+     */
+    private static expire(): void {
+        const oldest = Date.now() - MAX_QUEUE_AGE_MS;
+        const before = this.queue.length;
+        this.queue = this.queue.filter((event) => !isExpired(event, oldest));
+        const dropped = before - this.queue.length;
+        if (dropped === 0) return;
+        logger.warn({ dropped }, "Dropped queued activity events older than the queue keeps");
+        this.persist();
+    }
+
     private static clearRetry(): void {
         if (!this.retryTimer) return;
         clearTimeout(this.retryTimer);
         this.retryTimer = null;
     }
+}
+
+/** Whether an event occurred before `oldest`. One without a readable time is kept. */
+function isExpired(event: ActivityEvent, oldest: number): boolean {
+    const occurred = Date.parse(event.occurredAt);
+    return !Number.isNaN(occurred) && occurred < oldest;
 }

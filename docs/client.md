@@ -405,7 +405,9 @@ Everything the agent has to survive a restart lives in its **data directory**
   scratch file is the worse failure — the connection an operator would fix it over is the one
   it is refusing to open.
 - The activity queue holds at most 500 events and nothing older than seven days; the oldest
-  go first. Writes are coalesced over a second, and a `SIGTERM` — or an uncaught exception —
+  go first. The age is checked before every send, not only when the queue is read back at
+  startup, so an agent that stays up through a long outage does not deliver stale events
+  either. Writes are coalesced over a second, and a `SIGTERM` — or an uncaught exception —
   flushes what is pending before the process ends.
 
 There is no local database.
