@@ -151,7 +151,8 @@ export class WebSocketController {
         req: AgentRequest,
         fastify: FastifyInstance,
     ) {
-        // Correctly handle IP address with trustProxy (configured in Fastify)
+        // The socket's peer, or the forwarded address if the peer is a listed proxy
+        // (security.trusted_proxies) -- allowed_networks below is checked against this.
         const clientIp = req.ip;
         fastify.log.info({ msg: "Client connected", ip: clientIp });
 

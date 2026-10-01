@@ -95,7 +95,7 @@
 }
 ```
 
-The response sets two cookies, both with `Path=/`, `SameSite=Strict` and a `Max-Age` that ends when the token does (`jwtExpiresIn`, default `12h`). `Secure` is added when the request came in over HTTPS (behind a reverse proxy: `X-Forwarded-Proto: https`).
+The response sets two cookies, both with `Path=/`, `SameSite=Strict` and a `Max-Age` that ends when the token does (`jwtExpiresIn`, default `12h`). `Secure` is added when the request came in over HTTPS (behind a reverse proxy listed in `security.trusted_proxies`: `X-Forwarded-Proto: https`).
 
 | Cookie        | `HttpOnly` | Content                                                                 |
 | :------------ | :--------- | :---------------------------------------------------------------------- |

@@ -10,7 +10,7 @@ import cookie from "@fastify/cookie";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { initOIDC, appConfig, serverPort } from "./config/AppConfig.js";
+import { initOIDC, appConfig, serverPort, trustedProxies } from "./config/AppConfig.js";
 import { AuthService } from "./services/AuthService.js";
 import { NotificationCleanupService } from "./services/NotificationCleanupService.js";
 import { TokenCleanupService } from "./services/TokenCleanupService.js";
@@ -39,8 +39,11 @@ ClusterEventService.start();
 import { loggerOptions } from "@kasm/shared/node";
 
 const server = Fastify({
-    // Trust Proxy is required for correct IP detection behind Traefik
-    trustProxy: true,
+    // Forwarding headers count only from the proxies the operator listed. `true` believed
+    // them from anyone who reached the port, so the client address -- which the login rate
+    // limit and every network check rely on -- was whatever the caller wrote into
+    // X-Forwarded-For. See security.trusted_proxies in the config schema.
+    trustProxy: trustedProxies.length ? trustedProxies : false,
     disableRequestLogging: true,
     logger: loggerOptions,
 });
@@ -80,8 +83,8 @@ await server.register(cors, { origin: false });
 // Registered without a global limit: the only route that needs one is the login, and a
 // blanket limit would also count the dashboard's own polling and the agent handshakes,
 // where a larger fleet legitimately produces bursts. Routes opt in via `config.rateLimit`.
-// Clients are told apart by request.ip, which honours X-Forwarded-For because of
-// trustProxy above -- see docs/install.md on running without a reverse proxy.
+// Clients are told apart by request.ip, which honours X-Forwarded-For only from a proxy
+// listed in security.trusted_proxies -- see trustProxy above and docs/install.md.
 await server.register(rateLimit, { global: false });
 
 /**
@@ -196,6 +199,14 @@ try {
         host: "0.0.0.0",
     });
     writeHealthFile(serverPort);
+    // Said once at startup, because the wrong value fails silently: an unlisted proxy makes
+    // every request look like it came from the proxy itself.
+    server.log.info(
+        trustedProxies.length ? { trustedProxies } : {},
+        trustedProxies.length
+            ? "Trusting X-Forwarded-* headers from the listed proxies"
+            : "No trusted proxies configured -- X-Forwarded-* headers are ignored",
+    );
     await ClientConnector.connectAll();
 } catch (err) {
     server.log.error(err);

@@ -43,8 +43,9 @@ function maxAgeSeconds(request: FastifyRequest, token: string): number {
  * over plain HTTP, and many installations run on http:// inside a home network. Set
  * unconditionally, those would log in successfully and be rejected on the very next
  * request, with nothing in the UI to explain it -- a failure localhost never shows,
- * because browsers treat it as a secure context. `trustProxy` is on, so behind a
- * TLS-terminating proxy that sends X-Forwarded-Proto this is the scheme the browser used.
+ * because browsers treat it as a secure context. Behind a TLS-terminating proxy this is
+ * the scheme the browser used only if that proxy is listed in `security.trusted_proxies`;
+ * X-Forwarded-Proto from anyone else is ignored, and the cookies then go without `Secure`.
  */
 function isSecureRequest(request: FastifyRequest): boolean {
     return request.protocol === "https";

@@ -124,6 +124,7 @@ An image is tagged only after CI has started it and it answered its health check
 | `LOG_LEVEL`   | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` | `info` | Controls log verbosity. Wins over `logLevel` in `config.yaml`. |
 | `LOG_FORMAT`  | `pretty`, `json`                 | _auto_        | `pretty` for colored single-line logs (default in dev), `json` for prod.      |
 | `KASM_SERVER_PORT` | `1`–`65535`                 | `3010`        | Port the server listens on; wins over `port` in `config.yaml`. An unusable value ends the start. The container's health check follows the port either way (see [Health](#health)). |
+| `KASM_TRUSTED_PROXIES` | IPs, CIDRs, `loopback`, `linklocal`, `uniquelocal`, comma separated | _unset_ | Reverse proxies whose `X-Forwarded-*` headers the server believes; wins over `security.trusted_proxies`. An unusable entry ends the start. See [Reverse proxy](#reverse-proxy). |
 | `NODE_ENV`    | `development`, `production`      | `development` | Picks the log format when `LOG_FORMAT` is unset (`production` → JSON).        |
 | `KASM_CLIENT_PORT` | `1`–`65535`                  | `3011`        | _(Client only)_ Port of the local web server; wins over `listenPort` in `config.yaml`. An unusable value ends the start. |
 | `KASM_CLIENT_DATA_DIR` | path                     | `/app/client/data` | _(Client only)_ Where the agent keeps its own state: the identity it was issued at registration (`identity.json`), its last keepalived reading and unacknowledged activity events. Set it when the agent runs outside the shipped `compose.yaml`. **Losing this directory means registering the agent again.** |
@@ -194,6 +195,7 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 | `logLevel`                 | —               | pino log level; `LOG_LEVEL` wins when set.               |
 | `port`                     | —               | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set. The published port: `EXPOSE`, the compose port mapping and every agent's `serverUrl` have to follow it. |
 | `security`                 | `allowed_networks` | IPv4 addresses or CIDR networks an agent may open `/ws/agent` from, for all agents alike. Empty (default) allows every address. |
+|                            | `trusted_proxies` | Reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` the server believes: IP addresses, CIDR networks (v4 or v6), or `loopback`, `linklocal`, `uniquelocal`. Empty (default) believes no one. **Behind a proxy, list it** — see [Reverse proxy](#reverse-proxy). Requires a restart; `KASM_TRUSTED_PROXIES` wins. |
 |                            | `hsts`          | Send `Strict-Transport-Security` (default `false`). Enable only when the dashboard is served exclusively over HTTPS — browsers remember the header for months. Requires a restart. |
 |                            | `allow_self_signed_agent_certificates` | Accept a certificate the server cannot verify when it dials an outbound agent over `wss://` (default `false`). See [TLS to an Outbound Agent](#tls-to-an-outbound-agent). |
 
@@ -210,12 +212,36 @@ On the first start, if no users exist in the database, the backend automatically
 
 `POST /api/login` accepts at most 10 attempts per 15 minutes per client IP.
 
-> **Reverse proxy:** the server runs with `trustProxy: true` and takes the client IP from
-> `X-Forwarded-For`. That is correct behind Traefik, nginx or a similar proxy, which sets the
-> header itself. Without such a proxy in front, a caller can send the header with any value
-> and so appears under a different IP on every attempt — the login rate limit and the
-> per-client IP checks then rely on a value the caller controls. Expose port 3010 only
-> through a reverse proxy.
+### Reverse proxy
+
+The server believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies listed in
+`security.trusted_proxies` (or `KASM_TRUSTED_PROXIES`). The list is empty by default, so the
+client address is the connection's own and a caller cannot choose it by sending the header —
+port 3010 can be published directly.
+
+**Behind a proxy, list it:**
+
+```yaml
+security:
+    # A proxy on the same host:
+    trusted_proxies: ["loopback"]
+    # A proxy container on a Docker network (its address is assigned by Docker):
+    # trusted_proxies: ["uniquelocal"]
+```
+
+Without the entry nothing fails outright, but three things go wrong quietly:
+
+- Every request appears to come from the proxy. The login rate limit then counts all users
+  together, and `security.allowed_networks` and a client's allowed address are checked
+  against the proxy's address.
+- A new inbound client is restricted to the proxy's address instead of the agent's.
+- The session cookies lose `Secure`, because the server sees the proxy's plain-HTTP
+  connection rather than the browser's HTTPS one.
+
+The startup log says which proxies are trusted, or that none are.
+
+> **Upgrading:** earlier versions believed these headers from anyone. An installation behind
+> a proxy has to add the entry when it updates.
 
 ## Address Checks for Agent Connections
 
@@ -239,7 +265,9 @@ The editor knows the address of that client's last successful connect and warns 
 about to be saved would not let it back in. Without that warning the mistake surfaces only at
 the agent's next reconnect, with nothing but an offline client to go on.
 
-The agent checks the socket peer (it has no `trustProxy`). Behind a reverse proxy, list the
+The server checks the connection's peer — or, when that peer is listed in
+`security.trusted_proxies`, the address the proxy forwarded. The agent checks the socket peer
+(it has no `trustProxy`). Behind a reverse proxy, list the
 proxy's address. With Docker port publishing the peer is normally the server's address, but a
 userland proxy (for example Docker Desktop, or `127.0.0.1` published ports) shows up as the
 bridge gateway instead — check the agent's log line `denied: not in allowedNetworks` for the

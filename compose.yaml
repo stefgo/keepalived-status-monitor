@@ -15,6 +15,10 @@ services:
         restart: unless-stopped
         environment:
             - NODE_ENV=production
+            # Behind a reverse proxy: its address, so X-Forwarded-For/-Proto are believed.
+            # Without it every request appears to come from the proxy. Comma separated; IPs,
+            # CIDRs or loopback / linklocal / uniquelocal. Overrides security.trusted_proxies.
+            # - KASM_TRUSTED_PROXIES=172.16.0.0/12
         # Repeats the image's HEALTHCHECK so it is visible in the file operators edit.
         # It asks the address the server writes to /tmp/kasm-health.json once it listens, so it
         # follows a port set in config.yaml as well as KASM_SERVER_PORT. That takes an image

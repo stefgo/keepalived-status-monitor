@@ -9,6 +9,7 @@ import {
     AppSettingsSchema,
     DEFAULT_SERVER_PORT,
     firstIssue,
+    TrustedProxySchema,
     type AppConfigParsed,
 } from "@kasm/shared";
 
@@ -195,6 +196,39 @@ function resolveServerPort(): number {
 }
 
 export const serverPort: number = resolveServerPort();
+
+/**
+ * Reads the trusted reverse proxies from config.yaml or KASM_TRUSTED_PROXIES (comma
+ * separated). The environment wins, as it does for the port, so a container behind a proxy
+ * needs no config file edit to say so.
+ *
+ * Read once, at startup: Fastify takes `trustProxy` when the instance is created. An
+ * unusable entry in the variable ends the start -- the file's entries are already checked
+ * by AppConfigSchema.
+ */
+function resolveTrustedProxies(): string[] {
+    const raw = process.env.KASM_TRUSTED_PROXIES;
+    if (raw === undefined || raw.trim() === "") {
+        return appConfig.security.trusted_proxies;
+    }
+
+    const entries = raw
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "");
+    for (const entry of entries) {
+        if (!TrustedProxySchema.safeParse(entry).success) {
+            logger.fatal(
+                { value: entry },
+                "Invalid KASM_TRUSTED_PROXIES entry -- expected an IP address, a CIDR network, or loopback, linklocal, uniquelocal",
+            );
+            process.exit(1);
+        }
+    }
+    return entries;
+}
+
+export const trustedProxies: string[] = resolveTrustedProxies();
 
 export function updateConfig(updates: Partial<AppConfig>) {
     Object.assign(appConfig, updates);
