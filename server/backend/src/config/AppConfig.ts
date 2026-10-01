@@ -38,9 +38,16 @@ let config: Record<string, unknown> = {};
 let newDefaultsAdded = false;
 
 /**
+ * True while a secretKey generated on this start exists only in memory. Anything encrypted
+ * with it would be unreadable after the next restart -- see secretKeyPersisted(). Cleared
+ * by the next successful save.
+ */
+let secretKeyUnsaved = false;
+
+/**
  * Reads config.yaml as it stands, without filling anything in: defaults belong to
- * AppConfigSchema, and that cannot run yet -- jwtSecret is generated below on first start,
- * and validating before that would reject every fresh installation.
+ * AppConfigSchema, and that cannot run yet -- jwtSecret and secretKey are generated below on
+ * first start, and validating before that would reject every fresh installation.
  */
 function loadConfig() {
     if (fs.existsSync(CONFIG_PATH)) {
@@ -110,6 +117,7 @@ export function saveConfig() {
         syncDoc();
         const yamlOutput = configDoc.toString();
         fs.writeFileSync(CONFIG_PATH, yamlOutput);
+        secretKeyUnsaved = false;
     } catch (e) {
         logger.error(
             { err: e, path: CONFIG_PATH },
@@ -133,10 +141,25 @@ if (!config.jwtSecret) {
     }
 }
 
+if (!config.secretKey) {
+    logger.info("No secret key found in config.yaml, generating a new one...");
+    config.secretKey = crypto.randomBytes(32).toString("hex");
+    secretKeyUnsaved = true;
+    try {
+        saveConfig();
+        logger.info("Generated new secret key and saved to config.yaml");
+    } catch (e) {
+        logger.error(
+            { err: e },
+            "Failed to save generated secret key to config.yaml",
+        );
+    }
+}
+
 /**
  * Checks config.yaml and fills in every default, once, at startup.
  *
- * Runs after the secret above exists and before anything reads a value. A configuration
+ * Runs after the secrets above exist and before anything reads a value. A configuration
  * error is a startup failure, not something to discover when a scheduler first reads a
  * value hours later -- and not something to paper over with a default, because a server
  * quietly running on defaults the operator did not choose is worse than one that refuses
@@ -165,6 +188,15 @@ function validateConfig(): AppConfig {
 }
 
 export const appConfig: AppConfig = validateConfig();
+
+/**
+ * Whether secretKey is on disk. A start that generated the key and could not write it
+ * (read-only file, missing bind mount) runs on a key that is gone after the restart, and
+ * with it every secret encrypted in between. SecretCrypto refuses to encrypt in that state.
+ */
+export function secretKeyPersisted(): boolean {
+    return !secretKeyUnsaved;
+}
 
 // Applied only now: pino throws on an unknown level, and the schema has checked it.
 if (!process.env.LOG_LEVEL && appConfig.logLevel) {

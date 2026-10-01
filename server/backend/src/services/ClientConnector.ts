@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { randomUUID } from "crypto";
 import { WS_EVENTS, CONNECTION_MODE, agentBaseUrl, isTlsTarget } from "@kasm/shared";
 import { logger } from "@kasm/shared/node";
-import { appConfig } from "../config/AppConfig.js";
+import { appConfig, secretKeyPersisted } from "../config/AppConfig.js";
 import { ClientRepository, type ClientRow } from "../repositories/ClientRepository.js";
 import { WebSocketController } from "../controllers/WebSocketController.js";
 
@@ -318,6 +318,16 @@ export class ClientConnector {
         outboundTargetAddress: string,
         registrationSecret: string,
     ): Promise<boolean> {
+        // The new token is stored encrypted, after the agent has accepted it. Failing there
+        // would leave an agent holding a token the server never kept -- so not at all.
+        if (!secretKeyPersisted()) {
+            logger.error(
+                { clientId: client.id },
+                "ClientConnector: secretKey could not be written to config.yaml, not registering",
+            );
+            return false;
+        }
+
         const registration = await this.performRegistration(client.id, outboundTargetAddress, registrationSecret);
         if (!registration.authToken) {
             logger.warn({ clientId: client.id, error: registration.error }, "ClientConnector: re-registration failed");
@@ -325,7 +335,7 @@ export class ClientConnector {
             return false;
         }
 
-        ClientRepository.updateAuthToken(client.id, registration.authToken);
+        ClientRepository.updateOutboundAuthToken(client.id, registration.authToken);
         const updatedClient = ClientRepository.findById(client.id);
         // Deleted while the registration handshake was running.
         if (!updatedClient) return false;
@@ -341,12 +351,26 @@ export class ClientConnector {
             return false;
         }
 
+        let authToken: string | null;
+        try {
+            authToken = ClientRepository.outboundAuthToken(client);
+        } catch (err) {
+            // Not retried: a token that cannot be decrypted now will not decrypt in a minute
+            // either. Usually a changed secretKey; registering the client again fixes it.
+            logger.error(
+                { err, clientId: client.id },
+                "ClientConnector: cannot decrypt the stored auth token, not connecting",
+            );
+            return false;
+        }
+        if (!authToken) return false;
+
         // Same pair as in connectWithToken: the agent refuses a caller that does not name
         // the id it was registered under, so the id has to go on the wire here too.
         const { url, options } = this.agentSocket(client.outbound_target_address, "/ws/agent");
         const wsUrl = `${url}?clientId=${encodeURIComponent(
             client.id,
-        )}&token=${encodeURIComponent(client.auth_token)}`;
+        )}&token=${encodeURIComponent(authToken)}`;
         logger.info({ clientId: client.id, url }, "ClientConnector: connecting");
 
         return new Promise((resolve) => {

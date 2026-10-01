@@ -184,6 +184,7 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 | Key                        | Sub-Key         | Description                                              |
 | :------------------------- | :-------------- | :------------------------------------------------------- |
 | `jwtSecret`                | —               | JWT signing secret. Auto-generated on first run.         |
+| `secretKey`                | —               | Encrypts the auth tokens the server stores for outbound clients. Auto-generated on first run; do not copy it between installations. Losing or changing it means every outbound client has to be registered again. |
 | `oidc`                     | `enabled`       | Enables or disables OIDC login (`true`/`false`).         |
 |                            | `issuer`        | OIDC Issuer URL.                                         |
 |                            | `client_id`     | OIDC Client ID.                                          |
@@ -193,6 +194,14 @@ Fix the value and start again. Unknown keys are kept and do not cause an error.
 | `settings`                 | `token_retention_days` / `token_cleanup_interval_hours` | Retention of used/expired registration tokens (defaults 30 days, every 24 h). |
 |                            | `notification_retention_days` / `_count` / `notification_cleanup_interval_hours` | Retention of the activity list (defaults 90 days, at least 500 kept, every 24 h). |
 | `logLevel`                 | —               | pino log level; `LOG_LEVEL` wins when set.               |
+
+**Where the agent tokens are kept.** The database (`server-data` volume) holds no agent token in
+the clear: an inbound client's token is stored as its SHA-256 hash, an outbound client's —
+which the server presents when it dials — encrypted with `secretKey`. That key lives in
+`config.yaml`, a separate bind-mounted file, so a copy of the volume alone contains no usable
+token; back the two up separately. On first start the file has to be **writable**: a
+`secretKey` that is generated and cannot be written back would be gone after the next restart,
+so the server refuses to encrypt with it until `config.yaml` can be written.
 | `port`                     | —               | Listen port (default `3010`); `KASM_SERVER_PORT` wins when set. The published port: `EXPOSE`, the compose port mapping and every agent's `serverUrl` have to follow it. |
 | `security`                 | `allowed_networks` | IPv4 addresses or CIDR networks an agent may open `/ws/agent` from, for all agents alike. Empty (default) allows every address. |
 |                            | `trusted_proxies` | Reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` the server believes: IP addresses, CIDR networks (v4 or v6), or `loopback`, `linklocal`, `uniquelocal`. Empty (default) believes no one. **Behind a proxy, list it** — see [Reverse proxy](#reverse-proxy). Requires a restart; `KASM_TRUSTED_PROXIES` wins. |

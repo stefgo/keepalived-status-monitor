@@ -1,5 +1,7 @@
 import db from "../core/Database.js";
 import type { ConnectionMode } from "@kasm/shared";
+import { hashToken } from "./TokenRepository.js";
+import { decryptSecret, encryptSecret } from "../services/SecretCrypto.js";
 
 /**
  * A row of the `clients` table (migration 00). Deliberately not the shared
@@ -12,6 +14,12 @@ export interface ClientRow {
     display_name: string | null;
     /** Migration 02. Part of the VRRP cluster key; null means no site. */
     site: string | null;
+    /**
+     * Never the token itself (migration 11). Inbound: its SHA-256 hash, because the server
+     * only has to recognise the token an agent presents. Outbound: encrypted with
+     * SecretCrypto, because the server presents it itself when it dials -- read it with
+     * outboundAuthToken().
+     */
     auth_token: string | null;
     connection_mode: ConnectionMode;
     /**
@@ -51,6 +59,10 @@ export class ClientRepository {
      * token alone used to make a client whoever its token happened to belong to, so a token
      * copied to the wrong host took over that host's row. Narrower than the other finders,
      * because this runs on every agent connect.
+     *
+     * The stored value is a hash, so the comparison runs on the hash of what was presented.
+     * An outbound client's encrypted token never matches -- it has no business connecting
+     * inbound.
      */
     static findByIdAndToken(
         id: string,
@@ -60,7 +72,7 @@ export class ClientRepository {
             .prepare(
                 "SELECT id, inbound_allowed_ip, connection_mode FROM clients WHERE id = ? AND auth_token = ?",
             )
-            .get(id, token) as
+            .get(id, hashToken(token)) as
             | Pick<ClientRow, "id" | "inbound_allowed_ip" | "connection_mode">
             | undefined;
     }
@@ -86,7 +98,7 @@ export class ClientRepository {
         db.prepare(`
             INSERT INTO clients (id, hostname, auth_token, inbound_allowed_ip, connection_mode, last_seen)
             VALUES (?, ?, ?, ?, 'inbound', datetime('now'))
-        `).run(id, hostname, authToken, allowedIp);
+        `).run(id, hostname, hashToken(authToken), allowedIp);
     }
 
     static createOutbound(
@@ -98,7 +110,15 @@ export class ClientRepository {
         db.prepare(`
             INSERT INTO clients (id, hostname, outbound_target_address, auth_token, connection_mode, last_seen)
             VALUES (?, ?, ?, ?, 'outbound', datetime('now'))
-        `).run(id, hostname, outboundTargetAddress, authToken);
+        `).run(id, hostname, outboundTargetAddress, encryptSecret(authToken));
+    }
+
+    /**
+     * The auth token the server presents to an outbound client, decrypted. Throws if it
+     * cannot be decrypted (usually a changed secretKey).
+     */
+    static outboundAuthToken(client: ClientRow): string | null {
+        return client.auth_token ? decryptSecret(client.auth_token) : null;
     }
 
     static updateDisplayName(
@@ -148,10 +168,15 @@ export class ClientRepository {
             .run(targetAddress, id);
     }
 
-    static updateAuthToken(id: string, authToken: string): void {
+    /**
+     * Stores the token of an outbound client that registered again, encrypted like the one
+     * createOutbound stored. Restricted to outbound rows in SQL: an inbound token is a hash,
+     * and writing an encrypted value there would lock its agent out.
+     */
+    static updateOutboundAuthToken(id: string, authToken: string): void {
         db.prepare(
-            "UPDATE clients SET auth_token = ?, updated_at = datetime('now') WHERE id = ?",
-        ).run(authToken, id);
+            "UPDATE clients SET auth_token = ?, updated_at = datetime('now') WHERE id = ? AND connection_mode = 'outbound'",
+        ).run(encryptSecret(authToken), id);
     }
 
     /**

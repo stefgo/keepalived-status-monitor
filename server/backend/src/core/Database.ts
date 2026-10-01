@@ -20,6 +20,7 @@ import { migration07 } from "./migrations/07_keepalived_last_instances.js";
 import { migration08 } from "./migrations/08_webhooks.js";
 import { migration09 } from "./migrations/09_vrrp_cluster.js";
 import { migration10 } from "./migrations/10_user_token_version.js";
+import { migration11 } from "./migrations/11_protect_agent_tokens.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // server/src/core -> server/data
@@ -50,6 +51,7 @@ const migrator = new Umzug<Database.Database>({
         { name: "08_webhooks", up: migration08.up, down: migration08.down },
         { name: "09_vrrp_cluster", up: migration09.up, down: migration09.down },
         { name: "10_user_token_version", up: migration10.up, down: migration10.down },
+        { name: "11_protect_agent_tokens", up: migration11.up, down: migration11.down },
     ],
     context: db,
     storage: {

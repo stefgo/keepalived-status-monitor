@@ -25,6 +25,11 @@ oidc:
 # This should be a long, random string
 jwtSecret:
 
+# Encrypts the auth tokens the server stores for outbound clients. Generated on first
+# start when empty; keep it with the backup of this file. Losing or changing it means
+# every outbound client has to be registered again.
+secretKey:
+
 # JWT token expiration time (e.g. "24h", "7d", "30m"). Defaults to "12h" if not set.
 # Tokens always expire; there is no setting that turns expiry off. The dashboard's
 # session cookies carry the same lifetime.

@@ -529,12 +529,18 @@ export const SecurityConfigSchema = z
  * document, so a strict schema would not only ignore a key an operator added -- the next
  * save would delete it from the file.
  *
- * `jwtSecret` is required although a fresh installation has none: the server generates and
- * saves one before this schema is applied, so a missing value at that point is an error,
- * not a server that signs tokens with `undefined`.
+ * `jwtSecret` and `secretKey` are required although a fresh installation has neither: the
+ * server generates and saves both before this schema is applied, so a missing value at that
+ * point is an error, not a server that signs tokens with `undefined`.
  */
 export const AppConfigSchema = z.looseObject({
     jwtSecret: z.string().min(1),
+    /**
+     * Encrypts the secrets the server stores and has to read back -- the auth tokens of
+     * outbound clients. Separate from `jwtSecret`, so that rotating the session key does not
+     * make them unreadable.
+     */
+    secretKey: z.string().min(1),
     /** Any span @fastify/jwt accepts. There is no way to switch expiry off. */
     jwtExpiresIn: z.string().min(1).default("12h"),
     logLevel: LogLevelSchema.optional(),
