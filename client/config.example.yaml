@@ -9,7 +9,9 @@
 # naming the field. The agent writes back to this file in one case only -- the serverUrl of a
 # registration made through the web UI.
 
-# Log level for the client (debug, info, warn, error)
+# Log level for the client (trace, debug, info, warn, error, fatal, silent). Not set, or not
+# one of these (ignored with a warning), the LOG_LEVEL environment variable applies, and
+# without it "info".
 logLevel: "info"
 
 # URL of the KASM Server (e.g., http://your-server:3010). Set it here and the register page
