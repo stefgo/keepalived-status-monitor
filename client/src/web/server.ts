@@ -17,7 +17,11 @@ import {
 import { Connection } from "../core/Connection.js";
 import { KeepalivedService } from "../services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "../services/NotifyFifoWatcher.js";
-import { isCertificateError, serverRequest } from "../core/ServerHttp.js";
+import {
+    isCertificateError,
+    serverRequest,
+    type ServerResponse,
+} from "../core/ServerHttp.js";
 import { logger } from "@kasm/shared/node";
 import { initSetupPin, retireSetupPin, verifySetupPin } from "../core/SetupPin.js";
 import { secretEquals } from "../core/secrets.js";
@@ -29,9 +33,6 @@ import {
     isIpInCidr,
     isIpInNetworks,
 } from "@kasm/shared";
-
-/** The optional server URL the status endpoint may be asked to check instead of the configured one. */
-type StatusQuery = { url?: string };
 
 /** The identity the agent WebSocket route accepts in the query string. */
 type AgentQuery = { token?: string; clientId?: string };
@@ -327,12 +328,14 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
         );
     }
 
-    // Check server reachability
+    // Check server reachability -- of the configured server, and of no other. This endpoint
+    // needs no login, and it used to take any address as ?url=: anyone who could reach the
+    // port could have the agent probe its own network with it. The register page needed it
+    // for one pre-check, which /api/register now answers itself (`stage: "server"`).
     fastify.get(
         "/api/status/server",
-        async (request: FastifyRequest, _reply: FastifyReply) => {
-            const query = request.query as StatusQuery;
-            const checkUrl = query.url || getServerUrl();
+        async (_request: FastifyRequest, _reply: FastifyReply) => {
+            const checkUrl = getServerUrl();
             let serverReachable = false;
 
             if (checkUrl) {
@@ -377,6 +380,10 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
     // with the page disabled there is no legitimate caller, and the endpoint decides which
     // server this agent obeys. Open exactly as long as the page is -- see isRegisterPageOpen().
     if (routes.registerPage) {
+        // Every error names the step it failed at as `stage`, for the page's two-step
+        // display: "input" (form or PIN, nothing was sent), "server" (no server answered at
+        // the URL) or "register" (a server answered and the registration failed). A status
+        // code cannot say this: a bad form and a refusal are both 400.
         fastify.post(
             "/api/register",
             async (request: FastifyRequest, reply: FastifyReply) => {
@@ -391,7 +398,9 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                 // three it was.
                 const parsed = AgentWebRegisterSchema.safeParse(request.body ?? {});
                 if (!parsed.success) {
-                    return reply.status(400).send({ error: firstIssue(parsed.error) });
+                    return reply
+                        .status(400)
+                        .send({ error: firstIssue(parsed.error), stage: "input" });
                 }
                 const { token, url, pin } = parsed.data;
 
@@ -404,6 +413,7 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                     );
                     return reply.status(403).send({
                         error: "Wrong setup PIN. The current PIN is printed in this agent's log.",
+                        stage: "input",
                     });
                 }
 
@@ -412,16 +422,29 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                 try {
                     // The registration token goes out and the auth token comes back, so the
                     // certificate is checked unless the operator decided otherwise.
-                    const response = await serverRequest(`${url}/api/v1/register`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        // No clientId: the server issues it and returns it below.
-                        body: JSON.stringify({
-                            token,
-                            hostname: os.hostname(),
-                        }),
-                        allowSelfSigned: config.allowSelfSignedCertificates,
-                    });
+                    let response: ServerResponse;
+                    try {
+                        response = await serverRequest(`${url}/api/v1/register`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            // No clientId: the server issues it and returns it below.
+                            body: JSON.stringify({
+                                token,
+                                hostname: os.hostname(),
+                            }),
+                            allowSelfSigned: config.allowSelfSignedCertificates,
+                        });
+                    } catch (e: unknown) {
+                        // Reached nothing at all. Marked as the server step, so the page shows
+                        // "wrong address" where the separate pre-check used to show it. A
+                        // certificate error did reach a server and goes on to the catch below.
+                        if (isCertificateError(e)) throw e;
+                        logger.warn({ err: e, url }, "Web registration: server not reachable");
+                        return reply.status(502).send({
+                            error: `Server not reachable at ${url} (${e instanceof Error ? e.message : String(e)})`,
+                            stage: "server",
+                        });
+                    }
 
                     if (!response.ok) {
                         let errorMsg = response.text;
@@ -431,7 +454,7 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                         } catch {
                             // Response is not JSON, use raw text
                         }
-                        return reply.status(400).send({ error: errorMsg });
+                        return reply.status(400).send({ error: errorMsg, stage: "register" });
                     }
 
                     const data = JSON.parse(response.text);
@@ -467,6 +490,7 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                     } else {
                         return reply.status(500).send({
                             error: "Registration failed: The server did not return a token and client id.",
+                            stage: "register",
                         });
                     }
                 } catch (e: unknown) {
@@ -476,12 +500,14 @@ async function registerPages(fastify: FastifyInstance, routes: WebRoutes) {
                             error:
                                 `The server's certificate could not be verified (${(e as Error).message}). ` +
                                 "If it is self-signed on purpose, set allowSelfSignedCertificates: true in this agent's config.yaml and restart it.",
+                            stage: "register",
                         });
                     }
                     return reply.status(500).send({
                         error:
                             (e instanceof Error ? e.message : String(e)) ||
                             "Unknown error occurred during registration",
+                        stage: "register",
                     });
                 }
             },

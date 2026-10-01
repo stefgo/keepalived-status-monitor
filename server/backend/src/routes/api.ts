@@ -160,8 +160,8 @@ export default async function apiRoutes(fastify: FastifyInstance) {
             // Register Client (Public but API)
             v1.post("/register", TokenController.register);
 
-            // "Is there a KASM server at this URL?" -- the agent asks this for an address an
-            // operator has just typed. Not the same as /api/health, and the two must not be
+            // "Is there a KASM server at this URL?" -- the agent's status and register pages
+            // ask this of its configured server. Not the same as /api/health, and the two must not be
             // merged: this one checks nothing on purpose, because a server with a broken
             // database is still reachable, and "no server here" would send the operator to
             // fix the wrong thing.

@@ -219,6 +219,9 @@
                         icon.innerHTML = ICON_SUCCESS;
                         textEl.style.color = "var(--success-color)";
                     } else {
+                        // Running or pending: neither colour from an earlier attempt may
+                        // stay behind.
+                        icon.classList.remove("success", "error");
                         textEl.style.color = "";
                     }
                     textEl.textContent = text;
@@ -259,42 +262,16 @@
                     try {
                         const SKIP_MESSAGE = "Skipped due to previous error";
 
-                        // Step 1: Check server reachability
+                        // One call: the agent contacts the server only while registering,
+                        // and the answer's `stage` says which of the two steps failed. There
+                        // used to be a separate pre-check, which made the agent probe any
+                        // address it was given.
                         setStepState(
                             stepServer,
                             stepServerText,
                             "running",
-                            "Checking server...",
+                            "Contacting server...",
                         );
-                        const serverRes = await fetch(
-                            "/api/status/server?url=" + encodeURIComponent(url),
-                        );
-                        const serverData = await serverRes.json();
-
-                        if (serverData.serverReachable) {
-                            setStepState(
-                                stepServer,
-                                stepServerText,
-                                "success",
-                                "Server reachable",
-                            );
-                        } else {
-                            setStepState(
-                                stepServer,
-                                stepServerText,
-                                "error",
-                                "Server not reachable at " + url,
-                            );
-                            setStepState(
-                                stepRegister,
-                                stepRegisterText,
-                                "error",
-                                SKIP_MESSAGE,
-                            );
-                            return;
-                        }
-
-                        // Step 2: Perform registration
                         setStepState(
                             stepRegister,
                             stepRegisterText,
@@ -310,6 +287,12 @@
                         const regData = await regRes.json();
 
                         if (regRes.ok) {
+                            setStepState(
+                                stepServer,
+                                stepServerText,
+                                "success",
+                                "Server reachable",
+                            );
                             setStepState(
                                 stepRegister,
                                 stepRegisterText,
@@ -327,7 +310,40 @@
                                 formMessage.className = "message warning";
                                 formMessage.textContent = regData.warning;
                             }
+                        } else if (regData.stage === "server") {
+                            setStepState(
+                                stepServer,
+                                stepServerText,
+                                "error",
+                                regData.error || "Server not reachable at " + url,
+                            );
+                            setStepState(
+                                stepRegister,
+                                stepRegisterText,
+                                "error",
+                                SKIP_MESSAGE,
+                            );
+                        } else if (regData.stage === "input") {
+                            // Refused before anything was sent: the server was not contacted.
+                            setStepState(
+                                stepServer,
+                                stepServerText,
+                                "pending",
+                                "Not checked",
+                            );
+                            setStepState(
+                                stepRegister,
+                                stepRegisterText,
+                                "error",
+                                regData.error || "Registration failed",
+                            );
                         } else {
+                            setStepState(
+                                stepServer,
+                                stepServerText,
+                                "success",
+                                "Server reachable",
+                            );
                             setStepState(
                                 stepRegister,
                                 stepRegisterText,

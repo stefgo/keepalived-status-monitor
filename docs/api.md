@@ -1230,7 +1230,7 @@ Agent connections are not consulted: one offline agent must not mark the control
 
 `GET /api/v1/ping`
 
-**Description:** Answers "is there a KASM server at this URL?". The agent's web UI calls it for an address an operator has just typed. It deliberately checks nothing else: a server with a broken database is still reachable, and reporting otherwise during setup would point at the wrong problem. For "can this instance serve requests", use [Health](#health).
+**Description:** Answers "is there a KASM server at this URL?". The agent's status and register pages call it against the agent's configured server; an address an operator has just typed is checked by the registration itself. It deliberately checks nothing else: a server with a broken database is still reachable, and reporting otherwise during setup would point at the wrong problem. For "can this instance serve requests", use [Health](#health).
 
 #### Response
 
