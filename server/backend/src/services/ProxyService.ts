@@ -82,6 +82,24 @@ export class ProxyService {
         this.dashboardClients.delete(socket);
     }
 
+    /**
+     * Closes every dashboard socket of a user whose sessions were just revoked.
+     *
+     * 4001 makes the dashboard give up instead of reconnecting (WebSocketProvider). A user
+     * who changed their own password passes `renewed`: the response that did it carries a
+     * fresh cookie, so their dashboard closes with 4002 and reconnects on that cookie.
+     */
+    static closeDashboardSessions(userId: number, renewed = false) {
+        for (const [socket, owner] of this.dashboardClients) {
+            if (owner !== userId) continue;
+            if (renewed) {
+                socket.close(4002, "Session renewed");
+            } else {
+                socket.close(4001, "Session is no longer valid");
+            }
+        }
+    }
+
     static getClientSocket(clientId: string): WebSocket | undefined {
         return this.connectedClients.get(clientId);
     }

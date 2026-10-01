@@ -2,6 +2,8 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import bcrypt from "bcryptjs";
 import { CreateUserSchema, UpdateUserSchema, firstIssue } from "@kasm/shared";
 import { UserRepository } from "../repositories/UserRepository.js";
+import { ProxyService } from "../services/ProxyService.js";
+import { setSessionCookies } from "../services/SessionCookie.js";
 
 export class UserController {
     static async list(_request: FastifyRequest, _reply: FastifyReply) {
@@ -83,6 +85,24 @@ export class UserController {
             UserRepository.updateAuthMethods(userId, auth_methods);
         }
 
+        // Both updates above may have raised token_version; whether they did is read
+        // back rather than worked out here, so the rule lives in UserRepository alone.
+        const updated = UserRepository.findById(userId);
+        if (updated && updated.token_version !== user.token_version) {
+            const self = String(request.user.id) === String(userId);
+            if (self) {
+                // Whoever changed their own password keeps working: this response
+                // replaces the cookie the update just made worthless.
+                const token = request.server.jwt.sign({
+                    username: request.user.username,
+                    id: updated.id,
+                    tv: updated.token_version,
+                });
+                setSessionCookies(request, reply, token);
+            }
+            ProxyService.closeDashboardSessions(updated.id, self);
+        }
+
         return { status: "updated" };
     }
 
@@ -106,6 +126,10 @@ export class UserController {
         const info = UserRepository.delete(userId);
         if (info.changes === 0)
             return reply.code(404).send({ error: "User not found" });
+
+        // Their REST calls fail from now on (no row, AuthService.isSessionCurrent); an
+        // open dashboard socket checks nothing after the handshake and is closed here.
+        ProxyService.closeDashboardSessions(Number(userId));
 
         return { status: "deleted" };
     }

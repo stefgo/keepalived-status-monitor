@@ -19,7 +19,11 @@ export class AuthController {
             return reply.code(401).send({ error: result.error });
         }
 
-        const token = request.server.jwt.sign({ username, id: result.user.id });
+        const token = request.server.jwt.sign({
+            username,
+            id: result.user.id,
+            tv: result.user.token_version,
+        });
         setSessionCookies(request, reply, token);
         // The token is deliberately not in the body: handing it to the page would put it
         // back within JavaScript's reach, which is what the httpOnly cookie is for.
@@ -83,6 +87,7 @@ export class AuthController {
             const token = request.server.jwt.sign({
                 username: user.username,
                 id: user.id,
+                tv: user.token_version,
             });
 
             // The token rides back in the cookie, not in the redirect target. As a query

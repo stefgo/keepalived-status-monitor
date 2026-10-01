@@ -8,6 +8,7 @@ import { KeepalivedController } from "../controllers/KeepalivedController.js";
 import { ActivityController } from "../controllers/ActivityController.js";
 import { WebhookController } from "../controllers/WebhookController.js";
 import { HealthRepository } from "../repositories/HealthRepository.js";
+import { AuthService } from "../services/AuthService.js";
 
 export default async function apiRoutes(fastify: FastifyInstance) {
     /**
@@ -62,7 +63,14 @@ export default async function apiRoutes(fastify: FastifyInstance) {
                     try {
                         await request.jwtVerify();
                     } catch (err) {
-                        reply.send(err);
+                        return reply.send(err);
+                    }
+                    // A valid signature is not enough: the user may have been deleted or
+                    // had their password changed since the token was signed.
+                    if (!AuthService.isSessionCurrent(request.user)) {
+                        return reply
+                            .code(401)
+                            .send({ error: "Session is no longer valid" });
                     }
                 });
 

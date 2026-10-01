@@ -7,14 +7,17 @@
  *
  * `id` is a number because `users.id` is INTEGER AUTOINCREMENT. Route parameters are
  * strings, so comparisons against one still have to bridge that gap.
+ *
+ * `tv` is the user's `token_version` at signing time. `AuthService.isSessionCurrent` honours
+ * a token only while it still matches the row -- that is how a session ends before it expires.
  */
 import "@fastify/jwt";
 
 declare module "@fastify/jwt" {
     interface FastifyJWT {
-        payload: { username: string; id: number };
+        payload: { username: string; id: number; tv: number };
         // iat and exp are added by the signer, so a verified token carries them even though
         // the payload handed to sign() does not.
-        user: { username: string; id: number; iat?: number; exp?: number };
+        user: { username: string; id: number; tv: number; iat?: number; exp?: number };
     }
 }

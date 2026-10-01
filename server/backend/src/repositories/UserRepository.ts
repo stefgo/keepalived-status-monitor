@@ -10,6 +10,8 @@ export interface UserRow {
     /** Null for an account that signs in through OIDC only. */
     password_hash: string | null;
     auth_methods: string | null;
+    /** Carried by every session token as `tv`; raising it ends all of the user's sessions. */
+    token_version: number;
     created_at: string;
     updated_at: string | null;
 }
@@ -55,16 +57,24 @@ export class UserRepository {
         ).run(username, passwordHash, authMethods);
     }
 
+    /** Also ends every session of the user: a token signed under the old password must not outlive it. */
     static updatePassword(id: string, passwordHash: string): void {
         db.prepare(
-            "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         ).run(passwordHash, id);
     }
 
+    /**
+     * Ends the user's sessions only when the value actually changes: the user form sends
+     * `auth_methods` on every save, and an unchanged value revokes nothing.
+     */
     static updateAuthMethods(id: string, authMethods: string): void {
         db.prepare(
-            "UPDATE users SET auth_methods = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        ).run(authMethods, id);
+            `UPDATE users SET auth_methods = ?,
+                token_version = token_version + (COALESCE(auth_methods, '') <> ?),
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+        ).run(authMethods, authMethods, id);
     }
 
     static delete(id: string): { changes: number } {

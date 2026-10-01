@@ -33,6 +33,22 @@ export class AuthService {
         }
     }
 
+    /**
+     * Whether a verified session token still stands for a user as they are now.
+     *
+     * The signature only proves that this server issued the token. A deleted user, a changed
+     * password or changed auth methods all leave it valid until it expires -- 12 hours by
+     * default -- so the REST hook and the dashboard handshake both ask here as well. A token
+     * from before `tv` existed carries none and is refused: one login after the update.
+     */
+    static isSessionCurrent(payload: { id?: unknown; tv?: unknown }): boolean {
+        if (typeof payload.id !== "number" || typeof payload.tv !== "number") {
+            return false;
+        }
+        const user = UserRepository.findById(String(payload.id));
+        return !!user && user.token_version === payload.tv;
+    }
+
     static checkLocalAuth(
         username: string,
         password: string,

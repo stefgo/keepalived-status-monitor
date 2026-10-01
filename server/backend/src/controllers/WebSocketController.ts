@@ -16,6 +16,7 @@ import { logger } from "@kasm/shared/node";
 import { attachHeartbeat } from "./websocket/Heartbeat.js";
 import { attachAgentSession } from "./websocket/AgentSession.js";
 import { SESSION_COOKIE } from "../services/SessionCookie.js";
+import { AuthService } from "../services/AuthService.js";
 
 /** The identity the agent route accepts in its query string. */
 export type AgentQuery = { token?: string; clientId?: string };
@@ -49,7 +50,14 @@ export class WebSocketController {
         // of the activity -- can go to that user's sessions only.
         let userId: number;
         try {
-            userId = fastify.jwt.verify<{ id: number }>(token).id;
+            const payload = fastify.jwt.verify<{ id?: unknown; tv?: unknown }>(token);
+            // Same rule as the REST hook: a deleted user or a changed password ends the
+            // session, not only the token's expiry.
+            if (!AuthService.isSessionCurrent(payload)) {
+                socket.close(4001, "Session is no longer valid");
+                return;
+            }
+            userId = payload.id as number;
         } catch {
             socket.close(4001, "Invalid Token");
             return;

@@ -77,7 +77,7 @@ server/backend/src/
 
 ### 1. Routes (`src/routes/api.ts`)
 
-All routes are registered as a single Fastify plugin under the `/api` prefix. Protected routes apply `request.jwtVerify()` middleware.
+All routes are registered as a single Fastify plugin under the `/api` prefix. Protected routes apply `request.jwtVerify()` middleware. A valid signature is not enough on its own: the hook, and the dashboard handshake in `WebSocketController`, also ask `AuthService.isSessionCurrent`, which compares the token's `tv` with `users.token_version` (migration 10). `UserRepository` raises that counter on a password change and on changed auth methods; `UserController` then closes the user's dashboard sockets through `ProxyService.closeDashboardSessions` — with `4001`, or `4002` plus a fresh cookie when the user changed their own password.
 
 **Public routes:**
 - `POST /api/login` — Local authentication; sets the session cookies
@@ -119,7 +119,7 @@ if (!parsed.success) {
 const { username, password, auth_methods } = parsed.data;
 ```
 
-`request.body as any` does not appear in the controllers any more. Rules about a combination of fields (a `local` user needs a password, an allowed address only for an inbound client) stay in the controller; the schema describes the shape. `request.user` is typed through `src/types/fastify.d.ts` as `{ username: string; id: number }` — exactly what `jwt.sign` puts into the token.
+`request.body as any` does not appear in the controllers any more. Rules about a combination of fields (a `local` user needs a password, an allowed address only for an inbound client) stay in the controller; the schema describes the shape. `request.user` is typed through `src/types/fastify.d.ts` as `{ username: string; id: number; tv: number }` — exactly what `jwt.sign` puts into the token.
 
 | Controller              | Responsibilities                                                              |
 | :---------------------- | :---------------------------------------------------------------------------- |
@@ -245,7 +245,7 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 ### 5. WebSocket Controller (`src/controllers/WebSocketController.ts`)
 
 **Dashboard WebSocket (`/ws/dashboard`):**
-- Verifies the JWT from the `kasm_session` cookie of the handshake (`4001` without or with an invalid one).
+- Verifies the JWT from the `kasm_session` cookie of the handshake (`4001` without or with an invalid one, and when its `tv` no longer matches the user — `AuthService.isSessionCurrent`).
 - Sends on connect: `CLIENTS_UPDATE`, the stored `KEEPALIVED_STATE_UPDATE` of every client, and `ACTIVITY_UPDATE` with the seen state of the session's user.
 - Attaches the 30-second ping/pong heartbeat before the JWT check.
 - Registered in `ProxyService` to receive all broadcasts.
