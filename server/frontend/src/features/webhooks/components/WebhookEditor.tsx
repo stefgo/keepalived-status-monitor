@@ -253,11 +253,12 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                         spellCheck={false}
                         classNames={{ textarea: "font-mono text-xs sm:text-xs" }}
                     />
-                    <div>
+                    {/* basis-0 keeps the preview out of the row's height, so the textarea alone sets it */}
+                    <div className="flex flex-col">
                         <label className="field-label">
                             Preview (sample <span className="font-mono">{preview.kind}</span>)
                         </label>
-                        <pre className="mt-1 h-[calc(100%-1.5rem)] min-h-40 overflow-auto rounded-lg border border-border bg-app-bg p-3 text-xs font-mono text-text-primary">
+                        <pre className="mt-1 flex-1 basis-0 min-h-40 lg:min-h-0 overflow-auto rounded-lg border border-border bg-app-bg p-3 text-xs font-mono text-text-primary">
                             {preview.body ?? "–"}
                         </pre>
                     </div>
