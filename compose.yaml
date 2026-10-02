@@ -11,6 +11,8 @@ services:
             # Persist SQLite database and other data
             - server-data:/app/server/backend/data
             # Persist configuration (ensure this file exists or is created)
+            # The server runs as UID 1000; the entrypoint hands both paths to that user if it
+            # cannot write them, so the file may belong to UID 1000 on the host afterwards.
             - ./server-config.yaml:/app/server/config.yaml
         restart: unless-stopped
         environment:
