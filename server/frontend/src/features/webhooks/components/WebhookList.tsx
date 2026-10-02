@@ -48,7 +48,11 @@ const Filter = ({ webhook }: { webhook: Webhook }) => (
     </span>
 );
 
-/** How the last delivery went. A failure carries its reason, cut short; the tooltip has all of it. */
+/**
+ * How the last delivery went: when, and the answer's status as a badge -- "Failed" when
+ * nothing answered. A failure carries its reason below; a long one wraps onto a second
+ * line and is cut there, the tooltip has all of it.
+ */
 const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
     if (!webhook.lastAttemptAt) {
         return (
@@ -57,22 +61,25 @@ const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
             </Badge>
         );
     }
-    const when = formatDate(webhook.lastAttemptAt);
-    if (!webhook.lastError) {
-        return (
-            <Badge variant="success" size="sm">
-                HTTP {webhook.lastStatus} · {when}
-            </Badge>
-        );
-    }
+    const failed = webhook.lastError !== null;
     return (
-        <div className="flex flex-col items-start gap-0.5">
-            <Badge variant="error" size="sm">
-                Failed · {when}
-            </Badge>
-            <span className="max-w-xs truncate text-xs text-error" title={webhook.lastError}>
-                {webhook.lastError}
-            </span>
+        <div className="flex flex-col items-start gap-1">
+            <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap text-sm text-text-primary">
+                    {formatDate(webhook.lastAttemptAt)}
+                </span>
+                <Badge variant={failed ? "error" : "success"}>
+                    {webhook.lastStatus !== null ? `HTTP ${webhook.lastStatus}` : "Failed"}
+                </Badge>
+            </div>
+            {failed && (
+                <span
+                    className="line-clamp-2 max-w-sm break-words text-xs text-error"
+                    title={webhook.lastError ?? undefined}
+                >
+                    {webhook.lastError}
+                </span>
+            )}
         </div>
     );
 };
