@@ -179,7 +179,9 @@ The server checks the file on every start. A value of the wrong type or format â
 Invalid config.yaml -- security.hsts: Invalid input: expected boolean, received string
 ```
 
-Fix the value and start again. Unknown keys are kept and do not cause an error.
+Fix the value and start again. Unknown keys are kept and do not cause an error; the server
+logs a warning for each one at startup (`Unknown key in config.yaml -- ignored`), so a
+misspelled key does not leave its default in force unnoticed.
 
 | Key                        | Sub-Key         | Description                                              |
 | :------------------------- | :-------------- | :------------------------------------------------------- |

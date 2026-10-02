@@ -799,7 +799,7 @@ The defaults:
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
 
-The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone; the server removes both old keys from `config.yaml` at startup.
+The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone. Left in `config.yaml`, the old keys are ignored and logged as unknown at startup.
 
 ### Update Settings
 

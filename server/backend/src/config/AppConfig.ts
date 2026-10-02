@@ -9,6 +9,8 @@ import {
     AppSettingsSchema,
     DEFAULT_SERVER_PORT,
     firstIssue,
+    OidcConfigSchema,
+    SecurityConfigSchema,
     TrustedProxySchema,
     type AppConfigParsed,
 } from "@kasm/shared";
@@ -24,14 +26,6 @@ const CONFIG_PATH = path.resolve(__dirname, "../../../config.yaml");
  * operator's own additions, and saveConfig() writes this object back into the file.
  */
 export type AppConfig = AppConfigParsed;
-
-/** Setting keys that were renamed or dropped; removed from the file on startup. */
-const OBSOLETE_SETTINGS_KEYS = [
-    // Renamed to token_retention_days without carrying the value over.
-    "retention_invalid_tokens_days",
-    // The token cleanup keeps no minimum any more.
-    "retention_invalid_tokens_count",
-];
 
 let configDoc: YAML.Document = new YAML.Document({});
 let config: Record<string, unknown> = {};
@@ -68,12 +62,6 @@ function loadConfig() {
         // would requote values and reflow the operator's file.
         const defaults = AppSettingsSchema.parse({});
         newDefaultsAdded = Object.keys(defaults).some((key) => !(key in present));
-        for (const key of OBSOLETE_SETTINGS_KEYS) {
-            if (key in present) {
-                delete present[key];
-                configDoc.deleteIn(["settings", key]);
-            }
-        }
     } else {
         newDefaultsAdded = true;
     }
@@ -156,6 +144,33 @@ if (!config.secretKey) {
     }
 }
 
+/** The keys the server reads, per block; `""` is the top level. */
+const KNOWN_KEYS: Record<string, string[]> = {
+    "": Object.keys(AppConfigSchema.shape),
+    settings: Object.keys(AppSettingsSchema.unwrap().shape),
+    oidc: Object.keys(OidcConfigSchema.shape),
+    security: Object.keys(SecurityConfigSchema.unwrap().shape),
+};
+
+/**
+ * Logs every key in config.yaml the server does not read, so a typo -- `hst` for `hsts` --
+ * does not leave a default in force without a word. Only a warning: the schemas are loose
+ * on purpose, and an operator's own additions stay in the file.
+ */
+function warnUnknownKeys(raw: Record<string, unknown>) {
+    for (const [block, known] of Object.entries(KNOWN_KEYS)) {
+        const value = block === "" ? raw : raw[block];
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        for (const key of Object.keys(value)) {
+            if (known.includes(key)) continue;
+            logger.warn(
+                { path: CONFIG_PATH, key: block === "" ? key : `${block}.${key}` },
+                "Unknown key in config.yaml -- ignored",
+            );
+        }
+    }
+}
+
 /**
  * Checks config.yaml and fills in every default, once, at startup.
  *
@@ -174,6 +189,7 @@ function validateConfig(): AppConfig {
         );
         process.exit(1);
     }
+    warnUnknownKeys(config);
     config = parsed.data;
 
     if (newDefaultsAdded && fs.existsSync(CONFIG_PATH)) {
