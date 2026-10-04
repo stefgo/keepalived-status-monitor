@@ -10,7 +10,16 @@ import { ActivityView } from "../../activity/components/ActivityView";
 import { ClientList } from "../../clients/components/ClientList";
 import { SEARCH_PARAM, paths } from "../../../lib/paths";
 import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
-import { clientCount, formatOnlineCount, instanceCount, needsAttention, unseenProblems } from "../lib/dashboard";
+import {
+    clientCount,
+    clusterSummary,
+    formatOnlineCount,
+    hostSummary,
+    instanceCount,
+    needsAttention,
+    problemSummary,
+    unseenProblems,
+} from "../lib/dashboard";
 import { ClusterCard } from "../../keepalived/components/ClusterCard";
 import { ClusterOverview } from "../../keepalived/components/ClusterOverview";
 import { MasterList } from "../../keepalived/components/MasterList";
@@ -25,12 +34,16 @@ type Panel = (typeof PANELS)[number];
 const PANEL_PARAM = "panel";
 const PANEL_ID = "dashboard-panel";
 
+/** An icon with nothing to say; one that has something takes the colour of what it says. */
+const QUIET = "text-text-muted";
+
 const toPanel = (value: string | null): Panel | null =>
     (PANELS as readonly (string | null)[]).includes(value) ? (value as Panel) : null;
 
 /**
  * The landing page: how many hosts report, how many instances they run, and the clusters
- * that need a look. A healthy fleet shows the four numbers and nothing else.
+ * that need a look. A healthy fleet shows the four numbers, each saying below it that
+ * nothing is wrong, and nothing else.
  */
 export const DashboardOverview = () => {
     const navigate = useNavigate();
@@ -63,7 +76,7 @@ export const DashboardOverview = () => {
     const hosts = useMemo(() => clientCount(clients), [clients]);
     const summary = useMemo(() => instanceCount(clients, states), [clients, states]);
     const attention = useMemo(() => needsAttention(clusters), [clusters]);
-    const unseenWarnings = useMemo(() => unseenProblems(events), [events]);
+    const problems = useMemo(() => unseenProblems(events), [events]);
 
     // Four zeroes would say the fleet is empty, which is another statement altogether.
     const loadError = clientsError ?? statesError;
@@ -75,35 +88,52 @@ export const DashboardOverview = () => {
                 <StatCard
                     label="Hosts online"
                     value={formatOnlineCount(hosts)}
+                    sub={hostSummary(hosts)}
                     icon={Monitor}
                     onClick={() => togglePanel("hosts")}
                     selected={panel === "hosts"}
+                    aria-expanded={panel === "hosts"}
+                    classNames={{ icon: hosts.online < hosts.total ? "text-warning" : QUIET }}
                     aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="VRRP clusters"
                     value={String(clusters.length)}
-                    sub={`${summary.instances} instances`}
+                    sub={clusterSummary(clusters, summary.instances)}
                     icon={Network}
                     onClick={() => togglePanel("clusters")}
                     selected={panel === "clusters"}
+                    aria-expanded={panel === "clusters"}
+                    classNames={{
+                        icon:
+                            attention.length > 0 || clusters.some((c) => c.health === "unknown")
+                                ? "text-warning"
+                                : QUIET,
+                    }}
                     aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="MASTER"
                     value={String(summary.masters)}
-                    sub={summary.faults > 0 ? `${summary.faults} in FAULT` : undefined}
+                    sub={summary.faults > 0 ? `${summary.faults} in FAULT` : "None in FAULT"}
                     icon={Crown}
                     onClick={() => togglePanel("masters")}
                     selected={panel === "masters"}
+                    aria-expanded={panel === "masters"}
+                    classNames={{ icon: summary.faults > 0 ? "text-error" : QUIET }}
                     aria-controls={PANEL_ID}
                 />
                 <StatCard
                     label="Errors / Warnings"
-                    value={String(unseenWarnings)}
+                    value={String(problems.errors + problems.warnings)}
+                    sub={problemSummary(problems)}
                     icon={AlertTriangle}
                     onClick={() => togglePanel("activity")}
                     selected={panel === "activity"}
+                    aria-expanded={panel === "activity"}
+                    classNames={{
+                        icon: problems.errors > 0 ? "text-error" : problems.warnings > 0 ? "text-warning" : QUIET,
+                    }}
                     aria-controls={PANEL_ID}
                 />
             </div>
@@ -122,11 +152,16 @@ export const DashboardOverview = () => {
                 </div>
             )}
 
-            <div className="space-y-6">
-                {attention.map((cluster) => (
-                    <ClusterCard key={cluster.key} cluster={cluster} />
-                ))}
-            </div>
+            {attention.length > 0 && (
+                <section aria-labelledby="dashboard-attention" className="space-y-4">
+                    <h2 id="dashboard-attention" className="text-sm font-semibold text-text-secondary">
+                        Needs attention
+                    </h2>
+                    {attention.map((cluster) => (
+                        <ClusterCard key={cluster.key} cluster={cluster} />
+                    ))}
+                </section>
+            )}
         </div>
     );
 };

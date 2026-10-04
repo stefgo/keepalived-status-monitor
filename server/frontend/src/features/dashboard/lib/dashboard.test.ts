@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityRecord, KeepalivedState, VrrpCluster, VrrpClusterHealth, VrrpState } from "@kasm/shared";
-import { clientCount, formatOnlineCount, instanceCount, needsAttention, unseenProblems } from "./dashboard";
+import {
+    clientCount,
+    clusterSummary,
+    formatOnlineCount,
+    hostSummary,
+    instanceCount,
+    needsAttention,
+    problemSummary,
+    unseenProblems,
+} from "./dashboard";
 
 const reading = (clientId: string, states: VrrpState[]): KeepalivedState => ({
     clientId,
@@ -77,14 +86,59 @@ describe("unseenProblems", () => {
             event("c", { level: "info" }),
             event("d", { level: "error", seen: true }),
         ];
-        expect(unseenProblems(events)).toBe(2);
+        expect(unseenProblems(events)).toEqual({ errors: 1, warnings: 1 });
     });
 
-    it("counts a group as one row", () => {
+    it("counts a group as one row, at the most severe level in it", () => {
         const events = [
             event("a", { level: "error", correlationId: "i1" }),
             event("b", { level: "warning", correlationId: "i1" }),
         ];
-        expect(unseenProblems(events)).toBe(1);
+        expect(unseenProblems(events)).toEqual({ errors: 1, warnings: 0 });
+    });
+});
+
+describe("problemSummary", () => {
+    it("names what the number is made of and leaves out a part that is zero", () => {
+        expect(problemSummary({ errors: 1, warnings: 2 })).toBe("1 error · 2 warnings");
+        expect(problemSummary({ errors: 0, warnings: 1 })).toBe("1 warning");
+    });
+
+    it("says so when nothing is unseen", () => {
+        expect(problemSummary({ errors: 0, warnings: 0 })).toBe("Nothing unseen");
+    });
+});
+
+describe("hostSummary", () => {
+    it("says how many hosts are away, or that none is", () => {
+        expect(hostSummary({ online: 3, total: 3 })).toBe("All connected");
+        expect(hostSummary({ online: 1, total: 3 })).toBe("2 offline");
+    });
+
+    it("does not call an empty fleet connected", () => {
+        expect(hostSummary({ online: 0, total: 0 })).toBe("No client registered");
+    });
+});
+
+describe("clusterSummary", () => {
+    it("says how many clusters need a look, or that none does", () => {
+        expect(clusterSummary([cluster("a", "ok"), cluster("b", "ok")], 4)).toBe("All healthy · 4 instances");
+        expect(clusterSummary([cluster("a", "ok"), cluster("b", "degraded")], 4)).toBe(
+            "1 needs attention · 4 instances",
+        );
+        expect(clusterSummary([cluster("a", "degraded"), cluster("b", "degraded")], 1)).toBe(
+            "2 need attention · 1 instance",
+        );
+    });
+
+    it("does not call a cluster healthy that nobody reports on", () => {
+        expect(clusterSummary([cluster("a", "unknown")], 0)).toBe("1 unknown · 0 instances");
+        expect(clusterSummary([cluster("a", "degraded"), cluster("b", "unknown")], 2)).toBe(
+            "1 needs attention · 1 unknown · 2 instances",
+        );
+    });
+
+    it("does not call a fleet without clusters healthy", () => {
+        expect(clusterSummary([], 0)).toBe("0 instances");
     });
 });
