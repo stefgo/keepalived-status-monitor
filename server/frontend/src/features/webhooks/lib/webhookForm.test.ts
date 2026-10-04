@@ -13,8 +13,11 @@ import {
     inputFrom,
     parseKinds,
     previewBody,
+    webhookFieldOf,
+    webhookRules,
     type WebhookDraft,
 } from "./webhookForm";
+import { checkDraft } from "../../../lib/entityForm";
 
 const draft = (changes: Partial<WebhookDraft> = {}): WebhookDraft => ({
     ...EMPTY_DRAFT,
@@ -101,6 +104,42 @@ describe("inputFrom", () => {
 
     it("turns the draft a new webhook starts with into something the server accepts", () => {
         expect(WebhookInputSchema.safeParse(inputFrom(draft())).success).toBe(true);
+    });
+});
+
+describe("the webhook form's verdict", () => {
+    const check = (d: WebhookDraft) =>
+        checkDraft({ schema: WebhookInputSchema, toInput: inputFrom, fieldOf: webhookFieldOf, rules: webhookRules }, d);
+
+    it("accepts the draft a new webhook starts with, once it has a name and a URL", () => {
+        expect(check(draft())).toMatchObject({ isValid: true, errors: {} });
+    });
+
+    it("reports a missing name and a URL without a scheme at their fields", () => {
+        const { errors, isValid } = check(draft({ name: "", url: "chat.example.org" }));
+        expect(errors.name).toBe("A name is required");
+        expect(errors.url).toBe("Must be an http:// or https:// URL");
+        expect(isValid).toBe(false);
+    });
+
+    it("reports a broken header line at the headers, without a request to send", () => {
+        const verdict = check(draft({ headers: "no colon here" }));
+        expect(verdict.errors.headers).toBe('Header line 1 is not "Name: value"');
+        expect(verdict.input).toBeNull();
+    });
+
+    it("reports a header name the server refuses at the headers", () => {
+        expect(check(draft({ headers: "Bad Name: 1" })).errors.headers).toBe("Not a valid header name");
+    });
+
+    it("states the timeout's range in seconds, the unit of the field", () => {
+        expect(check(draft({ timeoutSeconds: "0.5" })).errors.timeoutSeconds).toBe("Between 1 and 60 seconds.");
+        expect(check(draft({ timeoutSeconds: "61" })).errors.timeoutSeconds).toBe("Between 1 and 60 seconds.");
+        expect(check(draft({ timeoutSeconds: "60" })).isValid).toBe(true);
+    });
+
+    it("reports a template that is no JSON at the template", () => {
+        expect(check(draft({ bodyTemplate: "{" })).errors.bodyTemplate).toBeDefined();
     });
 });
 

@@ -9,6 +9,7 @@ import {
     type Webhook,
     type WebhookInput,
 } from "@kasm/shared";
+import { DraftFieldError, type FieldErrors, type FieldOf } from "../../../lib/entityForm";
 
 /** The editor's fields, as typed. Headers and kinds are text until they are sent. */
 export interface WebhookDraft {
@@ -54,16 +55,20 @@ export function draftFrom(webhook: Webhook): WebhookDraft {
 }
 
 /**
- * The draft as the API takes it. Throws on a header line without a colon -- the one mistake
- * the server could not name, because by then the line would already be gone.
+ * The draft as the API takes it. Throws on a header line without a colon or without a name
+ * before it -- the one mistake the server could not name, because by then the line would
+ * already be gone. Thrown as a `DraftFieldError`, so the form shows it at the headers.
  */
 export function inputFrom(draft: WebhookDraft): WebhookInput {
     const headers: Record<string, string> = {};
     draft.headers.split("\n").forEach((line, index) => {
         if (line.trim() === "") return;
         const colon = line.indexOf(":");
-        if (colon <= 0) throw new Error(`Header line ${index + 1} is not "Name: value"`);
-        headers[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+        const name = line.slice(0, colon).trim();
+        if (colon <= 0 || name === "") {
+            throw new DraftFieldError<WebhookDraft>("headers", `Header line ${index + 1} is not "Name: value"`);
+        }
+        headers[name] = line.slice(colon + 1).trim();
     });
     return {
         name: draft.name,
@@ -74,9 +79,42 @@ export function inputFrom(draft: WebhookDraft): WebhookInput {
         bodyTemplate: draft.bodyTemplate,
         minLevel: draft.minLevel,
         kinds: parseKinds(draft.kinds),
-        timeoutMs: Math.round((parseFloat(draft.timeoutSeconds) || 10) * 1000),
+        timeoutMs: timeoutMsFrom(draft.timeoutSeconds),
     };
 }
+
+/** The timeout field in milliseconds. Empty, or no number at all, is the default of ten seconds. */
+export function timeoutMsFrom(seconds: string): number {
+    return Math.round((parseFloat(seconds) || 10) * 1000);
+}
+
+/**
+ * The timeout's range in the unit the field is typed in. The schema refuses the same
+ * values, but in milliseconds -- a number the operator never entered.
+ */
+export function webhookRules(draft: WebhookDraft): FieldErrors<WebhookDraft> {
+    const timeoutMs = timeoutMsFrom(draft.timeoutSeconds);
+    return timeoutMs < 1000 || timeoutMs > 60000 ? { timeoutSeconds: "Between 1 and 60 seconds." } : {};
+}
+
+/** A draft field is named like the request's, except for the timeout and its unit. */
+export const webhookFieldOf: FieldOf<WebhookDraft> = (path) => {
+    switch (path[0]) {
+        case "timeoutMs":
+            return "timeoutSeconds";
+        case "name":
+        case "enabled":
+        case "url":
+        case "method":
+        case "headers":
+        case "bodyTemplate":
+        case "minLevel":
+        case "kinds":
+            return path[0];
+        default:
+            return null;
+    }
+};
 
 /** The kind patterns of the comma separated field. */
 export function parseKinds(text: string): string[] {
