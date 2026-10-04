@@ -177,8 +177,8 @@ export const ClusterOverview = () => {
     // with the same comparator. A constant for the clusters keeps their order where the
     // column is about the hosts only.
     //
-    // The list shows the first level only, so each cluster carries its hosts inside it: the
-    // first column is the cluster's line there, and "Hosts" is the one column the table lacks.
+    // The list is the same tree with one line per row: what the table spreads over its
+    // columns -- the instance and the state -- stands beside the name there.
     const columns: DataColumnDef<ClusterRow>[] = [
         {
             header: "VRID / Host",
@@ -191,8 +191,20 @@ export const ClusterOverview = () => {
             table: { cellClassName: (row) => cn("text-sm", dim(row)) },
             list: { label: null },
             render: (row, view) => {
-                if (row.kind === "member") return <HostLink row={row} />;
-                if (view === "table") return clusterLabel(row.cluster);
+                if (view === "table") {
+                    return row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />;
+                }
+                if (row.kind === "member") {
+                    return (
+                        <div className="flex flex-wrap items-center gap-2 py-1">
+                            <span className={cn("text-text-primary", dim(row))}>
+                                <HostLink row={row} />
+                            </span>
+                            <span className={cn("text-text-secondary", dim(row))}>{row.member.instance.name}</span>
+                            <MemberStateBadge member={row.member} />
+                        </div>
+                    );
+                }
                 return (
                     <div className="flex flex-wrap items-center gap-2 py-1">
                         <ClusterLink cluster={row.cluster} clusters={clusters}>
@@ -233,29 +245,6 @@ export const ClusterOverview = () => {
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
                     <MemberStateBadge member={row.member} />
-                ),
-        },
-        {
-            header: "Hosts",
-            table: false,
-            render: (row) =>
-                row.kind === "cluster" && (
-                    <ul className="space-y-1">
-                        {row.children.map(
-                            (child) =>
-                                child.kind === "member" && (
-                                    <li key={child.key} className="flex flex-wrap items-center gap-2">
-                                        <span className={dim(child)}>
-                                            <HostLink row={child} />
-                                        </span>
-                                        <span className={cn("text-text-secondary", dim(child))}>
-                                            {child.member.instance.name}
-                                        </span>
-                                        <MemberStateBadge member={child.member} />
-                                    </li>
-                                ),
-                        )}
-                    </ul>
                 ),
         },
         {
@@ -307,7 +296,7 @@ export const ClusterOverview = () => {
             }
             noResultsMessage="No cluster matches this search."
             // `onRowClick` makes every row look clickable; a cluster without a VRID has no page,
-            // so its row takes the pointer and the hover back. The list shows cluster rows only.
+            // so its row takes the pointer and the hover back.
             rowClassName={(row) =>
                 row.kind === "cluster"
                     ? clusterPath(row.cluster, clusters)
