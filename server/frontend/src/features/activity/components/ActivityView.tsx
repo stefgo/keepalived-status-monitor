@@ -18,6 +18,7 @@ import {
     DataAction,
     DataMultiView,
     DataTableDef,
+    EmptyState,
     Select,
     useActionMenu,
     useConfirm,
@@ -360,7 +361,19 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             keyField={(g) => g.head.id}
             // Column 2 is the time. Column 3 is the action column, which has no sort value.
             sort={{ defaultValue: [{ colIndex: 2, direction: "desc" }] }}
-            emptyMessage="Nothing has happened yet."
+            // The level and the seen filter are no search, so the view takes what they leave
+            // empty for an empty list. Only a list without any event is one.
+            emptyMessage={
+                events.length === 0 ? (
+                    <EmptyState
+                        icon={Activity}
+                        title="Nothing has happened yet"
+                        description="What keepalived and the agents report is recorded here."
+                    />
+                ) : (
+                    "No events match these filters."
+                )
+            }
             noResultsMessage="No events match these filters."
             pagination={listPagination(PAGE_SIZE.page)}
             searchable

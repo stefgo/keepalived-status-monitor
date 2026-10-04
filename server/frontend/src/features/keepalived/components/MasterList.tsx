@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Crown } from "lucide-react";
 import {
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     StatusDot,
     listGroups,
@@ -143,7 +144,13 @@ export const MasterList = () => {
             searchable
             searchPlaceholder="Search host, VRID, site or address…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No host is MASTER of a VRRP instance."
+            emptyMessage={
+                <EmptyState
+                    icon={Crown}
+                    title="No host is MASTER"
+                    description="An instance is listed here while an online host holds it as MASTER."
+                />
+            }
             noResultsMessage="No MASTER matches this search."
             // A cluster without a VRID has no page, so its row takes the pointer and the hover back.
             rowClassName={(row) =>

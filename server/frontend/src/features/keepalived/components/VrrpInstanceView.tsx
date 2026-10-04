@@ -1,9 +1,11 @@
 import { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { Network } from "lucide-react";
 import type { VrrpInstance } from "@kasm/shared";
 import {
     cn,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     type DataColumnView,
     listGroups,
@@ -41,7 +43,7 @@ interface VrrpInstanceViewProps {
     showVrid?: boolean;
     title?: ReactNode;
     /** Shown in place of the rows when there are none. */
-    emptyMessage?: string;
+    emptyMessage?: ReactNode;
     /**
      * Adds a column in front of all others, headed by this, that shows each row's `leading`.
      * In the list it opens the row's first line.
@@ -100,7 +102,7 @@ export const VrrpInstanceView = ({
     showHost = false,
     showVrid = true,
     title,
-    emptyMessage = "No VRRP instances.",
+    emptyMessage = <EmptyState icon={Network} title="No VRRP instances" />,
     leadingHeader,
 }: VrrpInstanceViewProps) => {
     const navigate = useNavigate();

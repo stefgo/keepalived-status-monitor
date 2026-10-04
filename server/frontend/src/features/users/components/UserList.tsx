@@ -5,6 +5,7 @@ import {
     Button,
     DataAction,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     PAGE_SIZE,
     listPagination,
@@ -144,7 +145,14 @@ export const UserList = ({
             searchable
             searchPlaceholder="Search users…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No users found."
+            noResultsMessage={`No users match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={User}
+                    title="No users yet"
+                    description="Add a user to let someone sign in."
+                />
+            }
             pagination={listPagination(PAGE_SIZE.page)}
         />
     );

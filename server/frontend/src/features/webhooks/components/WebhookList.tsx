@@ -6,6 +6,7 @@ import {
     Button,
     DataAction,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     Switch,
     PAGE_SIZE,
@@ -186,7 +187,14 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
             searchable
             searchPlaceholder="Search webhooks…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No webhooks yet. Add one to report events to an external service."
+            noResultsMessage={`No webhooks match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={WebhookIcon}
+                    title="No webhooks yet"
+                    description="Add one to report events to an external service."
+                />
+            }
             pagination={listPagination(PAGE_SIZE.page)}
         />
     );

@@ -7,6 +7,7 @@ import { RelativeTime } from "../../../components/RelativeTime";
 import {
     Badge,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     StatusDot,
     PAGE_SIZE,
@@ -144,7 +145,14 @@ export const ClientList = ({
             searchable
             searchPlaceholder="Search name, hostname, site or ID…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No clients connected."
+            noResultsMessage={`No clients match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={Monitor}
+                    title="No clients registered yet"
+                    description="Add a client, then start its agent with the registration token it is given."
+                />
+            }
             rowClassName="align-top"
             onRowClick={setSelectedClient ?? undefined}
             // The view owns the page state and takes the page after sorting, so a column

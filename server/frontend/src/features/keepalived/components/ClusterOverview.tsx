@@ -4,6 +4,7 @@ import { Network } from "lucide-react";
 import {
     cn,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     StatusDot,
     listGroups,
@@ -302,7 +303,13 @@ export const ClusterOverview = () => {
             searchable
             searchPlaceholder="Search VRID, site, network, address or host…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
+            emptyMessage={
+                <EmptyState
+                    icon={Network}
+                    title="No VRRP instances reported yet"
+                    description="Clusters appear once a registered agent has read keepalived on its host."
+                />
+            }
             noResultsMessage="No cluster matches this search."
             // `onRowClick` makes every row look clickable; a cluster without a VRID has no page,
             // so its row takes the pointer and the hover back. The list shows cluster rows only.

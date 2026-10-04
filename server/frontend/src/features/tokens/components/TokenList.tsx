@@ -5,6 +5,7 @@ import {
     Badge,
     DataAction,
     DataMultiView,
+    EmptyState,
     type DataColumnDef,
     PAGE_SIZE,
     listPagination,
@@ -161,7 +162,14 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
             searchable
             searchPlaceholder="Search tokens…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No tokens yet."
+            noResultsMessage={`No tokens match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={Key}
+                    title="No tokens yet"
+                    description="A token is issued when a client is added."
+                />
+            }
             pagination={listPagination(PAGE_SIZE.page)}
         />
     );
