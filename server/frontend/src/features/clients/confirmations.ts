@@ -20,13 +20,3 @@ export function describeDeleteClient(client: Client): ConfirmOptions {
         variant: "danger",
     };
 }
-
-export function describeDiscardChanges(): ConfirmOptions {
-    return {
-        title: "Discard your changes?",
-        description: "The client has not been saved. Leaving now keeps it as it was.",
-        confirmLabel: "Discard",
-        cancelLabel: "Keep editing",
-        variant: "danger",
-    };
-}

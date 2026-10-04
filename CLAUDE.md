@@ -14,7 +14,7 @@ Consists of:
 | Layer | Technology |
 |---|---|
 | Backend | Node.js 22+, Fastify 5, SQLite (better-sqlite3), Pino |
-| Frontend | React 19, Vite 7, Zustand, Tailwind CSS 3, React Router 7 |
+| Frontend | React 19, Vite 7, TanStack Query 5, Zustand, Tailwind CSS 3, React Router 7 |
 | Client | Node.js, Fastify 5, ws — reads keepalived via signals and `/proc/<pid>/root` |
 | Shared | TypeScript, Zod 4 |
 | Auth | JWT + optional OIDC |
@@ -55,11 +55,13 @@ npm run screenshots      # docs/assets/screenshots from a running server (see do
 
 # Frontend only (server/frontend)
 npm run lint                 # ESLint
-npm run typecheck            # tsc against the installed UI library
+npm run typecheck            # tsc against the installed UI library, then over vite.config.ts
 npm run typecheck:local-ui   # tsc against a sibling checkout of the UI library
 ```
 
-The Vite build does not type-check, so `typecheck` is the frontend's only type gate.
+The Vite build does not type-check, so `typecheck` is the frontend's only type gate. Its
+second run covers `vite.config.ts` through `tsconfig.node.json`, the files Node runs rather
+than the browser.
 
 `build` names its workspaces one by one instead of using `--workspaces`, because
 `shared` has to be built first and the others need its output. `--workspaces` would
@@ -80,11 +82,51 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - SQLite with WAL mode; schema managed via Umzug migrations in `migrations/`
 
 ### Frontend (server/frontend/src)
-- Feature-based structure under `features/` (keepalived, clients, activity, users, auth, tokens, settings, app)
-- Zustand stores in `stores/` (useClientStore, useKeepalivedStore, useActivityStore, useSchedulerStore, useUIStore)
+- Feature-based structure under `features/` (dashboard, keepalived, clients, activity, users, auth, tokens, webhooks, settings, app)
+- What the server holds lives in one TanStack Query cache (`lib/queryClient.ts`), read through
+  the modules in `queries/` and addressed by `lib/queryKeys.ts`. Zustand holds only
+  `useUIStore`, what this browser alone knows.
+- Every request goes through `lib/api.ts`, which parses the answer against a schema from
+  `shared/src/responses.ts` and throws the server's reason on a refusal. `apiFetch` stays
+  below it; no component calls `fetch`.
+- A dashboard message changes a cache entry through a pure function in `lib/cacheUpdates.ts`.
+  The messages are one union in `shared/src/dashboardMessages.ts`; the backend sends through
+  it, and the socket handler's `switch` ends in `assertNever`.
+- A lost socket is said: `isLost` in `WebSocketContext` turns true `LOST_AFTER_MS` (5 s) after
+  the socket is gone and drives the library's `ConnectionBanner` and `StatusDotProvider`.
+  After a reconnect everything the server does not push on connect (`isPushedOnConnect` in
+  `lib/queryKeys.ts`) is invalidated. A new cache area the server pushes on connect has to
+  be added there.
+- Every path lives once in `lib/paths.ts` (`ROUTES`, `paths`, `clusterPath`). No path literal
+  anywhere else. The route tree in `features/app/routes.tsx` is the one description of what
+  lives where: the sidebar (`handle.nav`), the document title (`lib/pageTitle.ts`), "back"
+  (`useBackPath`, the route above -- never `location.state`) and the `errorElement` are all
+  read off it. A new page is a route there, with its lazy import in `lazyPages.ts`.
+  The breadcrumb in a page's header (`HeaderBreadcrumb`, `lib/breadcrumb.ts`) is read off
+  the same handles as the title; a page below a list uses it as its heading.
+- A route whose subject is gone for good throws `NotFoundError` (`lib/notFound.ts`); a
+  cluster, which comes back with the next reading, says "not found" itself.
+- An editor keeps its draft in `useEntityForm`, checked against the request schema from
+  `shared`; its rules are pure and live in the feature's `lib/<name>Form.ts`, with a test.
+  Leaving a page with unsaved changes is asked about in one place, `useUnsavedChangesGuard`
+  (the router's blocker); an editor navigates away with its `close` or `leave`, never with
+  `navigate` of its own.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
-  backend endpoint and by the dashboard (`useVrrpClusters`) alike
-- React Contexts: ThemeContext, WebSocketContext, AuthContext
+  backend endpoint and by the dashboard (`useVrrpClusters`) alike. The hook names every
+  member's host (`member.hostName`); no view looks a client up for its name.
+- A list describes its columns once, as `DataColumnDef[]` (`columns`), with `actionsColumn`
+  and `listGroups` from the library; its `emptyMessage` is an `EmptyState`, a search without
+  a hit a `noResultsMessage`. The search goes to the view as `searchFilter`, never applied
+  to `data` beforehand, or the view cannot tell the two apart.
+- Dates follow the browser's locale (`formatDate`, `formatTime` in `utils.ts`; no locale
+  literal). "How long ago" is `<RelativeTime>` on `useNow`, the date in its tooltip.
+- "Client" is the kasm agent registered with the server, "host" the machine keepalived runs
+  on. Both words are used on purpose; neither is renamed into the other.
+- React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,
+  mounted with `STORAGE_KEYS.theme`
+- Every key in the browser's storage lives once in `lib/storageKeys.ts` (`STORAGE_KEYS`,
+  written `kasm.<area>.<what>`). No key literal anywhere else; renaming one forgets the
+  stored value and needs no migration.
 - Vite proxies `/api` and `/ws` to backend in dev
 
 ### Client (client)
@@ -182,7 +224,7 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
 - The version string is derived in one order everywhere: build argument, then the root
   `package.json` (with `+<hash>` when the commit carries no release tag), then git. The
   order lives in `scripts/generate-version.sh` and, mirrored, in
-  `server/frontend/vite.config.js`. Only the client agent ships a `dist/VERSION` file.
+  `server/frontend/vite.config.ts`. Only the client agent ships a `dist/VERSION` file.
 
 ## Testing
 

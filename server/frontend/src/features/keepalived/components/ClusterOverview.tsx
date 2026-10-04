@@ -1,30 +1,35 @@
 import { ReactNode, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
     cn,
     DataMultiView,
-    type DataListColumnDef,
-    type DataTableDef,
+    EmptyState,
+    type DataColumnDef,
+    StatusDot,
+    listGroups,
 } from "@stefgo/react-ui-components";
-import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import type { VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
+import { useClients } from "../../../queries/clients";
+import { useKeepalivedStates } from "../../../queries/keepalived";
+import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { clientName, formatDate } from "../../../utils";
-import { StatusDot } from "../../clients/components/StatusDot";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
+import { clusterPath, paths } from "../../../lib/paths";
+import { clusterLabel, clusterVipLabel, memberStale, type NamedClusterMember, type NamedVrrpCluster } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
- * on the second. The host's name is resolved once here, so search and render agree on it.
+ * on the second.
  */
 type ClusterRow =
     | { kind: "cluster"; key: string; cluster: VrrpCluster; children: ClusterRow[] }
-    | { kind: "member"; key: string; member: VrrpClusterMember; hostName: string };
+    | { kind: "member"; key: string; member: NamedClusterMember };
 
 /** Sort ranks: what needs a look first. */
 const HEALTH_RANK: Record<VrrpClusterHealth, number> = {
@@ -55,7 +60,7 @@ const dim = (row: ClusterRow) => (row.kind === "member" && memberStale(row.membe
 const effectivePriority = (member: VrrpClusterMember) =>
     member.instance.effectivePriority ?? member.instance.priority ?? 0;
 
-function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
+function toRows(clusters: NamedVrrpCluster[]): ClusterRow[] {
     return clusters.map((cluster) => ({
         kind: "cluster",
         key: cluster.key,
@@ -63,15 +68,11 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
         // The node that should be MASTER on top.
         children: [...cluster.members]
             .sort((a, b) => effectivePriority(b) - effectivePriority(a))
-            .map((member) => {
-                const client = clients.find((c) => c.id === member.clientId);
-                return {
-                    kind: "member",
-                    key: `${cluster.key}/${member.clientId}:${member.instance.name}`,
-                    member,
-                    hostName: client ? clientName(client) : member.clientId,
-                };
-            }),
+            .map((member) => ({
+                kind: "member",
+                key: `${cluster.key}/${member.clientId}:${member.instance.name}`,
+                member,
+            })),
     }));
 }
 
@@ -79,7 +80,7 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
 function matches(row: ClusterRow, query: string): boolean {
     if (row.kind === "member") {
         return (
-            row.hostName.toLowerCase().includes(query) ||
+            row.member.hostName.toLowerCase().includes(query) ||
             row.member.instance.name.toLowerCase().includes(query)
         );
     }
@@ -92,15 +93,20 @@ function matches(row: ClusterRow, query: string): boolean {
     );
 }
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it. The view asks about the clusters alone; a
+// cluster that matches keeps all of its hosts.
+const matchesSearch = (row: ClusterRow, search: string) => matches(row, search.trim().toLowerCase());
+
 const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => (
     <Link
-        to={`/client/${row.member.clientId}`}
+        to={paths.client(row.member.clientId)}
         // The row leads to the host as well; without this a click would push it twice.
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"
     >
-        <StatusDot online={row.member.online} />
-        {row.hostName}
+        <StatusDot tone={row.member.online ? "success" : "neutral"} />
+        {row.member.hostName}
     </Link>
 );
 
@@ -114,12 +120,10 @@ const ClusterLink = ({
     clusters: VrrpCluster[];
     children: ReactNode;
 }) => {
-    const { pathname } = useLocation();
     const path = clusterPath(cluster, clusters);
     return path ? (
         <Link
             to={path}
-            state={{ from: pathname }}
             // The row leads to the cluster as well; without this a click would push it twice.
             onClick={(e) => e.stopPropagation()}
             className="text-text-primary hover:text-primary"
@@ -137,19 +141,15 @@ const ClusterLink = ({
  */
 export const ClusterOverview = () => {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
     const clusters = useVrrpClusters();
-    const clients = useClientStore((s) => s.clients);
+    const { error: clientsError } = useClients();
+    const { error: statesError } = useKeepalivedStates();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
     // What the reader opened or closed by hand; every other cluster follows the default below.
     const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
 
-    const rows = useMemo(() => toRows(clusters, clients), [clusters, clients]);
+    const rows = useMemo(() => toRows(clusters), [clusters]);
     const searching = searchQuery.trim() !== "";
-    const filteredRows = useMemo(() => {
-        const query = searchQuery.trim().toLowerCase();
-        return query ? rows.filter((row) => matches(row, query)) : rows;
-    }, [rows, searchQuery]);
 
     // Open are the clusters that need a look -- any health but `ok`, which covers an offline
     // or inactive member, since that makes a cluster degraded at least -- and, while a search
@@ -177,22 +177,51 @@ export const ClusterOverview = () => {
     // Every sortable column gives both kinds of row a value, since the tree sorts each level
     // with the same comparator. A constant for the clusters keeps their order where the
     // column is about the hosts only.
-    const tableDef: DataTableDef<ClusterRow>[] = [
+    //
+    // The list is the same tree with one line per row: what the table spreads over its
+    // columns -- the instance and the state -- stands beside the name there.
+    const columns: DataColumnDef<ClusterRow>[] = [
         {
-            tableHeader: "VRID / Host",
+            header: "VRID / Host",
             sortable: true,
             // By site first, then numerically by VRID (1–255, hence the padding).
             sortValue: (row) =>
                 row.kind === "cluster"
                     ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
-                    : row.hostName,
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) => (row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />),
+                    : row.member.hostName,
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: { label: null },
+            render: (row, view) => {
+                if (view === "table") {
+                    return row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />;
+                }
+                if (row.kind === "member") {
+                    return (
+                        <div className="flex flex-wrap items-center gap-2 py-1">
+                            <span className={cn("text-text-primary", dim(row))}>
+                                <HostLink row={row} />
+                            </span>
+                            <span className={cn("text-text-secondary", dim(row))}>{row.member.instance.name}</span>
+                            <MemberStateBadge member={row.member} />
+                        </div>
+                    );
+                }
+                return (
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                        <ClusterLink cluster={row.cluster} clusters={clusters}>
+                            {clusterVipLabel(row.cluster)}
+                        </ClusterLink>
+                        <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
+                        <ClusterHealthBadge health={row.cluster.health} />
+                    </div>
+                );
+            },
         },
         {
-            tableHeader: "Virtual IPs / Instance",
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) =>
+            header: "Virtual IPs / Instance",
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: false,
+            render: (row) =>
                 row.kind === "cluster" ? (
                     clusterVipLabel(row.cluster)
                 ) : (
@@ -207,11 +236,12 @@ export const ClusterOverview = () => {
                 ),
         },
         {
-            tableHeader: "State",
+            header: "State",
             sortable: true,
             sortValue: (row) =>
                 row.kind === "cluster" ? HEALTH_RANK[row.cluster.health] : STATE_RANK[row.member.instance.state],
-            tableItemRender: (row) =>
+            list: false,
+            render: (row) =>
                 row.kind === "cluster" ? (
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
@@ -219,67 +249,27 @@ export const ClusterOverview = () => {
                 ),
         },
         {
-            tableHeader: "Priority",
+            header: "Priority",
             sortable: true,
             sortValue: (row) => (row.kind === "cluster" ? 0 : effectivePriority(row.member)),
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) => (row.kind === "member" ? <Priority instance={row.member.instance} /> : null),
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: false,
+            render: (row) => (row.kind === "member" ? <Priority instance={row.member.instance} /> : null),
         },
         {
-            tableHeader: "Last transition",
-            tableHeaderClassName: "whitespace-nowrap",
-            tableCellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
-            tableItemRender: (row) =>
-                row.kind === "member" ? formatDate(row.member.instance.lastTransition, { seconds: true }) : null,
+            header: "Last transition",
+            table: {
+                headerClassName: "whitespace-nowrap",
+                cellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
+            },
+            list: false,
+            render: (row) =>
+                row.kind === "member" ? <RelativeTime date={row.member.instance.lastTransition} seconds /> : null,
         },
     ];
 
-    // The list shows the first level only, so each cluster carries its hosts inside it.
-    const listColumns: DataListColumnDef<ClusterRow>[] = [
-        {
-            columnClassName: "flex-1",
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (row) =>
-                        row.kind === "cluster" && (
-                            <div className="flex flex-wrap items-center gap-2 py-1">
-                                <ClusterLink cluster={row.cluster} clusters={clusters}>
-                                    {clusterVipLabel(row.cluster)}
-                                </ClusterLink>
-                                <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
-                                <ClusterHealthBadge health={row.cluster.health} />
-                            </div>
-                        ),
-                },
-                {
-                    listLabel: "Hosts",
-                    listItemRender: (row) =>
-                        row.kind === "cluster" && (
-                            <ul className="space-y-1">
-                                {row.children.map(
-                                    (child) =>
-                                        child.kind === "member" && (
-                                            <li
-                                                key={child.key}
-                                                className="flex flex-wrap items-center gap-2"
-                                            >
-                                                <span className={dim(child)}>
-                                                    <HostLink row={child} />
-                                                </span>
-                                                <span className={cn("text-text-secondary", dim(child))}>
-                                                    {child.member.instance.name}
-                                                </span>
-                                                <MemberStateBadge member={child.member} />
-                                            </li>
-                                        ),
-                                )}
-                            </ul>
-                        ),
-                },
-            ],
-        },
-    ];
+    const loadError = clientsError ?? statesError;
+    if (loadError) return <QueryError title="Could not load the clusters" error={loadError} />;
 
     return (
         <DataMultiView<ClusterRow>
@@ -288,20 +278,27 @@ export const ClusterOverview = () => {
                     <Network size={18} className="text-text-muted" /> VRRP Clusters
                 </>
             }
-            viewMode={{ persist: { key: "clusterViewMode", scope: "local" } }}
-            data={filteredRows}
+            viewMode={{ persist: { key: STORAGE_KEYS.clustersView, scope: "local" } }}
+            data={rows}
             getChildren={(row) => (row.kind === "cluster" ? row.children : null)}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            columns={columns}
+            listGroups={listGroups()}
             treeExpanded={{ value: expanded, onChange: onExpandedChange }}
             keyField="key"
             searchable
             searchPlaceholder="Search VRID, site, network, address or host…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No VRRP instances reported yet. Clusters appear once a registered agent has read keepalived on its host."
+            searchFilter={matchesSearch}
+            emptyMessage={
+                <EmptyState
+                    icon={Network}
+                    title="No VRRP instances reported yet"
+                    description="Clusters appear once a registered agent has read keepalived on its host."
+                />
+            }
             noResultsMessage="No cluster matches this search."
             // `onRowClick` makes every row look clickable; a cluster without a VRID has no page,
-            // so its row takes the pointer and the hover back. The list shows cluster rows only.
+            // so its row takes the pointer and the hover back.
             rowClassName={(row) =>
                 row.kind === "cluster"
                     ? clusterPath(row.cluster, clusters)
@@ -309,11 +306,10 @@ export const ClusterOverview = () => {
                         : "align-top cursor-default hover:bg-transparent"
                     : "align-top"
             }
-            // A cluster row opens the cluster's page, a host row the host. `from` is how the
-            // cluster page knows where back is.
+            // A cluster row opens the cluster's page, a host row the host.
             onRowClick={(row) => {
-                const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : `/client/${row.member.clientId}`;
-                if (to) navigate(to, { state: { from: pathname } });
+                const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : paths.client(row.member.clientId);
+                if (to) navigate(to);
             }}
         />
     );

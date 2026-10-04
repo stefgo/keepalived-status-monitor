@@ -1,10 +1,10 @@
 import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
 import { ClientList } from "./ClientList";
-import { apiFetch } from "../../../lib/apiFetch";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
-import { Button, DataAction, useConfirm } from "@stefgo/react-ui-components";
-import { describeFailure } from "../../../utils";
+import { reconnectClient } from "../../../queries/clients";
+import { refreshKeepalived } from "../../../queries/keepalived";
+import { Button, DataAction, useConfirm, useToast } from "@stefgo/react-ui-components";
+import { clientName, getErrorMessage } from "../../../utils";
 import { describeDeleteClient } from "../confirmations";
 
 interface ManagedClientsProps {
@@ -35,9 +35,8 @@ export const ManagedClients = ({
     onAdd,
     onEdit,
 }: ManagedClientsProps) => {
-    const refresh = useKeepalivedStore((s) => s.refresh);
-
-    const { confirm, alert } = useConfirm();
+    const { confirm } = useConfirm();
+    const { show } = useToast();
 
     // A failed delete keeps the dialog open with the message in it: the store reverts its
     // optimistic removal, so the row comes back, and closing would hide both the failure
@@ -51,21 +50,27 @@ export const ManagedClients = ({
      * is asked to read keepalived again.
      */
     const handleReloadClient = async (client: Client) => {
-        if (
-            client.connectionMode === CONNECTION_MODE.OUTBOUND &&
-            client.status === CLIENT_STATUS.OFFLINE
-        ) {
-            await apiFetch(`/api/v1/clients/${client.id}/reconnect`, {
-                method: "POST",
-            });
-            onRefresh();
-            return;
-        }
-
+        // The answer to either request comes over the socket, so the toast is all that
+        // says the click was taken: a host whose reading has not changed looks the same.
         try {
-            await refresh(client.id);
+            if (
+                client.connectionMode === CONNECTION_MODE.OUTBOUND &&
+                client.status === CLIENT_STATUS.OFFLINE
+            ) {
+                await reconnectClient(client.id);
+                onRefresh();
+                show({ variant: "success", title: "Client reconnected" });
+                return;
+            }
+
+            await refreshKeepalived(client.id);
+            show({ variant: "success", title: `Asked ${clientName(client)} for a reading` });
         } catch (e: unknown) {
-            await alert(describeFailure("The agent could not be asked for a reading", e));
+            show({
+                variant: "error",
+                title: `Could not reload ${clientName(client)}`,
+                description: getErrorMessage(e),
+            });
         }
     };
 

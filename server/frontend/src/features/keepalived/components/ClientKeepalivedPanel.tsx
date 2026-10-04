@@ -1,9 +1,9 @@
 import { Network } from "lucide-react";
-import { Card } from "@stefgo/react-ui-components";
+import { Card, EmptyState, LoadingIndicator } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
-import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterOf, clusterPath } from "../lib/vrrp";
+import { clusterPath } from "../../../lib/paths";
+import { clusterOf } from "../lib/vrrp";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 
@@ -46,7 +46,13 @@ export const ClientKeepalivedPanel = ({ clientId, state }: ClientKeepalivedPanel
                         href: cluster && clusterPath(cluster, clusters),
                     };
                 })}
-                emptyMessage="No VRRP instances found."
+                emptyMessage={
+                    <EmptyState
+                        icon={Network}
+                        title="No VRRP instances found"
+                        description="keepalived runs on this host, but its configuration defines no VRRP instance."
+                    />
+                }
             />
 
             {state.syncGroups.length > 0 && (

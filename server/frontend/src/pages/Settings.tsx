@@ -1,27 +1,30 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Save, Settings as SettingsIcon } from "lucide-react";
 import {
     Button,
     Card,
-    cn,
-    FOCUS_RING_INSET,
     TabList,
     TabPanel,
     useConfirm,
     useTabs,
     useToast,
+    LoadingIndicator,
+    SideTab,
 } from "@stefgo/react-ui-components";
 import { useSearchQueryParam } from "../hooks/useSearchQueryParam";
-import { LoadingIndicator } from "../components/LoadingIndicator";
+import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard";
 import { describeFailure } from "../utils";
-import { apiFetch } from "../lib/apiFetch";
-import type { SchedulerStatuses } from "@kasm/shared";
-import { useSchedulerStore } from "../stores/useSchedulerStore";
+import { QueryError } from "../components/QueryError";
+import { schedulerStatusOptions } from "../queries/scheduler";
+import { loadSettings, saveSettings } from "../queries/settings";
 import {
     DEFAULT_SETTINGS,
     SECTIONS,
     SECTION_IDS,
     isDirty,
+    sectionBody,
+    sectionError,
     type SectionDef,
     type SectionId,
     type SettingsValues,
@@ -31,29 +34,8 @@ import {
     TokenRetentionSection,
 } from "../features/settings/components/SettingsSections";
 
-interface SchedulerStatusResponse {
-    schedulers?: Partial<SchedulerStatuses>;
-}
-
-/** Loads the scheduler status without touching state; null when it cannot be read. */
-async function requestSchedulerStatus(): Promise<SchedulerStatusResponse | null> {
-    try {
-        const response = await apiFetch("/api/v1/settings/scheduler-status");
-        return response.ok ? await response.json() : null;
-    } catch (e) {
-        console.error("Failed to fetch scheduler status:", e);
-        return null;
-    }
-}
-
-// The tab fills the sidebar's width, so the ring is drawn inside it -- an outward one would
-// be clipped by the panel border next to it.
-const TAB_CLASS = cn(
-    "w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-left transition duration-200 cursor-pointer border-l-4 border-transparent hover:bg-hover",
-    FOCUS_RING_INSET,
-);
-const TAB_SELECTED_CLASS =
-    "bg-primary/10 text-primary border-l-primary shadow-[inset_0_1px_1px_rgba(0,0,0,0.05)] hover:bg-primary/10";
+/** Escape leaves an editor; this page is no editor and has nowhere to close onto. */
+const stayOnEscape = () => true;
 
 /**
  * The server's own settings, one section per tab.
@@ -61,7 +43,8 @@ const TAB_SELECTED_CLASS =
  * Each section saves on its own and sends only its own keys; the server merges them into the
  * stored block. It used to be one Save under all tabs, which wrote whatever had been
  * touched anywhere -- including edits in a tab that was no longer on screen. A tab with
- * edits that are not saved yet carries a dot, so they are not forgotten either.
+ * edits that are not saved yet carries a dot, so they are not forgotten either -- and
+ * leaving the page asks first for as long as any section has some.
  *
  * The open tab is in the URL, so a reload lands on it.
  */
@@ -75,7 +58,8 @@ export default function Settings() {
     const [draft, setDraft] = useState<SettingsValues>(DEFAULT_SETTINGS);
     const [savingSection, setSavingSection] = useState<SectionId | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const setSchedulers = useSchedulerStore((s) => s.setSchedulers);
+    /** Why the settings could not be read. Set, the form is not shown at all. */
+    const [loadError, setLoadError] = useState<unknown>(null);
 
     const [tab, setTab] = useSearchQueryParam("tab");
     const tabs = useTabs({
@@ -85,64 +69,51 @@ export default function Settings() {
         orientation: "vertical",
     });
 
-    // Split into a request that touches no state and a function that applies its answer:
-    // the effect below may only set state once the response is there, and a save loads the
-    // status again afterwards. The store's setter is stable by definition.
-    const applySchedulerStatus = useCallback((data: SchedulerStatusResponse) => {
-        if (data.schedulers) setSchedulers(data.schedulers);
-    }, [setSchedulers]);
+    const queryClient = useQueryClient();
 
-    // Settings and scheduler status are loaded once, inside the effect. isLoading starts
-    // out true, so the load only ever has to lower it.
+    // Switching tabs is not leaving: the guard asks when the path changes, and a tab is
+    // the page's query.
+    const hasUnsaved = SECTIONS.some((section) => isDirty(section, draft, saved));
+    useUnsavedChangesGuard(hasUnsaved, "settings", { onEscape: stayOnEscape });
+
+    // Loaded once, into the draft. Deliberately not a cache entry: one that is read again
+    // behind the form would overwrite what is typed and not yet saved. The scheduler status
+    // below the fields is one, and follows the socket. isLoading starts out true, so the
+    // load only ever has to lower it.
     useEffect(() => {
         let cancelled = false;
-        const loadSettings = async () => {
+        const load = async () => {
             try {
-                const response = await apiFetch("/api/v1/settings/cleanup");
-                if (response.ok) {
-                    const data = (await response.json()) as SettingsValues;
-                    if (!cancelled) {
-                        const loaded = { ...DEFAULT_SETTINGS, ...data };
-                        setSaved(loaded);
-                        setDraft(loaded);
-                    }
+                const data = await loadSettings();
+                if (!cancelled) {
+                    const loaded = { ...DEFAULT_SETTINGS, ...data };
+                    setSaved(loaded);
+                    setDraft(loaded);
                 }
             } catch (e) {
-                console.error("Failed to fetch settings:", e);
+                if (!cancelled) setLoadError(e);
             } finally {
                 if (!cancelled) setIsLoading(false);
             }
         };
-        loadSettings();
-        requestSchedulerStatus().then((data) => {
-            if (!cancelled && data) applySchedulerStatus(data);
-        });
+        load();
         return () => {
             cancelled = true;
         };
-    }, [applySchedulerStatus]);
+    }, []);
 
     const change = (key: string, value: string) => setDraft((prev) => ({ ...prev, [key]: value }));
 
     const save = async (section: SectionDef) => {
-        const body = Object.fromEntries(section.keys.map((key) => [key, draft[key] ?? ""]));
+        const body = sectionBody(section, draft);
         setSavingSection(section.id);
         try {
-            const response = await apiFetch("/api/v1/settings/cleanup", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
-            if (!response.ok) {
-                // The endpoint validates the body and names the offending field.
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error || "Failed to save settings");
-            }
+            // The endpoint validates the body and names the offending field.
+            await saveSettings(body);
             setSaved((prev) => ({ ...prev, ...body }));
             show({ variant: "success", title: `${section.label} saved` });
             // A changed interval moves the next scheduled run.
-            const status = await requestSchedulerStatus();
-            if (status) applySchedulerStatus(status);
+            void queryClient.invalidateQueries({ queryKey: schedulerStatusOptions.queryKey });
         } catch (e: unknown) {
             alert(describeFailure("Could not save the settings", e));
         } finally {
@@ -152,6 +123,12 @@ export default function Settings() {
 
     if (isLoading) {
         return <LoadingIndicator label="Loading settings…" />;
+    }
+
+    // Without what the server holds, the fields would show the defaults as if they were
+    // saved -- and a save would write them over the real values.
+    if (loadError) {
+        return <QueryError title="Could not load the settings" error={loadError} />;
     }
 
     const renderSection = (id: SectionId) => {
@@ -181,54 +158,61 @@ export default function Settings() {
                     aria-label="Settings sections"
                     className="w-full md:w-64 shrink-0 bg-app-bg border-b md:border-b-0 md:border-r md:rounded-bl-lg border-border py-4 flex flex-col gap-1"
                 >
-                    {SECTIONS.map((section) => {
-                        const { selected, ...tabAttributes } = tabs.tabProps(section.id);
-                        const dirty = isDirty(section, draft, saved);
-                        return (
-                            <button
-                                key={section.id}
-                                type="button"
-                                {...tabAttributes}
-                                className={cn(TAB_CLASS, selected && TAB_SELECTED_CLASS)}
-                            >
-                                <section.icon size={18} />
-                                <span className="flex-1">{section.label}</span>
-                                {dirty && (
+                    {SECTIONS.map((section) => (
+                        <SideTab
+                            key={section.id}
+                            tabs={tabs}
+                            value={section.id}
+                            icon={section.icon}
+                            trailing={
+                                isDirty(section, draft, saved) && (
                                     <>
                                         <span aria-hidden="true" className="w-2 h-2 rounded-full bg-warning" />
                                         <span className="sr-only">(unsaved changes)</span>
                                     </>
-                                )}
-                            </button>
-                        );
-                    })}
+                                )
+                            }
+                        >
+                            {section.label}
+                        </SideTab>
+                    ))}
                 </TabList>
 
                 <div className="flex-1 min-w-0 flex flex-col">
-                    {SECTIONS.map((section) => (
-                        <TabPanel
-                            key={section.id}
-                            tabs={tabs}
-                            value={section.id}
-                            className="flex-1 flex flex-col px-8 pt-8 pb-4 animate-in fade-in slide-in-from-right-2 duration-300"
-                        >
-                            <div className="flex-1 flex flex-col gap-8">
-                                {renderSection(section.id)}
+                    {SECTIONS.map((section) => {
+                        const invalid = sectionError(section, draft);
+                        return (
+                            <TabPanel
+                                key={section.id}
+                                tabs={tabs}
+                                value={section.id}
+                                className="flex-1 flex flex-col px-8 pt-8 pb-4 animate-in fade-in slide-in-from-right-2 duration-300"
+                            >
+                                <div className="flex-1 flex flex-col gap-8">
+                                    {renderSection(section.id)}
 
-                                <div className="mt-auto flex justify-end border-t border-border pt-4">
-                                    <Button
-                                        variant="primary"
-                                        icon={Save}
-                                        onClick={() => save(section)}
-                                        disabled={!isDirty(section, draft, saved) || savingSection !== null}
-                                        isLoading={savingSection === section.id}
-                                    >
-                                        Save
-                                    </Button>
+                                    <div className="mt-auto flex items-center justify-end gap-4 border-t border-border pt-4">
+                                        {invalid && (
+                                            <p role="alert" className="text-sm text-error">
+                                                {invalid}
+                                            </p>
+                                        )}
+                                        <Button
+                                            variant="primary"
+                                            icon={Save}
+                                            onClick={() => save(section)}
+                                            disabled={
+                                                !isDirty(section, draft, saved) || invalid !== null || savingSection !== null
+                                            }
+                                            isLoading={savingSection === section.id}
+                                        >
+                                            Save
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                        </TabPanel>
-                    ))}
+                            </TabPanel>
+                        );
+                    })}
                 </div>
             </div>
         </Card>

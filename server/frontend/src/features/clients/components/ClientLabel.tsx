@@ -1,5 +1,5 @@
+import { StatusDot } from "@stefgo/react-ui-components";
 import { EMPTY_VALUE } from "../../../utils";
-import { StatusDot } from "./StatusDot";
 
 interface ClientLabelProps {
     /** The client's name as `clientName()` gives it. Without one, the cell says nothing is there. */
@@ -16,7 +16,7 @@ export const ClientLabel = ({ name, online }: ClientLabelProps) => {
     if (name === undefined) return <span className="text-text-muted text-sm">{EMPTY_VALUE}</span>;
     return (
         <div className="flex items-center gap-2">
-            <StatusDot online={online} />
+            <StatusDot tone={online ? "success" : "neutral"} />
             <span className="text-sm">{name}</span>
         </div>
     );

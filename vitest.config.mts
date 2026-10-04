@@ -14,7 +14,7 @@ export default defineConfig({
                 },
             },
             {
-                // Deliberately not server/frontend/vite.config.js: that one shells out
+                // Deliberately not server/frontend/vite.config.ts: that one shells out
                 // to git for the version and sets up the dev proxy, neither of which a
                 // test needs.
                 resolve: {

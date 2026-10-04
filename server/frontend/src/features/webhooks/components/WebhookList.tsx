@@ -1,19 +1,21 @@
-import { useMemo } from "react";
 import { Edit2, Plus, Trash2, Webhook as WebhookIcon } from "lucide-react";
 import type { Webhook } from "@kasm/shared";
 import {
     Badge,
     Button,
     DataAction,
-    DataListColumnDef,
-    DataListDef,
     DataMultiView,
-    DataTableDef,
+    EmptyState,
+    type DataColumnDef,
     Switch,
+    PAGE_SIZE,
+    listPagination,
+    actionsColumn,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface WebhookListProps {
     webhooks: Webhook[];
@@ -84,17 +86,17 @@ const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
     );
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (w: Webhook, query: string) => {
+    const q = query.toLowerCase();
+    return w.name.toLowerCase().includes(q) || w.url.toLowerCase().includes(q);
+};
+
 /** The webhooks, built like every other list of the app. Only the edit button opens the editor. */
 export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onToggleEnabled }: WebhookListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
-    const filtered = useMemo(() => {
-        if (!searchQuery) return webhooks;
-        const q = searchQuery.toLowerCase();
-        return webhooks.filter((w) => w.name.toLowerCase().includes(q) || w.url.toLowerCase().includes(q));
-    }, [webhooks, searchQuery]);
-
-    // One set of actions for both views, so the table and the list cannot drift apart.
     const renderActions = (webhook: Webhook) => (
         <DataAction
             rowId={webhook.id}
@@ -127,63 +129,39 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
         </div>
     );
 
-    const tableDef: DataTableDef<Webhook>[] = [
+    const columns: DataColumnDef<Webhook>[] = [
         {
-            tableHeader: "Name",
+            header: "Name",
             sortable: true,
             sortValue: (w) => w.name.toLowerCase(),
-            tableItemRender: (w) => <Name webhook={w} />,
+            list: { label: null },
+            // The list has no Enabled column: the name carries the state instead.
+            render: (w, view) =>
+                view === "list" ? (
+                    <div className="py-1">
+                        <Name webhook={w} withState />
+                    </div>
+                ) : (
+                    <Name webhook={w} />
+                ),
         },
         {
-            tableHeader: "Enabled",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
+            header: "Enabled",
             sortable: true,
             sortValue: (w) => (w.enabled ? 0 : 1),
-            tableItemRender: renderEnabled,
+            table: { headerClassName: "text-center", cellClassName: "content-center" },
+            list: false,
+            render: renderEnabled,
         },
+        { header: "Target", table: false, render: (w) => <Target webhook={w} /> },
+        { header: "Filter", table: false, render: (w) => <Filter webhook={w} /> },
         {
-            tableHeader: "Last Delivery",
+            header: "Last Delivery",
             sortable: true,
             sortValue: (w) => w.lastAttemptAt ?? "",
-            tableItemRender: (w) => <LastDelivery webhook={w} />,
+            render: (w) => <LastDelivery webhook={w} />,
         },
-        {
-            tableHeader: "Actions",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
-            tableItemRender: renderActions,
-        },
-    ];
-
-    const listColumns: DataListColumnDef<Webhook>[] = [
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (w) => (
-                        <div className="py-1">
-                            <Name webhook={w} withState />
-                        </div>
-                    ),
-                },
-                { listLabel: "Target", listItemRender: (w) => <Target webhook={w} /> },
-                { listLabel: "Filter", listItemRender: (w) => <Filter webhook={w} /> },
-                { listLabel: "Last Delivery", listItemRender: (w) => <LastDelivery webhook={w} /> },
-            ] satisfies DataListDef<Webhook>[],
-            columnClassName: "flex-1 min-w-0",
-        },
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (w) => (
-                        <div className="mt-2 md:mt-0 flex justify-center">{renderActions(w)}</div>
-                    ),
-                },
-            ] satisfies DataListDef<Webhook>[],
-            columnClassName: "md:text-right",
-        },
+        actionsColumn(renderActions),
     ];
 
     return (
@@ -199,18 +177,26 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
                 </Button>
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "webhookViewMode", scope: "local" } }}
-            data={filtered}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            viewMode={{ persist: { key: STORAGE_KEYS.webhooksView, scope: "local" } }}
+            data={webhooks}
+            columns={columns}
+            listGroups={listGroups("flex-1 min-w-0")}
             keyField="id"
             isLoading={isLoading}
             loadingMessage="Loading webhooks…"
             searchable
             searchPlaceholder="Search webhooks…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No webhooks yet. Add one to report events to an external service."
-            pagination={pagination(PAGE_SIZE.page)}
+            searchFilter={matchesSearch}
+            noResultsMessage={`No webhooks match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={WebhookIcon}
+                    title="No webhooks yet"
+                    description="Add one to report events to an external service."
+                />
+            }
+            pagination={listPagination(PAGE_SIZE.page)}
         />
     );
 };

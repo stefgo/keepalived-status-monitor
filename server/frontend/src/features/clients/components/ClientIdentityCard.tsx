@@ -1,24 +1,25 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
 import {
     Client,
     CLIENT_STATUS,
-    CONNECTION_MODE,
     DEFAULT_AGENT_PORT,
     Ipv4OrCidrSchema,
     isIpAllowed,
-    normaliseTargetAddress,
-    UpdateClient,
 } from "@kasm/shared";
 import { Save } from "lucide-react";
-import { Badge, Button, Card, Checkbox, DescriptionList, Input } from "@stefgo/react-ui-components";
-import { StatusDot } from "./StatusDot";
-import { clientName, formatDate, getErrorMessage } from "../../../utils";
+import { Badge, Button, Card, Checkbox, DescriptionList, Input, StatusDot, FieldLabel } from "@stefgo/react-ui-components";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
+import { clientName } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
+import type { EntityForm } from "../../../hooks/useEntityForm";
+import { isOutbound, type ClientDraft, type ClientUpdateInput } from "../lib/clientForm";
 
 interface ClientIdentityCardProps {
     client: Client;
-    onSave: (id: string, data: UpdateClient) => Promise<void>;
-    /** Reported upwards so the page can ask before the operator leaves with unsaved work. */
-    onDirtyChange?: (dirty: boolean) => void;
+    /** The draft and its state. Held by the page, which also has to know whether it is dirty. */
+    form: EntityForm<ClientDraft, ClientUpdateInput>;
+    /** Saves the form. The card only says when. */
+    onSubmit: () => void;
     /**
      * Placed in the card header. The page passes its close control here rather than
      * rendering one of its own: the header is the one part of a card that stays in reach
@@ -28,7 +29,7 @@ interface ClientIdentityCardProps {
 }
 
 /**
- * Name and address of a client -- everything
+ * Name, site and address of a client -- everything
  * `PUT /api/v1/clients/:id` owns, and nothing else. One save button for one resource is the
  * only arrangement in which a button cannot silently drop what the operator typed into a
  * field it does not submit.
@@ -37,33 +38,10 @@ interface ClientIdentityCardProps {
  * `action`. Save stays here, because it belongs to these fields; the way out belongs to
  * the surface that opened them.
  */
-export const ClientIdentityCard = ({
-    client,
-    onSave,
-    onDirtyChange,
-    action,
-}: ClientIdentityCardProps) => {
-    const isInbound = client.connectionMode !== CONNECTION_MODE.OUTBOUND;
-    const [displayName, setDisplayName] = useState(client.displayName || "");
-    const [site, setSite] = useState(client.site || "");
-    // The check is opt-out per client: the box carries the decision, the field the value.
-    const [restrictIp, setRestrictIp] = useState(!!client.inboundAllowedIp);
-    const [allowedIp, setAllowedIp] = useState(client.inboundAllowedIp || "");
-    const [targetAddress, setTargetAddress] = useState(client.outboundTargetAddress || "");
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [saved, setSaved] = useState(false);
-
-    // Same rule the server applies, so a rejected value is caught in the field instead of
-    // coming back as a request error. A stored value the schema would not accept -- the
-    // IPv6 address a client registered from -- stays savable as long as it is unchanged.
-    const allowedIpTrimmed = allowedIp.trim();
-    const allowedIpChanged = allowedIpTrimmed !== (client.inboundAllowedIp || "");
-    const allowedIpInvalid =
-        isInbound &&
-        restrictIp &&
-        allowedIpChanged &&
-        !Ipv4OrCidrSchema.safeParse(allowedIpTrimmed).success;
+export const ClientIdentityCard = ({ client, form, onSubmit, action }: ClientIdentityCardProps) => {
+    const { draft, set, errors, isSaving } = form;
+    const isInbound = !isOutbound(client);
+    const allowedIpTrimmed = draft.allowedIp.trim();
 
     /**
      * The agent cannot object to a value that shuts it out, and the mistake only surfaces at
@@ -74,92 +52,36 @@ export const ClientIdentityCard = ({
      */
     const wouldLockOut =
         isInbound &&
-        restrictIp &&
+        draft.restrictIp &&
         !!client.inboundLastIp &&
         !!allowedIpTrimmed &&
-        !allowedIpInvalid &&
+        !errors.allowedIp &&
+        // A stored value the check cannot read is left alone, not reported as a lockout.
+        Ipv4OrCidrSchema.safeParse(allowedIpTrimmed).success &&
         !isIpAllowed(client.inboundLastIp, allowedIpTrimmed);
 
-    // Same rule the endpoint applies, from the same function: the field rejects an address
-    // the server would reject. A stored value is only re-checked once it is edited, so an
-    // address written before this check existed stays savable as long as it is left alone.
-    const targetAddressTrimmed = targetAddress.trim();
-    const targetAddressChanged =
-        targetAddressTrimmed !== (client.outboundTargetAddress || "");
-    const targetAddressInvalid =
-        !isInbound &&
-        targetAddressChanged &&
-        normaliseTargetAddress(targetAddressTrimmed) === null;
-
-    // Whether leaving now would throw something away. The page asks before it does.
-    const isDirty =
-        displayName.trim() !== (client.displayName || "") ||
-        site.trim() !== (client.site || "") ||
-        allowedIpChanged ||
-        restrictIp !== !!client.inboundAllowedIp ||
-        targetAddressChanged;
-
-    // Save is offered only when there is something to save: a button that submits an
-    // unchanged form teaches the operator to press it and find out.
-    const canSave =
-        isDirty &&
-        !allowedIpInvalid &&
-        !targetAddressInvalid &&
-        // Required only while the box is ticked: that is what ticking it means.
-        !(isInbound && restrictIp && !allowedIpTrimmed) &&
-        !(!isInbound && !targetAddressTrimmed);
-
-    useEffect(() => {
-        onDirtyChange?.(isDirty);
-    }, [isDirty, onDirtyChange]);
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!canSave) return;
-        setIsSaving(true);
-        setError(null);
-        setSaved(false);
-        try {
-            const data: UpdateClient = {
-                displayName: displayName.trim(),
-                site: site.trim() || null,
-            };
-            if (isInbound) {
-                // Only sent when it changed: an absent key leaves the stored value alone, and
-                // `null` is not "unchanged" but "switch the check off".
-                if (!restrictIp && client.inboundAllowedIp) {
-                    data.inboundAllowedIp = null;
-                } else if (restrictIp && allowedIpChanged) {
-                    data.inboundAllowedIp = allowedIpTrimmed;
-                }
-            } else if (targetAddressChanged) {
-                data.outboundTargetAddress = targetAddressTrimmed;
-            }
-            await onSave(client.id, data);
-            setSaved(true);
-        } catch (err) {
-            setError(getErrorMessage(err));
-        } finally {
-            setIsSaving(false);
-        }
+        onSubmit();
     };
+
+    const error = form.saveError ?? form.formError;
+    const saved = form.saved;
 
     return (
         <Card
             className="flex flex-col"
             title={
                 <div className="flex items-center gap-4">
-                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} size="md" />
-                    <div>
-                        <div className="text-xl font-bold">
-                            {clientName(client)}
-                        </div>
+                    <StatusDot tone={client.status === CLIENT_STATUS.ONLINE ? "success" : "neutral"} size="md" />
+                    <div className="min-w-0">
+                        <HeaderBreadcrumb>{clientName(client)}</HeaderBreadcrumb>
                         {/* Only while offline: for a connected client the pulsing dot
                             already says the agent is here, and a timestamp beside it just
                             invites the question whether it is stale. */}
                         {client.status !== CLIENT_STATUS.ONLINE && (
                             <div className="text-xs font-normal text-text-muted mt-1">
-                                Last seen {formatDate(client.lastSeen)}
+                                Last seen <RelativeTime date={client.lastSeen} />
                             </div>
                         )}
                     </div>
@@ -183,12 +105,10 @@ export const ClientIdentityCard = ({
                         address or an IP restriction below at all, so it reads as context for
                         the fields under it rather than as a footnote after them. */}
                     <div>
-                        {/* Not an `Input`: there is no control to label. The classes are
-                            copied from its stacked label and hint so a read-only value
-                            lines up with the editable fields under it. */}
-                        <div className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1">
-                            Connection Mode
-                        </div>
+                        {/* Not an `Input`: there is no control to label. The caption is the one
+                            an input gets, and the hint's classes are copied from it, so a
+                            read-only value lines up with the editable fields under it. */}
+                        <FieldLabel as="div">Connection Mode</FieldLabel>
                         {/* `lg` is text-sm -- the size the inputs and the agent version
                             below use, so the read-only value does not read as a footnote. */}
                         <Badge variant="info">
@@ -202,9 +122,7 @@ export const ClientIdentityCard = ({
                     </div>
 
                     <div>
-                        <div className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1">
-                            Agent Version
-                        </div>
+                        <FieldLabel as="div">Agent Version</FieldLabel>
                         {/* Always rendered, even without a value: a field that vanishes reads
                             as "not applicable", while an agent that has never reported one is
                             a fact worth seeing. */}
@@ -221,11 +139,9 @@ export const ClientIdentityCard = ({
 
                     <Input
                         label="Display Name"
-                        value={displayName}
-                        onChange={(e) => {
-                            setDisplayName(e.target.value);
-                            setSaved(false);
-                        }}
+                        value={draft.displayName}
+                        onChange={(e) => set("displayName", e.target.value)}
+                        error={errors.displayName}
                         placeholder={client.hostname}
                         disabled={isSaving}
                         hint={`Leave empty to use hostname (${client.hostname})`}
@@ -234,11 +150,9 @@ export const ClientIdentityCard = ({
 
                     <Input
                         label="Site"
-                        value={site}
-                        onChange={(e) => {
-                            setSite(e.target.value);
-                            setSaved(false);
-                        }}
+                        value={draft.site}
+                        onChange={(e) => set("site", e.target.value)}
+                        error={errors.site}
                         placeholder="e.g. dc-berlin"
                         maxLength={100}
                         disabled={isSaving}
@@ -251,14 +165,11 @@ export const ClientIdentityCard = ({
                                 save button, and a switch would claim to take effect on the spot. */}
                             <Checkbox
                                 label="Restrict connections to an IP address or network"
-                                checked={restrictIp}
-                                onChange={(e) => {
-                                    setRestrictIp(e.target.checked);
-                                    setSaved(false);
-                                }}
+                                checked={draft.restrictIp}
+                                onChange={(e) => set("restrictIp", e.target.checked)}
                                 disabled={isSaving}
                                 hint={
-                                    restrictIp
+                                    draft.restrictIp
                                         ? "The agent is refused when it connects from anywhere else."
                                         : `The agent's token is accepted from any address the server's allowed_networks permit. Suited to hosts whose address is assigned by their environment.${
                                               client.inboundLastIp
@@ -268,21 +179,14 @@ export const ClientIdentityCard = ({
                                 }
                             />
 
-                            {restrictIp && (
+                            {draft.restrictIp && (
                                 <Input
                                     label="Allowed IP or Network"
-                                    value={allowedIp}
-                                    onChange={(e) => {
-                                        setAllowedIp(e.target.value);
-                                        setSaved(false);
-                                    }}
+                                    value={draft.allowedIp}
+                                    onChange={(e) => set("allowedIp", e.target.value)}
                                     placeholder="192.168.1.50 or 192.168.1.0/24"
                                     disabled={isSaving}
-                                    error={
-                                        allowedIpInvalid
-                                            ? "Enter an IPv4 address or an IPv4 network in CIDR notation."
-                                            : undefined
-                                    }
+                                    error={errors.allowedIp}
                                     hint={
                                         client.inboundLastIp
                                             ? `A client that connects from a different address is refused at its next reconnect. Its last successful connection came from ${client.inboundLastIp}.`
@@ -308,18 +212,11 @@ export const ClientIdentityCard = ({
                     {!isInbound && (
                         <Input
                             label="Target Address"
-                            value={targetAddress}
-                            onChange={(e) => {
-                                setTargetAddress(e.target.value);
-                                setSaved(false);
-                            }}
+                            value={draft.targetAddress}
+                            onChange={(e) => set("targetAddress", e.target.value)}
                             placeholder={`192.168.1.100:${DEFAULT_AGENT_PORT}`}
                             disabled={isSaving}
-                            error={
-                                targetAddressInvalid
-                                    ? "Enter a host or host:port, without scheme, path or credentials."
-                                    : undefined
-                            }
+                            error={errors.targetAddress}
                             hint={`Host and port of the agent's web server. Without a port, :${DEFAULT_AGENT_PORT} is used. Saving reconnects to the new address at once.`}
                             required
                         />
@@ -334,7 +231,7 @@ export const ClientIdentityCard = ({
                             type="submit"
                             variant="primary"
                             isLoading={isSaving}
-                            disabled={!canSave}
+                            disabled={!form.canSave}
                             icon={Save}
                             className="shadow-glow-accent"
                         >

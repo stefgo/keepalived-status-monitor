@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState, ReactNode } from "react";
-import { DashboardMessageSchema, WS_EVENTS } from "@kasm/shared";
+import { WS_EVENTS } from "@kasm/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
-import { useClientStore } from "../../../stores/useClientStore";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
-import { useActivityStore } from "../../../stores/useActivityStore";
-import { useSchedulerStore } from "../../../stores/useSchedulerStore";
+import { queryClient } from "../../../lib/queryClient";
+import { assertNever, createDashboardMessageReader } from "../lib/dashboardMessages";
+import { isPushedOnConnect } from "../../../lib/queryKeys";
+import { clientListOptions } from "../../../queries/clients";
+import {
+    appendActivity,
+    applyKeepalivedState,
+    applySchedulerUpdate,
+    markActivitySeen,
+    type KeepalivedStates,
+} from "../../../lib/cacheUpdates";
+import { keepalivedStatesOptions } from "../../../queries/keepalived";
+import { activityListOptions } from "../../../queries/activity";
+import { schedulerStatusOptions } from "../../../queries/scheduler";
+
+/**
+ * How long the socket may be down before the page says so. A reconnect is scheduled 3 s
+ * after a drop; a server restart is over within a few more. Anything shorter would flash
+ * the banner at every deploy.
+ */
+const LOST_AFTER_MS = 5000;
+
+/** Module scope, so "reported once" holds across reconnects and not per socket. */
+const readMessage = createDashboardMessageReader();
 
 interface WebSocketProviderProps {
     children: ReactNode;
@@ -13,15 +33,8 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { isAuthenticated } = useAuth();
-    const { setClients } = useClientStore();
-    const { setState: setKeepalivedState } = useKeepalivedStore();
-    // Only the actions: the whole store would re-render the provider on every activity update.
-    const setEvents = useActivityStore((s) => s.setEvents);
-    const appendEvents = useActivityStore((s) => s.appendEvents);
-    const applySeen = useActivityStore((s) => s.applySeen);
-    const fetchEvents = useActivityStore((s) => s.fetchEvents);
-    const applySchedulerUpdate = useSchedulerStore((s) => s.applyUpdate);
     const [isConnected, setIsConnected] = useState(false);
+    const [isLost, setIsLost] = useState(false);
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,6 +43,18 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
 
         let isClosing = false;
         let connectTimeout: ReturnType<typeof setTimeout> | null = null;
+        // Per effect run: a login after a logout is a first connection again, not a resync.
+        let hasConnected = false;
+        let lostTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        const armLostTimer = () => {
+            if (lostTimeout) return;
+            lostTimeout = setTimeout(() => setIsLost(true), LOST_AFTER_MS);
+        };
+        const disarmLostTimer = () => {
+            if (lostTimeout) clearTimeout(lostTimeout);
+            lostTimeout = null;
+        };
 
         const connect = () => {
             if (socketRef.current?.readyState === WebSocket.OPEN) return;
@@ -39,72 +64,96 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
             // by itself. As a query parameter the JWT went into every access log on the way.
             const wsUrl = `${protocol}//${window.location.host}/ws/dashboard`;
 
-            console.log("Connecting to WebSocket:", wsUrl);
             const socket = new WebSocket(wsUrl);
             socketRef.current = socket;
 
             socket.onopen = () => {
-                console.log("WebSocket connected");
                 setIsConnected(true);
+                disarmLostTimer();
+                setIsLost(false);
                 if (reconnectTimeoutRef.current) {
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                fetchEvents();
+                // What the server pushed while the socket was down is lost. The client
+                // list, the readings and the activity come again with this connect;
+                // everything else on screen is read again, the rest marked stale and read
+                // when it is next shown. On the first connect there is nothing to make up
+                // for: whatever a page needs, its query reads.
+                if (hasConnected) {
+                    void queryClient.invalidateQueries({ predicate: (query) => !isPushedOnConnect(query.queryKey) });
+                }
+                hasConnected = true;
             };
 
             socket.onmessage = (event) => {
-                let data: unknown;
-                try {
-                    data = JSON.parse(event.data);
-                } catch (e) {
-                    console.error("Failed to parse WS message", e);
-                    return;
-                }
+                // Parsed against the contract in @kasm/shared; what does not match is
+                // dropped and reported once per type (see lib/dashboardMessages.ts).
+                const message = readMessage(event.data);
+                if (!message) return;
 
-                // The same guarantee the agent side of the protocol has had all along: a
-                // payload that does not match what `shared` says the message carries is
-                // dropped here instead of reaching a store, where a missing field would
-                // only show up as a broken render somewhere else entirely.
-                const message = DashboardMessageSchema.safeParse(data);
-                if (!message.success) {
-                    console.warn("Discarded WS message", message.error.issues);
-                    return;
-                }
-
-                switch (message.data.type) {
+                switch (message.type) {
+                    // The whole list, so it may also be what fills the entry first.
                     case WS_EVENTS.CLIENTS_UPDATE:
-                        setClients(message.data.payload);
+                        queryClient.setQueryData(clientListOptions.queryKey, message.payload);
                         break;
-                    case WS_EVENTS.KEEPALIVED_STATE_UPDATE:
-                        setKeepalivedState(message.data.payload);
+                    // One client's reading; the later one stays, whichever way it arrived.
+                    case WS_EVENTS.KEEPALIVED_STATE_UPDATE: {
+                        const state = message.payload;
+                        queryClient.setQueryData<KeepalivedStates>(keepalivedStatesOptions.queryKey, (states) =>
+                            applyKeepalivedState(states, state),
+                        );
                         break;
+                    }
+                    // The whole list: on connect, and empty after "Delete all".
                     case WS_EVENTS.ACTIVITY_UPDATE:
-                        setEvents(message.data.payload);
+                        queryClient.setQueryData(activityListOptions.queryKey, message.payload);
                         break;
-                    case WS_EVENTS.ACTIVITY_APPENDED:
-                        appendEvents(message.data.payload);
+                    // Only onto a list that is there: the events alone would pass for all
+                    // of it. The list itself arrives with the connect, before any of these.
+                    case WS_EVENTS.ACTIVITY_APPENDED: {
+                        const incoming = message.payload;
+                        queryClient.setQueryData(
+                            activityListOptions.queryKey,
+                            (events) => events && appendActivity(events, incoming),
+                        );
                         break;
-                    case WS_EVENTS.ACTIVITY_SEEN:
-                        applySeen(message.data.payload.ids);
+                    }
+                    case WS_EVENTS.ACTIVITY_SEEN: {
+                        const { ids } = message.payload;
+                        queryClient.setQueryData(
+                            activityListOptions.queryKey,
+                            (events) => events && markActivitySeen(events, ids),
+                        );
                         break;
-                    case WS_EVENTS.SCHEDULER_STATUS_UPDATE:
-                        applySchedulerUpdate(message.data.payload);
+                    }
+                    // One scheduler at a time. Only where the status has been read: an
+                    // entry made here would hold one scheduler and pass for both.
+                    case WS_EVENTS.SCHEDULER_STATUS_UPDATE: {
+                        const update = message.payload;
+                        queryClient.setQueryData(
+                            schedulerStatusOptions.queryKey,
+                            (schedulers) => schedulers && applySchedulerUpdate(schedulers, update),
+                        );
                         break;
+                    }
+                    // Does not compile while a member of DashboardMessage has no case above.
+                    default:
+                        assertNever(message);
                 }
             };
 
             socket.onclose = (event) => {
                 if (isClosing) return; // Ignore intentional closure
 
-                console.log("WebSocket disconnected", event.code, event.reason);
                 setIsConnected(false);
+                armLostTimer();
                 socketRef.current = null;
 
-                if (event.code === 4001 || event.code === 4003) {
-                    console.log("Authentication failed, stopping reconnection attempts");
-                    return;
-                }
+                // The server refused the session: asking again changes nothing. The next
+                // request answers 401 and logs out; until then the banner says the page
+                // is not being kept current.
+                if (event.code === 4001 || event.code === 4003) return;
 
                 reconnectTimeoutRef.current = setTimeout(() => {
                     connect();
@@ -118,6 +167,9 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
             };
         };
 
+        // The first connection can fail too, and then there was never a drop to arm this.
+        armLostTimer();
+
         // Delay initial connection slightly to avoid React Strict Mode noisy double-mount in dev
         connectTimeout = setTimeout(() => {
             if (!isClosing) connect();
@@ -125,6 +177,8 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
 
         return () => {
             isClosing = true;
+            disarmLostTimer();
+            setIsLost(false);
             if (connectTimeout) {
                 clearTimeout(connectTimeout);
             }
@@ -137,10 +191,10 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
+    }, [isAuthenticated]);
 
     return (
-        <WebSocketContext.Provider value={{ isConnected }}>
+        <WebSocketContext.Provider value={{ isConnected, isLost }}>
             {children}
         </WebSocketContext.Provider>
     );

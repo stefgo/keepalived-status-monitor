@@ -1,10 +1,7 @@
 import { ReactNode } from "react";
-import { Checkbox } from "@stefgo/react-ui-components";
-import type { VrrpCluster } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
-import { clientName } from "../../../utils";
-import { StatusDot } from "../../clients/components/StatusDot";
-import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
+import { Checkbox, StatusDot } from "@stefgo/react-ui-components";
+import { paths } from "../../../lib/paths";
+import { clusterVipLabel, memberKey, memberStale, type NamedVrrpCluster } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
@@ -17,7 +14,7 @@ export interface ClusterCompare {
 }
 
 interface ClusterCardProps {
-    cluster: VrrpCluster;
+    cluster: NamedVrrpCluster;
     /**
      * Replaces the cluster's VRID, addresses and health in the card header -- for the
      * cluster's own page, whose header says all of that already.
@@ -33,7 +30,6 @@ interface ClusterCardProps {
  * that host.
  */
 export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
-    const clients = useClientStore((s) => s.clients);
     const label = `VRID ${cluster.vrid ?? "?"}: ${clusterVipLabel(cluster)}`;
 
     const compared = compare ? cluster.members.filter((m) => compare.selected(memberKey(m))).length : 0;
@@ -67,18 +63,17 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
             rows={[...cluster.members]
                 .sort((a, b) => (b.instance.effectivePriority ?? 0) - (a.instance.effectivePriority ?? 0))
                 .map((member) => {
-                    const client = clients.find((c) => c.id === member.clientId);
-                    const name = client ? clientName(client) : member.clientId;
+                    const name = member.hostName;
                     const key = memberKey(member);
                     return {
                         key,
-                        href: `/client/${member.clientId}`,
+                        href: paths.client(member.clientId),
                         instance: member.instance,
                         stale: memberStale(member),
                         stateBadge: <MemberStateBadge member={member} />,
                         host: (
                             <span className="flex items-center gap-2">
-                                <StatusDot online={member.online} />
+                                <StatusDot tone={member.online ? "success" : "neutral"} />
                                 {name}
                             </span>
                         ),

@@ -3,6 +3,7 @@ import {
     WS_EVENTS,
     CLIENT_STATUS,
     CONNECTION_MODE,
+    type DashboardMessage,
 } from "@kasm/shared";
 import { logger } from "@kasm/shared/node";
 import { ClientRepository } from "../repositories/ClientRepository.js";
@@ -108,7 +109,9 @@ export class ProxyService {
         const clients = ClientRepository.findAll();
         return clients.map((client) => ({
             id: client.id,
-            hostname: client.hostname,
+            // The column is nullable, though every insert writes one. The contract says a
+            // string, and the dashboard searches and sorts by it.
+            hostname: client.hostname ?? "",
             displayName: client.display_name,
             site: client.site,
             status: this.connectedClients.has(client.id)
@@ -140,24 +143,26 @@ export class ProxyService {
      */
     static broadcastClientUpdate() {
         try {
-            // Serialised once. This used to stringify, parse the result straight back and
-            // hand the object to broadcastToDashboard, which stringified it again -- three
-            // passes over the full client list on every connect and disconnect.
-            this.broadcastToDashboard(
-                JSON.stringify({
-                    type: WS_EVENTS.CLIENTS_UPDATE,
-                    payload: this.getClientsWithStatus(),
-                }),
-            );
+            this.broadcastToDashboard({
+                type: WS_EVENTS.CLIENTS_UPDATE,
+                payload: this.getClientsWithStatus(),
+            });
         } catch (e) {
             logger.error({ err: e }, "Broadcast error");
         }
     }
 
-    static broadcastToDashboard(message: unknown) {
-        const msgStr =
-            typeof message === "string" ? message : JSON.stringify(message);
-        // Multicast message to all connected dashboard sessions
+    /**
+     * `DashboardMessage` and nothing else: the union in `@kasm/shared` is the contract the
+     * dashboard parses against, so a shape that is not listed there does not compile here.
+     */
+    static sendToDashboard(socket: WebSocket, message: DashboardMessage) {
+        socket.send(JSON.stringify(message));
+    }
+
+    static broadcastToDashboard(message: DashboardMessage) {
+        // Serialised once for all connected dashboard sessions.
+        const msgStr = JSON.stringify(message);
         for (const client of this.dashboardClients.keys()) {
             if (client.readyState === client.OPEN) {
                 client.send(msgStr);
@@ -169,9 +174,8 @@ export class ProxyService {
      * Sends to every dashboard session of one user -- for what only that user's view
      * depends on, such as which events they have seen. Other users' sessions get nothing.
      */
-    static sendToUser(userId: number, message: unknown) {
-        const msgStr =
-            typeof message === "string" ? message : JSON.stringify(message);
+    static sendToUser(userId: number, message: DashboardMessage) {
+        const msgStr = JSON.stringify(message);
         for (const [client, owner] of this.dashboardClients) {
             if (owner === userId && client.readyState === client.OPEN) {
                 client.send(msgStr);

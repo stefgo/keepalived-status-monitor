@@ -1,14 +1,8 @@
-import { apiFetch } from "../../../lib/apiFetch";
+import { NumberField, SectionHeader } from "@stefgo/react-ui-components";
+import { runCleanup } from "../../../queries/settings";
 import type { SectionProps } from "../sections";
 import { SchedulerBox } from "./SchedulerBox";
-import { ManualRun, NumberField, SectionHeader } from "./SettingsParts";
-
-/** Starts a maintenance job and returns its answer; throws when the server refuses. */
-async function runJob<T>(url: string): Promise<T> {
-    const response = await apiFetch(url, { method: "POST" });
-    if (!response.ok) throw new Error("The server refused to start the job");
-    return (await response.json()) as T;
-}
+import { ManualRun } from "./SettingsParts";
 
 export const TokenRetentionSection = ({ values, onChange }: SectionProps) => (
     <section>
@@ -39,7 +33,7 @@ export const TokenRetentionSection = ({ values, onChange }: SectionProps) => (
                 description="Trigger the maintenance process immediately using the saved retention settings."
                 failureTitle="Could not remove the invalid tokens"
                 onRun={async () => {
-                    const data = await runJob<{ removed?: number }>("/api/v1/settings/cleanup/invalid-tokens");
+                    const data = await runCleanup("invalid-tokens");
                     return typeof data.removed === "number" ? `Removed ${data.removed}` : "Done";
                 }}
             />
@@ -84,7 +78,7 @@ export const ActivitySection = ({ values, onChange }: SectionProps) => (
                 description="Immediately remove activity events that exceed the saved retention settings."
                 failureTitle="Could not clean up the activity history"
                 onRun={async () => {
-                    const data = await runJob<{ removed?: number }>("/api/v1/settings/cleanup/notifications");
+                    const data = await runCleanup("notifications");
                     return typeof data.removed === "number" ? `Removed ${data.removed}` : "Done";
                 }}
             />

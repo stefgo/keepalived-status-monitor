@@ -455,8 +455,8 @@ loopback is its own and the `curl` above works there — from any other machine 
 ## Security Headers
 
 The server sends a Content-Security-Policy and the usual hardening headers (via
-`@fastify/helmet`). The policy allows scripts only from the server itself, styles and
-fonts additionally from Google Fonts, and WebSocket connections to the same host. If a
+`@fastify/helmet`). The policy allows scripts, styles and fonts only from the server itself, and WebSocket connections
+to the same host. The font ships with the bundle, so no other origin is named. If a
 reverse proxy injects scripts or other resources into the dashboard, those are blocked.
 
 `Strict-Transport-Security` is **off** unless `security.hsts: true` is set, because many

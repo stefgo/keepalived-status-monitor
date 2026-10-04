@@ -1,5 +1,5 @@
 import { ReactNode, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
     Card,
@@ -9,28 +9,33 @@ import {
     cn,
     type DataTableDef,
     type EntityDetail,
+    LoadingIndicator,
 } from "@stefgo/react-ui-components";
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
-import { clientName, formatDate } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
+import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
-import { useActivityStore } from "../../../stores/useActivityStore";
-import { useClientStore } from "../../../stores/useClientStore";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
-import { LoadingIndicator } from "../../../components/LoadingIndicator";
+import { useActivity } from "../../../queries/activity";
+import { useClients } from "../../../queries/clients";
+import { QueryError } from "../../../components/QueryError";
+import { useKeepalivedStates } from "../../../queries/keepalived";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
+import { ENTITY_HEADER } from "../../../components/entityHeader";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
+import { ROUTES, activitySearch, clusterPath, paths } from "../../../lib/paths";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import {
     clusterNetworkKey,
     clusterLabel,
-    clusterPath,
     clusterVipLabel,
     clustersAt,
     defaultCompareSelection,
     groupCounters,
-    hasProblemCounts,
     memberKey,
     memberStale,
+    rebaseCounters,
+    type CounterBaseline,
     type CounterRow,
 } from "../lib/vrrp";
 import { ClusterCard } from "./ClusterCard";
@@ -48,6 +53,9 @@ const HISTORY_LIMIT = 20;
 type CounterTableRow =
     | { kind: "group"; key: string; title: string; children: CounterTableRow[] }
     | { kind: "counter"; key: string; row: CounterRow };
+
+/** Before a cluster has been seen there is nothing to measure from. */
+const NO_BASELINE: CounterBaseline = new Map();
 
 /** The sticky first column needs its own background to cover what scrolls under it. */
 const stickyCell = (row: CounterTableRow) =>
@@ -69,17 +77,14 @@ interface ClusterDetailProps {
  * column is picked in the host table.
  */
 export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
-    const { state } = useLocation();
-    // The surface that opened this page says where it was; a directly opened URL goes back
-    // to the cluster list.
-    const back = (state as { from?: string } | null)?.from ?? "/clusters";
-    useEscapeToLeave(back);
+    // Back is the cluster list, wherever the page was opened from. Without the query: `net`
+    // names this cluster and means nothing to the list.
+    useEscapeToLeave(useBackPath({ keepSearch: false }));
 
     const clusters = useVrrpClusters();
-    const clients = useClientStore((s) => s.clients);
-    const clientsLoading = useClientStore((s) => s.isLoading);
-    const readings = useKeepalivedStore((s) => s.states);
-    const events = useActivityStore((s) => s.events);
+    const { isPending: clientsLoading, error: clientsError } = useClients();
+    const { states: readings, isPending: readingsLoading, error: readingsError } = useKeepalivedStates();
+    const { events } = useActivity();
 
     const candidates = clustersAt(clusters, site, vrid);
     const cluster =
@@ -129,24 +134,36 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const [allGroupsOf, setAllGroupsOf] = useState<string>();
     const allGroups = allGroupsOf !== undefined && allGroupsOf === cluster?.key;
 
+    // What the counters stood at when this page first saw each host, so a counter that
+    // moves says by how much: keepalived's own numbers are sums since its start, and a 3
+    // that has been there for weeks looks like one that is counting. Kept in memory and per
+    // cluster, like the picks; reseeded while rendering, since it follows the readings.
+    const [base, setBase] = useState<{ cluster?: string; counters: CounterBaseline }>({ counters: NO_BASELINE });
+    const baseline = cluster && base.cluster === cluster.key ? base.counters : NO_BASELINE;
+    const rebased = rebaseCounters(baseline, members);
+    if (cluster && (base.cluster !== cluster.key || rebased !== baseline)) {
+        setBase({ cluster: cluster.key, counters: rebased });
+    }
+
     const label = `${site ? `${site} / ` : ""}VRID ${vrid}`;
 
     if (!cluster) {
         if (candidates.length > 1) return <ClusterChoice label={label} candidates={candidates} clusters={clusters} />;
-        if (clientsLoading) return <LoadingIndicator />;
+        // Without the list or the readings nothing says whether the cluster exists.
+        const loadError = clientsError ?? readingsError;
+        if (loadError) return <QueryError title="Could not load the cluster" error={loadError} />;
+        if (clientsLoading || readingsLoading) return <LoadingIndicator />;
         return (
-            <NotFoundCard title="Cluster not found" backTo="/clusters" backLabel="Back to clusters">
+            <NotFoundCard title="Cluster not found" backTo={ROUTES.clusters} backLabel="Back to clusters">
                 No host reports a VRRP instance for {label}.
             </NotFoundCard>
         );
     }
 
-    const hostName = (clientId: string) => {
-        const c = clients.find((c) => c.id === clientId);
-        return c ? clientName(c) : clientId;
-    };
+    // For what names a host by its id alone -- an event, a member picked out by a check.
+    const hostName = (clientId: string) => members.find((m) => m.clientId === clientId)?.hostName ?? clientId;
     const hostLink = (clientId: string) => (
-        <Link to={`/client/${clientId}`} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
+        <Link to={paths.client(clientId)} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
             {hostName(clientId)}
         </Link>
     );
@@ -186,13 +203,16 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         },
         {
             label: "Last reading",
-            value: formatDate(newest(members.map((m) => readings[m.clientId]?.collectedAt)), { seconds: true }),
+            value: <RelativeTime date={newest(members.map((m) => readings[m.clientId]?.collectedAt))} seconds />,
             visibility: "always",
         },
     ];
 
     const compared = members.filter((m) => isCompared(memberKey(m)));
-    const allCounters = groupCounters(compared.map((m) => m.instance.stats));
+    const allCounters = groupCounters(
+        compared.map((m) => m.instance.stats),
+        compared.map((m) => rebased.get(memberKey(m))),
+    );
     const errorGroups = allCounters.filter((group) =>
         group.rows.some((row) => row.problem && row.values.some((value) => (value ?? 0) > 0)),
     );
@@ -226,10 +246,10 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 tableHeader: (
                     <div className="flex flex-col items-end gap-1">
                         <Link
-                            to={`/client/${m.clientId}`}
+                            to={paths.client(m.clientId)}
                             className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
                         >
-                            {hostName(m.clientId)}
+                            {m.hostName}
                         </Link>
                         <VrrpStateBadge state={m.instance.state} />
                     </div>
@@ -246,7 +266,20 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                         memberStale(m) && "opacity-60",
                     );
                 },
-                tableItemRender: (row) => (row.kind === "counter" ? (row.row.values[i] ?? "–") : null),
+                tableItemRender: (row) => {
+                    if (row.kind !== "counter") return null;
+                    const delta = row.row.deltas?.[i];
+                    return (
+                        <>
+                            {row.row.values[i] ?? "–"}
+                            {delta != null && (
+                                <span className={cn("ml-2 text-xs", !row.row.problem && "text-text-muted")}>
+                                    +{delta}
+                                </span>
+                            )}
+                        </>
+                    );
+                },
             }),
         ),
     ];
@@ -258,7 +291,8 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         <div className="space-y-6">
             <EntityHeader
                 leading={<Network size={20} className="text-text-muted" />}
-                title={clusterLabel(cluster)}
+                title={<HeaderBreadcrumb>{clusterLabel(cluster)}</HeaderBreadcrumb>}
+                classNames={ENTITY_HEADER}
                 meta={<ClusterHealthBadge health={cluster.health} />}
                 alert={
                     (offline.length > 0 || silent.length > 0 || mismatched.length > 0) && (
@@ -335,9 +369,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
             >
                 {compared.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">
-                        {members.some((m) => hasProblemCounts(m.instance.stats))
-                            ? "Select hosts in the table above to compare their counters."
-                            : "No host counted errors. Select hosts in the table above to compare their counters."}
+                        Select hosts in the table above to compare their counters.
                     </p>
                 ) : counters.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">keepalived reported no counters for this cluster.</p>
@@ -353,6 +385,12 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                         rowClassName={(row) => (row.kind === "group" ? "bg-hover" : "")}
                     />
                 )}
+                {compared.length > 0 && counters.length > 0 && (
+                    <p className="border-t border-border px-4 py-2 text-xs text-text-muted">
+                        The counters are sums since keepalived started. A <span className="tabular-nums">+n</span>{" "}
+                        beside one is what it counted since this page was opened.
+                    </p>
+                )}
             </Card>
 
             <Card
@@ -361,7 +399,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 action={
                     instanceNames.length === 1 && (
                         <Link
-                            to={`/activity?search=${encodeURIComponent(instanceNames[0])}`}
+                            to={activitySearch(instanceNames[0])}
                             className={cn("rounded-sm text-sm text-text-secondary hover:text-primary", FOCUS_RING)}
                         >
                             Show all
@@ -390,9 +428,11 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                                         </div>
                                         {detail && <div className="text-xs text-text-muted">{detail}</div>}
                                     </div>
-                                    <span className="whitespace-nowrap text-xs text-text-muted">
-                                        {formatDate(event.occurredAt, { seconds: true })}
-                                    </span>
+                                    <RelativeTime
+                                        date={event.occurredAt}
+                                        seconds
+                                        className="whitespace-nowrap text-xs text-text-muted"
+                                    />
                                 </li>
                             );
                         })}
@@ -418,8 +458,6 @@ const ClusterChoice = ({
     candidates: VrrpCluster[];
     clusters: VrrpCluster[];
 }) => {
-    const { state } = useLocation();
-
     return (
         <Card title={`${label} is used by ${candidates.length} clusters`} padding="md" classNames={{ content: "space-y-4" }}>
             <p className="text-text-secondary">
@@ -429,8 +467,7 @@ const ClusterChoice = ({
                 {candidates.map((candidate) => (
                     <li key={candidate.key} className="flex flex-wrap items-center gap-2 text-sm">
                         <Link
-                            to={clusterPath(candidate, clusters) ?? "/clusters"}
-                            state={state}
+                            to={clusterPath(candidate, clusters) ?? ROUTES.clusters}
                             className={cn("rounded-sm font-mono text-text-primary hover:text-primary", FOCUS_RING)}
                         >
                             {candidate.networks.join(", ") || clusterVipLabel(candidate)}

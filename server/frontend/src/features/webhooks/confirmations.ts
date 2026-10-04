@@ -9,14 +9,3 @@ export function describeDeleteWebhook(name: string): ConfirmOptions {
         variant: "danger",
     };
 }
-
-/** Leaving the editor with edits that are not saved. */
-export function describeDiscardWebhookChanges(): ConfirmOptions {
-    return {
-        title: "Discard your changes?",
-        description: "The webhook has not been saved. Leaving now keeps it as it was.",
-        confirmLabel: "Discard",
-        cancelLabel: "Keep editing",
-        variant: "danger",
-    };
-}

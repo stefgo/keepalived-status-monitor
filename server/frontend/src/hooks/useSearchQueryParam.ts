@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { SEARCH_PARAM } from "../lib/paths";
 
 /**
  * A single query parameter as state, kept in the URL so it survives a reload and travels
@@ -16,7 +17,7 @@ import { useSearchParams } from "react-router-dom";
  * An empty value removes the parameter instead of writing `?search=`, so a cleared field
  * leaves the URL as clean as it found it.
  */
-export function useSearchQueryParam(key = "search"): [string, (value: string) => void] {
+export function useSearchQueryParam(key = SEARCH_PARAM): [string, (value: string) => void] {
     const [searchParams, setSearchParams] = useSearchParams();
     const value = searchParams.get(key) ?? "";
 

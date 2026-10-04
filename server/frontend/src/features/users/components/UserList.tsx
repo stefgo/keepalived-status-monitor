@@ -1,24 +1,23 @@
-import { useMemo } from "react";
 import { Plus, Trash2, Edit2, User, Key, Globe } from "lucide-react";
 import {
     Badge,
     Button,
     DataAction,
-    DataListColumnDef,
-    DataListDef,
     DataMultiView,
-    DataTableDef,
+    EmptyState,
+    type DataColumnDef,
+    PAGE_SIZE,
+    listPagination,
+    actionsColumn,
+    listGroups,
 } from "@stefgo/react-ui-components";
+import type { User as UserRow } from "@kasm/shared";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
-export interface UserData {
-    id: number;
-    username: string;
-    auth_methods?: string;
-    created_at: string;
-}
+/** One row of `GET /api/v1/users`, as `UserSchema` parses it. */
+export type UserData = UserRow;
 
 interface UserListProps {
     users: UserData[];
@@ -28,7 +27,7 @@ interface UserListProps {
     onCreateUser: () => void;
 }
 
-const AuthBadges = ({ methods: methodsStr }: { methods?: string }) => {
+const AuthBadges = ({ methods: methodsStr }: { methods?: string | null }) => {
     const methods = methodsStr ? methodsStr.split(",") : ["local"];
     return (
         <div className="flex gap-1">
@@ -46,6 +45,10 @@ const AuthBadges = ({ methods: methodsStr }: { methods?: string }) => {
     );
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (user: UserData, query: string) => user.username.toLowerCase().includes(query.toLowerCase());
+
 /**
  * The accounts that may sign in. Built like every other list of the app -- search, a list
  * view for narrow screens, the add button in the list's own header -- where it used to be
@@ -60,13 +63,6 @@ export const UserList = ({
 }: UserListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
-    const filteredUsers = useMemo(() => {
-        if (!searchQuery) return users;
-        const q = searchQuery.toLowerCase();
-        return users.filter((u) => u.username.toLowerCase().includes(q));
-    }, [users, searchQuery]);
-
-    // One set of actions for both views, so the table and the list cannot drift apart.
     const renderActions = (user: UserData) => (
         <div onClick={(e) => e.stopPropagation()}>
             <DataAction
@@ -93,68 +89,34 @@ export const UserList = ({
         </div>
     );
 
-    const tableDef: DataTableDef<UserData>[] = [
+    const columns: DataColumnDef<UserData>[] = [
         {
-            tableHeader: "User",
-            tableCellClassName: "text-sm font-medium text-text-primary",
-            accessorKey: "username",
+            header: "User",
             sortable: true,
+            sortValue: (user) => user.username,
+            table: { cellClassName: "text-sm font-medium text-text-primary" },
+            list: { label: null },
+            render: (user, view) =>
+                view === "list" ? (
+                    <div className="flex items-center gap-2 py-1">
+                        <User size={16} className="text-text-muted" />
+                        <span className="font-medium text-text-primary">{user.username}</span>
+                    </div>
+                ) : (
+                    user.username
+                ),
         },
         {
-            tableHeader: "Auth",
-            tableItemRender: (user) => <AuthBadges methods={user.auth_methods} />,
+            header: "Auth",
+            render: (user) => <AuthBadges methods={user.auth_methods} />,
         },
         {
-            tableHeader: "Created",
-            tableCellClassName: "text-sm text-text-muted",
+            header: "Created",
             sortable: true,
-            sortValue: (user) => user.created_at,
-            tableItemRender: (user) => formatDate(user.created_at),
+            sortValue: (user) => user.created_at ?? "",
+            render: (user) => <span className="text-sm text-text-muted">{formatDate(user.created_at)}</span>,
         },
-        {
-            tableHeader: "Actions",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
-            tableItemRender: renderActions,
-        },
-    ];
-
-    const listColumns: DataListColumnDef<UserData>[] = [
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (user) => (
-                        <div className="flex items-center gap-2 py-1">
-                            <User size={16} className="text-text-muted" />
-                            <span className="font-medium text-text-primary">{user.username}</span>
-                        </div>
-                    ),
-                },
-                {
-                    listLabel: "Auth",
-                    listItemRender: (user) => <AuthBadges methods={user.auth_methods} />,
-                },
-                {
-                    listLabel: "Created",
-                    listItemRender: (user) => (
-                        <span className="text-sm text-text-muted">{formatDate(user.created_at)}</span>
-                    ),
-                },
-            ] satisfies DataListDef<UserData>[],
-            columnClassName: "flex-1",
-        },
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (user) => (
-                        <div className="mt-2 md:mt-0 flex justify-center">{renderActions(user)}</div>
-                    ),
-                },
-            ] satisfies DataListDef<UserData>[],
-            columnClassName: "md:text-right",
-        },
+        actionsColumn(renderActions),
     ];
 
     return (
@@ -170,18 +132,26 @@ export const UserList = ({
                 </Button>
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "userViewMode", scope: "local" } }}
-            data={filteredUsers}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            viewMode={{ persist: { key: STORAGE_KEYS.usersView, scope: "local" } }}
+            data={users}
+            columns={columns}
+            listGroups={listGroups()}
             keyField="id"
             isLoading={isLoading}
             loadingMessage="Loading users…"
             searchable
             searchPlaceholder="Search users…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No users found."
-            pagination={pagination(PAGE_SIZE.page)}
+            searchFilter={matchesSearch}
+            noResultsMessage={`No users match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={User}
+                    title="No users yet"
+                    description="Add a user to let someone sign in."
+                />
+            }
+            pagination={listPagination(PAGE_SIZE.page)}
         />
     );
 };

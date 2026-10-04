@@ -4,6 +4,7 @@ import {
     clientName,
     describeFailure,
     formatDate,
+    formatRelative,
     formatTime,
     getErrorMessage,
     plural,
@@ -11,14 +12,19 @@ import {
 
 // Noon UTC is the same calendar day in every zone the tests may run in.
 const date = "2026-10-03T12:00:30Z";
+const de = { locale: "de-DE" };
 
 describe("formatDate", () => {
     it("writes day, month, year and the time without seconds", () => {
-        expect(formatDate(date)).toMatch(/^03\.10\.2026, \d{2}:\d{2}$/);
+        expect(formatDate(date, de)).toMatch(/^03\.10\.2026, \d{2}:\d{2}$/);
     });
 
     it("adds the seconds where asked", () => {
-        expect(formatDate(date, { seconds: true })).toMatch(/^03\.10\.2026, \d{2}:\d{2}:30$/);
+        expect(formatDate(date, { ...de, seconds: true })).toMatch(/^03\.10\.2026, \d{2}:\d{2}:30$/);
+    });
+
+    it("writes it the way the locale does", () => {
+        expect(formatDate(date, { locale: "en-US" })).toMatch(/^10\/03\/2026, \d{2}:\d{2}\s[AP]M$/);
     });
 
     it("takes a Date and a timestamp as well", () => {
@@ -38,13 +44,52 @@ describe("formatDate", () => {
     });
 });
 
+describe("formatRelative", () => {
+    const now = Date.parse("2026-10-04T12:00:00Z");
+    const ago = (ms: number) => formatRelative(now - ms, now, "en-US");
+    const min = 60_000;
+    const h = 60 * min;
+    const d = 24 * h;
+
+    it("calls the last minute now", () => {
+        expect(ago(0)).toBe("just now");
+        expect(ago(59_000)).toBe("just now");
+    });
+
+    it("counts minutes, hours and days, each rounded down", () => {
+        expect(ago(min)).toBe("1 min ago");
+        expect(ago(59 * min)).toBe("59 min ago");
+        expect(ago(h)).toBe("1 h ago");
+        expect(ago(23 * h + 59 * min)).toBe("23 h ago");
+        expect(ago(d)).toBe("1 d ago");
+        expect(ago(30 * d)).toBe("30 d ago");
+    });
+
+    it("writes the date once the distance says nothing any more", () => {
+        expect(ago(31 * d)).toBe(formatDate(now - 31 * d, { locale: "en-US" }));
+    });
+
+    it("does not turn a clock that runs a little ahead into a date", () => {
+        expect(ago(-30_000)).toBe("just now");
+    });
+
+    it("writes a date that lies ahead as the date", () => {
+        expect(ago(-h)).toBe(formatDate(now + h, { locale: "en-US" }));
+    });
+
+    it("reads SQLite's format and has nothing to say without a date", () => {
+        expect(formatRelative("2026-10-04 10:00:00", now)).toBe("2 h ago");
+        expect(formatRelative(null, now)).toBe(EMPTY_VALUE);
+    });
+});
+
 describe("formatTime", () => {
     it("writes the time of day alone, with seconds", () => {
-        expect(formatTime(date)).toMatch(/^\d{2}:\d{2}:30$/);
+        expect(formatTime(date, "de-DE")).toMatch(/^\d{2}:\d{2}:30$/);
     });
 
     it("agrees with the time formatDate writes", () => {
-        expect(formatDate(date, { seconds: true }).endsWith(formatTime(date))).toBe(true);
+        expect(formatDate(date, { ...de, seconds: true }).endsWith(formatTime(date, "de-DE"))).toBe(true);
         expect(formatTime("2026-10-03 12:00:30")).toBe(formatTime(date));
     });
 

@@ -1,3 +1,16 @@
+/*
+ * The font ships with the agent: these pages ask nobody else for anything, and an agent
+ * on a host without a way out renders the same. The file is the Latin subset of
+ * @fontsource-variable/inter; a character outside it falls back to the system font.
+ */
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+
 :root {
     --bg-color: #121212;
     --bg-secondary: #252525;

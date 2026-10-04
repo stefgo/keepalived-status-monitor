@@ -1,11 +1,9 @@
 import { useCallback, ReactNode, useEffect, useState } from "react";
 import { AuthContext, SessionUser } from "./AuthContext";
-import {
-    apiFetch,
-    clearSessionFlag,
-    hasSessionFlag,
-    setUnauthorizedHandler,
-} from "../../lib/apiFetch";
+import { SessionUserSchema } from "@kasm/shared";
+import { clearSessionFlag, hasSessionFlag, setUnauthorizedHandler } from "../../lib/apiFetch";
+import { api, publicApi } from "../../lib/api";
+import { queryClient } from "../../lib/queryClient";
 
 interface AuthProviderProps {
     children: ReactNode;
@@ -39,12 +37,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(null);
         setExpiresAt(null);
         clearSessionFlag();
+        // What the cache holds was read for this session; the next one starts empty.
+        queryClient.clear();
         // The session cookie is httpOnly, so only the server can remove it. Not awaited:
-        // the UI returns to the login form either way, and plain fetch because a 401 from
-        // apiFetch would call straight back into this function.
-        void fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(
-            () => undefined,
-        );
+        // the UI returns to the login form either way, and the public client because a 401
+        // from apiFetch would call straight back into this function.
+        void publicApi.post("/api/auth/logout").catch(() => undefined);
     }, []);
 
     // apiFetch is a plain module and cannot read this context, so it gets handed the one
@@ -64,12 +62,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         let cancelled = false;
         const load = async () => {
             try {
-                const res = await apiFetch("/api/v1/me");
-                if (!res.ok || cancelled) return;
-                const data: { id: number; username: string; expiresAt: string | null } =
-                    await res.json();
+                const data = await api.get("/api/v1/me", SessionUserSchema);
                 if (cancelled) return;
-                setUser({ id: data.id, username: data.username });
+                // A session without an identity has nothing to put in the header.
+                if (typeof data.id === "number" && data.username) {
+                    setUser({ id: data.id, username: data.username });
+                }
                 setExpiresAt(data.expiresAt ? Date.parse(data.expiresAt) : null);
             } catch {
                 // A 401 has already logged out through apiFetch; anything else only leaves

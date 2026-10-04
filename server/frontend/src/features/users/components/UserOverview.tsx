@@ -1,47 +1,21 @@
-import { useState, useEffect } from "react";
-import { apiFetch } from "../../../lib/apiFetch";
+import { useState } from "react";
 import { UserDialog } from "./UserDialog";
 import { UserList, UserData } from "./UserList";
 import { useConfirm } from "@stefgo/react-ui-components";
 import { describeDeleteUser, describeLastUser } from "../confirmations";
+import { QueryError } from "../../../components/QueryError";
+import { useDeleteUser, useSaveUser, useUsers } from "../../../queries/users";
+
+const NO_USERS: UserData[] = [];
 
 export const UserOverview = () => {
-    const [users, setUsers] = useState<UserData[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { data, isPending, error } = useUsers();
+    const users = data ?? NO_USERS;
+    const saveUser = useSaveUser();
+    const deleteUser = useDeleteUser();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const { confirm, alert } = useConfirm();
-    /** Bumped to load the list again after a change; the effect below is the only loader. */
-    const [reloadCount, setReloadCount] = useState(0);
-
-    // The effect only ever lowers isLoading: the first load starts with it set, and a
-    // reload raises it in fetchUsers, outside the effect. A response that arrives after
-    // the next reload has started is dropped, so an older list cannot overwrite a newer one.
-    useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res = await apiFetch("/api/v1/users");
-                if (res.ok) {
-                    const list = await res.json();
-                    if (!cancelled) setUsers(list);
-                }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                if (!cancelled) setIsLoading(false);
-            }
-        };
-        load();
-        return () => {
-            cancelled = true;
-        };
-    }, [reloadCount]);
-
-    const fetchUsers = () => {
-        setIsLoading(true);
-        setReloadCount((n) => n + 1);
-    };
 
     const handleCreateUser = () => {
         setEditingUser(null);
@@ -69,46 +43,22 @@ export const UserOverview = () => {
         // A refused delete keeps the dialog open, with the server's reason in it.
         confirm({
             ...describeDeleteUser(user.username),
-            onConfirm: async () => {
-                const res = await apiFetch(`/api/v1/users/${user.id}`, { method: "DELETE" });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    throw new Error(data.error || "Failed to delete user");
-                }
-                fetchUsers();
-            },
+            onConfirm: () => deleteUser.mutateAsync(user.id),
         });
     };
 
-    const handleSaveUser = async (data: {
-        username: string;
-        password?: string;
-        auth_methods?: string;
-    }) => {
-        const url = editingUser
-            ? `/api/v1/users/${editingUser.id}`
-            : "/api/v1/users";
-        const method = editingUser ? "PUT" : "POST";
+    // A refusal is thrown to the dialog, which shows the server's reason next to the form.
+    const handleSaveUser = (data: { username: string; password?: string; auth_methods?: string }) =>
+        saveUser.mutateAsync({ id: editingUser?.id, data });
 
-        const res = await apiFetch(url, {
-            method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || "Failed to save user");
-        }
-
-        fetchUsers();
-    };
+    // Instead of the list: an empty one would say there are no users.
+    if (error && data === undefined) return <QueryError title="Could not load the users" error={error} />;
 
     return (
         <div className="space-y-6">
             <UserList
                 users={users}
-                isLoading={isLoading}
+                isLoading={isPending}
                 onCreateUser={handleCreateUser}
                 onEditUser={handleEditUser}
                 onDeleteUser={requestDeleteUser}

@@ -1,17 +1,19 @@
-import { useMemo } from "react";
 import { Key, Trash2 } from "lucide-react";
 import { Token } from "@kasm/shared";
 import {
     Badge,
     DataAction,
-    DataListColumnDef,
-    DataListDef,
     DataMultiView,
-    DataTableDef,
+    EmptyState,
+    type DataColumnDef,
+    PAGE_SIZE,
+    listPagination,
+    actionsColumn,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface TokenListProps {
     tokens: Token[];
@@ -62,6 +64,17 @@ const StatusBadge = ({ token: t }: { token: Token }) => {
     return <Badge variant="success">Active</Badge>;
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (t: Token, query: string) => {
+    const q = query.toLowerCase();
+    return (
+        t.tokenHash.includes(q) ||
+        (t.displayName ?? "").toLowerCase().includes(q) ||
+        (t.inboundAllowedIp ?? "").toLowerCase().includes(q)
+    );
+};
+
 /**
  * The registration tokens, built like every other list of the app. Tokens are issued in the
  * add-client wizard, which is also where the two defaults a token carries are entered -- a
@@ -69,17 +82,6 @@ const StatusBadge = ({ token: t }: { token: Token }) => {
  */
 export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
-
-    const filteredTokens = useMemo(() => {
-        if (!searchQuery) return tokens;
-        const q = searchQuery.toLowerCase();
-        return tokens.filter(
-            (t) =>
-                t.tokenHash.includes(q) ||
-                (t.displayName ?? "").toLowerCase().includes(q) ||
-                (t.inboundAllowedIp ?? "").toLowerCase().includes(q),
-        );
-    }, [tokens, searchQuery]);
 
     const renderActions = (t: Token) => (
         <div onClick={(e) => e.stopPropagation()}>
@@ -97,74 +99,48 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
         </div>
     );
 
-    const tableDef: DataTableDef<Token>[] = [
+    const columns: DataColumnDef<Token>[] = [
         {
-            tableHeader: "Token Hash",
-            tableItemRender: (t) => <TokenHash token={t} />,
+            header: "Token Hash",
+            list: { label: null },
+            // The list has no Status column of its own: the badge leads the row instead.
+            render: (t, view) =>
+                view === "list" ? (
+                    <div className="flex items-center gap-2 py-1">
+                        <StatusBadge token={t} />
+                        <TokenHash token={t} />
+                    </div>
+                ) : (
+                    <TokenHash token={t} />
+                ),
         },
         {
-            tableHeader: "Client",
-            tableItemRender: (t) => <ClientDefaults token={t} />,
+            header: "Client",
+            render: (t) => <ClientDefaults token={t} />,
         },
         {
-            tableHeader: "Expires / Used",
-            tableCellClassName: "text-sm text-text-muted",
+            header: "Expires / Used",
             sortable: true,
             sortValue: (t) => t.usedAt ?? t.expiresAt,
-            tableItemRender: (t) => <Validity token={t} />,
+            table: { cellClassName: "text-sm text-text-muted" },
+            list: { label: "Validity" },
+            render: (t, view) =>
+                view === "list" ? (
+                    <span className="text-sm text-text-muted">
+                        <Validity token={t} />
+                    </span>
+                ) : (
+                    <Validity token={t} />
+                ),
         },
         {
-            tableHeader: "Status",
+            header: "Status",
             sortable: true,
             sortValue: (t) => (t.usedAt ? 2 : isExpired(t) ? 1 : 0),
-            tableItemRender: (t) => <StatusBadge token={t} />,
+            list: false,
+            render: (t) => <StatusBadge token={t} />,
         },
-        {
-            tableHeader: "Actions",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
-            tableItemRender: renderActions,
-        },
-    ];
-
-    const listColumns: DataListColumnDef<Token>[] = [
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (t) => (
-                        <div className="flex items-center gap-2 py-1">
-                            <StatusBadge token={t} />
-                            <TokenHash token={t} />
-                        </div>
-                    ),
-                },
-                {
-                    listLabel: "Client",
-                    listItemRender: (t) => <ClientDefaults token={t} />,
-                },
-                {
-                    listLabel: "Validity",
-                    listItemRender: (t) => (
-                        <span className="text-sm text-text-muted">
-                            <Validity token={t} />
-                        </span>
-                    ),
-                },
-            ] satisfies DataListDef<Token>[],
-            columnClassName: "flex-1 min-w-0",
-        },
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (t) => (
-                        <div className="mt-2 md:mt-0 flex justify-center">{renderActions(t)}</div>
-                    ),
-                },
-            ] satisfies DataListDef<Token>[],
-            columnClassName: "md:text-right",
-        },
+        actionsColumn(renderActions),
     ];
 
     return (
@@ -175,18 +151,26 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
                 </>
             }
             sort={{ defaultValue: [{ colIndex: 2, direction: "asc" }] }}
-            viewMode={{ persist: { key: "tokenViewMode", scope: "local" } }}
-            data={filteredTokens}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            viewMode={{ persist: { key: STORAGE_KEYS.tokensView, scope: "local" } }}
+            data={tokens}
+            columns={columns}
+            listGroups={listGroups("flex-1 min-w-0")}
             keyField="tokenHash"
             isLoading={isLoading}
             loadingMessage="Loading tokens…"
             searchable
             searchPlaceholder="Search tokens…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No tokens yet."
-            pagination={pagination(PAGE_SIZE.page)}
+            searchFilter={matchesSearch}
+            noResultsMessage={`No tokens match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={Key}
+                    title="No tokens yet"
+                    description="A token is issued when a client is added."
+                />
+            }
+            pagination={listPagination(PAGE_SIZE.page)}
         />
     );
 };

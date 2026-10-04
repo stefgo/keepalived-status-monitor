@@ -4,7 +4,6 @@ import {
     clusterLabel,
     clusterNetworkKey,
     clusterOf,
-    clusterPath,
     clustersAt,
     clusterVipLabel,
     defaultCompareSelection,
@@ -12,6 +11,8 @@ import {
     groupCounters,
     hasProblemCounts,
     memberKey,
+    nameMembers,
+    rebaseCounters,
     memberStale,
     silenceLabel,
     statLabel,
@@ -145,35 +146,35 @@ describe("clusterNetworkKey", () => {
     });
 });
 
-describe("clustersAt and clusterPath", () => {
+describe("nameMembers", () => {
+    const names = new Map([["a", "lb-01"]]);
+    const named = nameMembers([cluster()], (clientId) => names.get(clientId));
+
+    it("gives every member the name of its host", () => {
+        expect(named[0].members[0].hostName).toBe("lb-01");
+    });
+
+    it("falls back to the id of a client it has no name for", () => {
+        expect(named[0].members[1].hostName).toBe("b");
+    });
+
+    it("leaves the cluster and its members as they were otherwise", () => {
+        const [before] = [cluster()];
+        expect(named[0]).toMatchObject({ key: before.key, vips: before.vips, health: before.health });
+        expect(named[0].members.map((m) => m.clientId)).toEqual(["a", "b"]);
+    });
+});
+
+describe("clustersAt", () => {
     const plain = cluster();
-    const sited = cluster({ site: "dc 1/a" });
     const first = cluster({ site: "dc2" });
     const second = cluster({ site: "dc2", networks: ["10.0.1.0/24"] });
-    const all = [plain, sited, first, second];
+    const all = [plain, first, second];
 
     it("finds the clusters behind one site and VRID", () => {
         expect(clustersAt(all, null, 51)).toEqual([plain]);
         expect(clustersAt(all, "dc2", 51)).toEqual([first, second]);
         expect(clustersAt(all, "dc2", 52)).toEqual([]);
-    });
-
-    it("is the VRID alone for a cluster without a site", () => {
-        expect(clusterPath(plain, all)).toBe("/clusters/51");
-    });
-
-    it("puts the site first, encoded", () => {
-        expect(clusterPath(sited, all)).toBe("/clusters/dc%201%2Fa/51");
-    });
-
-    it("names the network only where another cluster shares site and VRID", () => {
-        expect(clusterPath(first, all)).toBe("/clusters/dc2/51?net=10.0.0.0%2F24");
-        expect(clusterPath(second, all)).toBe("/clusters/dc2/51?net=10.0.1.0%2F24");
-        expect(clusterPath(first, [first])).toBe("/clusters/dc2/51");
-    });
-
-    it("has no page for a cluster without a VRID", () => {
-        expect(clusterPath(cluster({ vrid: null }), all)).toBeUndefined();
     });
 });
 
@@ -278,6 +279,51 @@ describe("cluster members", () => {
             member("c"),
         ];
         expect([...defaultCompareSelection(members)]).toEqual(["a:VI_1"]);
-        expect(defaultCompareSelection([member("c")]).size).toBe(0);
+    });
+
+    it("compares every host where none counted errors", () => {
+        expect([...defaultCompareSelection([member("c"), member("d")])]).toEqual(["c:VI_1", "d:VI_1"]);
+    });
+});
+
+describe("rebaseCounters", () => {
+    const withStats = (clientId: string, stats: Record<string, number>) =>
+        member(clientId, { instance: instance("BACKUP", { stats }) });
+
+    it("measures a member seen for the first time from what it reports now", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        expect(baseline.get("a:VI_1")).toEqual({ advert_rcvd: 5 });
+    });
+
+    it("keeps the baseline, and the map itself, while the counters only go up", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        expect(rebaseCounters(baseline, [withStats("a", { advert_rcvd: 9 })])).toBe(baseline);
+    });
+
+    it("starts over for a member whose counter went down", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        const next = rebaseCounters(baseline, [withStats("a", { advert_rcvd: 1 })]);
+        expect(next.get("a:VI_1")).toEqual({ advert_rcvd: 1 });
+    });
+
+    it("leaves a member without counters out", () => {
+        const baseline = new Map();
+        expect(rebaseCounters(baseline, [member("a")])).toBe(baseline);
+    });
+});
+
+describe("groupCounters with baselines", () => {
+    it("says how far a value has moved, and nothing where it has not", () => {
+        const [group] = groupCounters(
+            [{ advert_rcvd: 9 }, { advert_rcvd: 4 }, { advert_rcvd: 2 }],
+            [{ advert_rcvd: 5 }, { advert_rcvd: 4 }, undefined],
+        );
+        const row = group.rows.find((r) => r.values[0] === 9);
+        expect(row?.deltas).toEqual([4, null, null]);
+    });
+
+    it("carries no deltas without baselines", () => {
+        const [group] = groupCounters([{ advert_rcvd: 9 }]);
+        expect(group.rows[0].deltas).toBeUndefined();
     });
 });

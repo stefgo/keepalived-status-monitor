@@ -106,9 +106,9 @@ await server.register(helmet, {
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'"],
-            // Google Fonts: index.html loads the Inter stylesheet from there.
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            // No foreign origin: the font ships with the bundle.
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            fontSrc: ["'self'"],
             imgSrc: ["'self'", "data:"],
             // The dashboard WebSocket. Same origin, but ws:/wss: are separate schemes
             // to the CSP and 'self' alone does not cover them in every browser.

@@ -82,7 +82,7 @@ cluster and are reported as such.
 |---|---|
 | **Healthy** | Exactly one live member (agent online, keepalived reporting) is MASTER, every member is live and none is in FAULT. |
 | **Degraded** | One MASTER holds, but a member is in FAULT, its agent is offline, its keepalived is stopped or unreadable, or it is the only member. |
-| **Unknown Master** | No live member is MASTER — the virtual addresses are not being served. |
+| **No master** | No live member is MASTER — the virtual addresses are not being served. |
 | **Split brain** | More than one live member is MASTER for the same virtual router. |
 | **VIP mismatch** | The members do not all carry the same virtual addresses, so a failover changes which of them are up. |
 | **Unknown** | No member is live. |

@@ -1,22 +1,32 @@
-import { MoreVertical, Edit, RefreshCw } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { MoreVertical, Edit, RefreshCw, WifiOff } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
-import { clientName, describeFailure, formatDate } from "../../../utils";
+import { clientName, formatDate, getErrorMessage } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
+import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { refreshKeepalived, useKeepalivedState } from "../../../queries/keepalived";
 import {
     ActionButton,
     ActionMenu,
     Badge,
     EntityHeader,
+    FOCUS_RING,
+    cn,
     type EntityDetail,
     useActionMenu,
-    useConfirm,
+    useToast,
+    StatusDot,
+    MenuItem,
 } from "@stefgo/react-ui-components";
-import { StatusDot } from "./StatusDot";
-import { MENU_ENTRY } from "../../../components/menuEntry";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
+import { ENTITY_HEADER } from "../../../components/entityHeader";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
-import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
+import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
+import { clusterLabel, summarizeKeepalived } from "../../keepalived/lib/vrrp";
+import { offlineNotice } from "../lib/offlineNotice";
+import { clusterPath, paths } from "../../../lib/paths";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface ClientOverviewProps {
     client: Client;
@@ -24,20 +34,23 @@ interface ClientOverviewProps {
 
 export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const navigate = useNavigate();
-    const { pathname, state } = useLocation();
-    // The list is the only surface that opens this page today, and the honest fallback for
-    // a directly opened URL -- the same `from` convention the editor reached from here uses.
-    const back = (state as { from?: string } | null)?.from ?? "/clients";
-    const reading = useKeepalivedStore((s) => s.states[client.id]);
-    const refresh = useKeepalivedStore((s) => s.refresh);
+    // The client list, wherever this page was opened from: its parent in the route tree.
+    const back = useBackPath();
+    const reading = useKeepalivedState(client.id);
+    const clusters = useVrrpClusters();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
-    const { alert } = useConfirm();
+    const { show } = useToast();
 
     const handleReloadClient = async () => {
         try {
-            await refresh(client.id);
+            await refreshKeepalived(client.id);
+            show({ variant: "success", title: `Asked ${clientName(client)} for a reading` });
         } catch (e: unknown) {
-            await alert(describeFailure("The agent could not be asked for a reading", e));
+            show({
+                variant: "error",
+                title: `Could not reload ${clientName(client)}`,
+                description: getErrorMessage(e),
+            });
         }
     };
 
@@ -56,10 +69,11 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
 
     /**
      * What the header row has no room for. keepalived's state and the time of the last
-     * reading stay on screen; the rest opens on request. An offline client shows none of
-     * it: the Offline badge says all there is to say.
+     * reading stay on screen while the client is connected; who the client is opens on
+     * request, connected or not. An offline client shows no keepalived state: the last one
+     * would read as current, and the notice below says how old it is.
      */
-    const details: EntityDetail[] = isOnline ? [
+    const details: EntityDetail[] = [
         { label: "ID", value: client.id, copyable: client.id },
         { label: "Agent", value: client.version || "Unknown" },
         isInbound
@@ -68,19 +82,33 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         ...(isInbound && client.inboundLastIp
             ? [{ label: "Last IP", value: client.inboundLastIp }]
             : []),
-        { label: "keepalived", value: keepalived, visibility: "always" },
-        {
-            label: "Last Reading",
-            value: reading ? formatDate(reading.collectedAt, { seconds: true }) : "–",
-            visibility: "always",
-        },
-    ] : [];
+        ...(isOnline
+            ? [
+                  { label: "keepalived", value: keepalived, visibility: "always" as const },
+                  {
+                      label: "Last Reading",
+                      value: reading ? <RelativeTime date={reading.collectedAt} seconds /> : "–",
+                      visibility: "always" as const,
+                  },
+              ]
+            : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
+    ];
+
+    const notice = offlineNotice({ lastSeen: client.lastSeen, readingAt: reading?.collectedAt });
+    // Where the last reading is still on screen: dimmed, beside the hosts that report.
+    const memberOf = clusters
+        .filter((cluster) => cluster.members.some((member) => member.clientId === client.id))
+        .flatMap((cluster) => {
+            const to = clusterPath(cluster, clusters);
+            return to ? [{ key: cluster.key, label: clusterLabel(cluster), to }] : [];
+        });
 
     return (
         <div className="space-y-6">
             <EntityHeader
-                leading={<StatusDot online={isOnline} size="md" />}
-                title={`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}
+                leading={<StatusDot tone={isOnline ? "success" : "neutral"} size="md" />}
+                title={<HeaderBreadcrumb>{`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}</HeaderBreadcrumb>}
+                classNames={ENTITY_HEADER}
                 meta={
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>
@@ -96,7 +124,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 alert={reading?.error && <p className="text-error text-sm">{reading.error}</p>}
                 details={details}
                 // Names the view, not the client: one entry for every client page.
-                persist={{ key: "kasm.client.details", scope: "local" }}
+                persist={{ key: STORAGE_KEYS.clientDetails, scope: "local" }}
                 actions={
                     <div className="relative">
                         <ActionButton
@@ -110,35 +138,57 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                             anchor={menuState?.anchor ?? null}
                             triggerRef={triggerRef}
                         >
-                            <button
+                            <MenuItem
+                                icon={RefreshCw}
                                 disabled={!isOnline}
-                                onClick={() => {
-                                    void handleReloadClient();
-                                    closeMenu();
-                                }}
-                                className={MENU_ENTRY}
+                                onClick={() => void handleReloadClient()}
                             >
-                                <RefreshCw size={16} /> Read keepalived now
-                            </button>
-                            <button
-                                onClick={() => {
-                                    // `from` is how the editor knows that back is this
-                                    // page and not the client list.
-                                    navigate(`/client/${client.id}/edit`, {
-                                        state: { from: pathname },
-                                    });
-                                    closeMenu();
-                                }}
-                                className={MENU_ENTRY}
+                                Read keepalived now
+                            </MenuItem>
+                            <MenuItem
+                                icon={Edit}
+                                onClick={() => navigate(paths.clientEdit(client.id))}
                             >
-                                <Edit size={16} /> Edit
-                            </button>
+                                Edit
+                            </MenuItem>
                         </ActionMenu>
                     </div>
                 }
             />
 
-            {isOnline && <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />}
+            {/* An offline client shows no instances: the last reading would read as current.
+                It says so instead, or the page reads as a broken one. */}
+            {isOnline ? (
+                <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />
+            ) : (
+                <div role="status" className="flex gap-3 rounded-md border border-border bg-card p-4">
+                    <WifiOff size={18} className="mt-0.5 shrink-0 text-warning" />
+                    <div className="min-w-0">
+                        <div className="font-medium text-text-primary">{notice.title}</div>
+                        {notice.lines.map((line) => (
+                            <p key={line} className="mt-1 text-sm text-text-muted">{line}</p>
+                        ))}
+                        {memberOf.length > 0 && (
+                            <p className="mt-1 text-sm text-text-muted">
+                                {memberOf.length === 1 ? "Its cluster still lists" : "Its clusters still list"} it
+                                with that reading:{" "}
+                                {memberOf.map((cluster, i) => (
+                                    <span key={cluster.key}>
+                                        {i > 0 && ", "}
+                                        <Link
+                                            to={cluster.to}
+                                            className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
+                                        >
+                                            {cluster.label}
+                                        </Link>
+                                    </span>
+                                ))}
+                                .
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

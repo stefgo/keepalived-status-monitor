@@ -2,12 +2,20 @@ import { Monitor } from "lucide-react";
 import { ReactNode, useMemo } from "react";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { Client, CLIENT_STATUS } from "@kasm/shared";
-import { clientName, EMPTY_VALUE, formatDate } from "../../../utils";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
-import { StatusDot } from "./StatusDot";
-import { Badge, DataTableDef } from "@stefgo/react-ui-components";
-import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
-import { DataMultiView } from "@stefgo/react-ui-components";
+import { clientName, EMPTY_VALUE } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
+import {
+    Badge,
+    DataMultiView,
+    EmptyState,
+    type DataColumnDef,
+    StatusDot,
+    PAGE_SIZE,
+    listPagination,
+    actionsColumn,
+    listGroups,
+} from "@stefgo/react-ui-components";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * What the connected agent says it can do, reported as it named it. Only the agent on the
@@ -27,6 +35,18 @@ const CapabilitiesCell = ({ client }: { client: Client }) => {
     }
     return (
         <span className="text-sm text-text-primary">{client.capabilities.join(", ")}</span>
+    );
+};
+
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (c: Client, query: string) => {
+    const q = query.toLowerCase();
+    return (
+        (c.displayName ?? "").toLowerCase().includes(q) ||
+        c.hostname.toLowerCase().includes(q) ||
+        (c.site ?? "").toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q)
     );
 };
 
@@ -50,155 +70,64 @@ export const ClientList = ({
         [clients],
     );
 
-    const filteredClients = useMemo(() => {
-        if (!searchQuery) return sortedClients;
-        const q = searchQuery.toLowerCase();
-        return sortedClients.filter(c =>
-            (c.displayName ?? "").toLowerCase().includes(q) ||
-            c.hostname.toLowerCase().includes(q) ||
-            (c.site ?? "").toLowerCase().includes(q) ||
-            c.id.toLowerCase().includes(q),
-        );
-    }, [sortedClients, searchQuery]);
+    const isOnline = (client: Client) => client.status === CLIENT_STATUS.ONLINE;
 
-    const buildTableDefinitions = (): DataTableDef<Client>[] => {
-        const cols: DataTableDef<Client>[] = [];
-
-        cols.push({
-            tableHeader: "Client",
+    // The table answers which client is gone and where it stands. What the agent is -- its
+    // ID, version and capabilities -- is in the list view only.
+    const columns: DataColumnDef<Client>[] = [
+        {
+            header: "Client",
             sortable: true,
             sortValue: (client) => clientName(client),
-            tableItemRender: (client) => (
-                <div className="flex items-center gap-3">
-                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
+            list: { label: null },
+            render: (client, view) => (
+                <div className={view === "list" ? "flex items-center gap-2 py-1" : "flex items-center gap-3"}>
+                    <StatusDot tone={isOnline(client) ? "success" : "neutral"} />
                     <div
-                        className={`text-sm font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
+                        className={`${view === "list" ? "" : "text-sm "}font-medium text-text-primary ${isOnline(client) ? "" : "opacity-70"} truncate`}
                     >
                         {clientName(client)}
                     </div>
                 </div>
             ),
-        });
-
-        cols.push({
-            tableHeader: "Site",
+        },
+        { header: "ID", accessorKey: "id", table: false },
+        {
+            header: "Site",
             sortable: true,
             sortValue: (client) => client.site ?? "",
-            tableCellClassName: "align-top text-sm text-text-primary",
-            tableItemRender: (client) => client.site || EMPTY_VALUE,
-        });
-
-        cols.push({
-            tableHeader: "Status",
-            tableCellClassName: "align-top text-sm text-text-primary",
-            tableItemRender: (client) =>
-                client.status !== CLIENT_STATUS.ONLINE ? (
-                    <div className="whitespace-nowrap opacity-70">
-                        Last Seen: {formatDate(client.lastSeen)}
-                    </div>
-                ) : (
-                    <Badge variant="success">Online</Badge>
-                ),
-        });
-
-        if (renderRowActions) {
-            cols.push({
-                tableHeader: "Actions",
-                tableHeaderClassName: "text-center",
-                tableCellClassName: "content-center",
-                tableItemRender: (client) => (
-                    <div onClick={(e) => e.stopPropagation()}>
-                        {renderRowActions(client)}
-                    </div>
-                ),
-            });
-        }
-
-        return cols;
-    };
-
-    const buildListDefinitions = (): DataListColumnDef<Client>[] => {
-        const contentFields: DataListDef<Client>[] = [];
-        const actionFields: DataListDef<Client>[] = [];
-
-        contentFields.push({
-            listItemRender: (client) => (
-                <div className="flex items-center gap-2 py-1">
-                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
-                    <div
-                        className={`font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
-                    >
-                        {clientName(client)}
-                    </div>
-                </div>
-            ),
-            listLabel: null,
-        });
-
-        contentFields.push({
-            accessorKey: "id",
-            listLabel: "ID",
-        });
-
-        contentFields.push({
-            listItemRender: (client) => (
-                <span className="text-sm text-text-primary">
-                    {client.site || EMPTY_VALUE}
-                </span>
-            ),
-            listLabel: "Site",
-        });
-
-        contentFields.push({
-            listItemRender: (client) => (
-                <span className="text-sm text-text-primary">
-                    {client.version}
-                </span>
-            ),
-            listLabel: "Version",
-        });
-
-        contentFields.push({
-            listItemRender: (client) => <CapabilitiesCell client={client} />,
-            listLabel: "Capabilities",
-        });
-
-        contentFields.push({
-            listItemRender: (client) =>
-                client.status !== CLIENT_STATUS.ONLINE ? (
+            render: (client) => <span className="text-sm text-text-primary">{client.site || EMPTY_VALUE}</span>,
+        },
+        {
+            header: "Version",
+            table: false,
+            render: (client) => <span className="text-sm text-text-primary">{client.version}</span>,
+        },
+        {
+            header: "Capabilities",
+            table: false,
+            render: (client) => <CapabilitiesCell client={client} />,
+        },
+        {
+            header: "Status",
+            table: { cellClassName: "whitespace-nowrap" },
+            render: (client) =>
+                !isOnline(client) ? (
                     <span className="text-sm text-text-muted">
-                        {formatDate(client.lastSeen)}
+                        {client.lastSeen ? <>Last seen <RelativeTime date={client.lastSeen} /></> : "Never connected"}
                     </span>
                 ) : (
                     <Badge variant="success">Online</Badge>
                 ),
-            listLabel: "Status",
-        });
-
-        if (renderRowActions) {
-            actionFields.push({
-                listItemRender: (client) => (
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-2 md:mt-0 flex justify-center"
-                    >
-                        {renderRowActions(client)}
-                    </div>
-                ),
-                listLabel: null,
-            });
-        }
-
-        return actionFields.length > 0
+        },
+        ...(renderRowActions
             ? [
-                    { fields: contentFields, columnClassName: "flex-1" },
-                    { fields: actionFields, columnClassName: "md:text-right" },
-                ]
-            : [{ fields: contentFields, columnClassName: "flex-1" }];
-    };
-
-    const tableColumns = buildTableDefinitions();
-    const listColumns = buildListDefinitions();
+                  actionsColumn<Client>((client) => (
+                      <div onClick={(e) => e.stopPropagation()}>{renderRowActions(client)}</div>
+                  )),
+              ]
+            : []),
+    ];
 
     return (
         <DataMultiView
@@ -209,20 +138,28 @@ export const ClientList = ({
             }
             extraActions={extraActions}
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "clientViewMode", scope: "local" } }}
-            data={filteredClients}
-            tableDef={tableColumns}
-            listColumns={listColumns}
+            viewMode={{ persist: { key: STORAGE_KEYS.clientsView, scope: "local" } }}
+            data={sortedClients}
+            columns={columns}
+            listGroups={listGroups()}
             keyField="id"
             searchable
             searchPlaceholder="Search name, hostname, site or ID…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
-            emptyMessage="No clients connected."
+            searchFilter={matchesSearch}
+            noResultsMessage={`No clients match “${searchQuery}”.`}
+            emptyMessage={
+                <EmptyState
+                    icon={Monitor}
+                    title="No clients registered yet"
+                    description="Add a client, then start its agent with the registration token it is given."
+                />
+            }
             rowClassName="align-top"
             onRowClick={setSelectedClient ?? undefined}
             // The view owns the page state and takes the page after sorting, so a column
             // sort covers every client, not just the ones on screen.
-            pagination={pagination(PAGE_SIZE.page)}
+            pagination={listPagination(PAGE_SIZE.page)}
         />
     );
 };
