@@ -9,6 +9,7 @@ import {
     useParams,
     useSearchParams,
 } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Activity, Webhook } from "lucide-react";
 
 // Library Components
@@ -40,6 +41,7 @@ import { NotFoundCard } from "../../components/NotFoundCard";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
 import { STORAGE_KEYS } from "../../lib/storageKeys";
+import { queryClient } from "../../lib/queryClient";
 
 // Page components -- loaded on demand, so a chunk only arrives when its route does. The
 // previous shape built the element tree of every page on every render of the shell,
@@ -446,15 +448,17 @@ function AppLayout() {
 function App() {
     return (
         <ThemeProvider storageKey={STORAGE_KEYS.theme}>
-            <AuthProvider>
-                <WebSocketProvider>
-                    <ToastProvider>
-                        <ConfirmProvider>
-                            <AppRoutes />
-                        </ConfirmProvider>
-                    </ToastProvider>
-                </WebSocketProvider>
-            </AuthProvider>
+            <QueryClientProvider client={queryClient}>
+                <AuthProvider>
+                    <WebSocketProvider>
+                        <ToastProvider>
+                            <ConfirmProvider>
+                                <AppRoutes />
+                            </ConfirmProvider>
+                        </ToastProvider>
+                    </WebSocketProvider>
+                </AuthProvider>
+            </QueryClientProvider>
         </ThemeProvider>
     );
 }
