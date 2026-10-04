@@ -16,8 +16,9 @@ import type { ActivityLevel, ActivityRecord } from "./types.js";
  *   as its JSON.
  * - Filters follow the path and can be chained: `default(<literal>)` stands in for a value that
  *   is missing, null or "", `join(", ")` turns an array into text, `map("host")` takes one
- *   field of every item, `upper` and `lower` change the case. A filter handed a value of the
- *   wrong type passes it on unchanged -- like a missing value, that never fails a delivery.
+ *   field of every item, `upper` and `lower` change the case, `truncate(12)` keeps the first
+ *   characters of a text. A filter handed a value of the wrong type passes it on unchanged --
+ *   like a missing value, that never fails a delivery.
  *
  * Conditions and loops are JSON objects with a directive key, borrowed from JSON-e so the
  * template stays a data structure:
@@ -122,7 +123,8 @@ type Filter =
     | { name: "join"; separator: string }
     | { name: "map"; field: string[] }
     | { name: "upper" }
-    | { name: "lower" };
+    | { name: "lower" }
+    | { name: "truncate"; length: number };
 
 interface Expression {
     path: string[];
@@ -205,9 +207,16 @@ function parseFilter(text: string, source: string): Filter {
         case "lower":
             if (arg !== undefined) break;
             return { name };
+        case "truncate": {
+            const length = arg === undefined ? undefined : literal("the number of characters to keep, such as 12");
+            if (typeof length !== "number" || !Number.isInteger(length) || length < 1) {
+                throw new Error(`"{{${source}}}": truncate(...) takes the number of characters to keep, such as 12`);
+            }
+            return { name, length };
+        }
     }
     throw new Error(
-        `"{{${source}}}": "${text}" is not a filter -- there are default(…), join(…), map(…), upper and lower`,
+        `"{{${source}}}": "${text}" is not a filter -- there are default(…), join(…), map(…), truncate(…), upper and lower`,
     );
 }
 
@@ -246,6 +255,9 @@ function applyFilter(value: unknown, filter: Filter): unknown {
             return typeof value === "string" ? value.toUpperCase() : value;
         case "lower":
             return typeof value === "string" ? value.toLowerCase() : value;
+        case "truncate":
+            // By character, not by UTF-16 unit: a cut must not leave half an emoji behind.
+            return typeof value === "string" ? Array.from(value).slice(0, filter.length).join("") : value;
     }
 }
 

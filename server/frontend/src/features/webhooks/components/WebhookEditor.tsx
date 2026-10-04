@@ -285,8 +285,8 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                     <p className="mt-3 text-xs text-text-muted">
                         <span className="font-medium text-text-primary">Filters</span> follow the path and chain:{" "}
                         <code>{"{{event.data.members | map(\"host\") | join(\", \")}}"}</code>. There are{" "}
-                        <code>default</code>, <code>join</code>, <code>map</code>, <code>upper</code> and{" "}
-                        <code>lower</code>.
+                        <code>default</code>, <code>join</code>, <code>map</code>, <code>truncate</code>,{" "}
+                        <code>upper</code> and <code>lower</code>.
                     </p>
                     <p className="mt-2 text-xs text-text-muted">
                         <span className="font-medium text-text-primary">Conditions and loops</span> are objects:{" "}

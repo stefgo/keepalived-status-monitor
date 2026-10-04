@@ -95,15 +95,18 @@ placeholder does, URL and headers included.
 | `join(", ")` | An array as text, its items separated by the given text (`", "` when left out). Objects in it are written as JSON. |
 | `map("host")` | From an array of objects, the one field of each: `[{host: "lb-01"}, …]` → `["lb-01", …]` |
 | `upper`, `lower` | Text in upper or lower case |
+| `truncate(12)` | The first characters of a text, cut without an ellipsis. The number is required and at least 1. |
 
 ```text
 {{event.data.cluster.vips | join(", ")}}                    → 10.0.0.10/24, 10.0.0.11/24
 {{event.data.cluster.members | map("host") | join(", ")}}   → lb-01, lb-02
 {{client.name | default("server") | upper}}         → LB-01
+{{event.id | truncate(8)}}                          → 3f2a9c1e
 ```
 
 A filter handed a value it cannot work on — `join` on a number, `upper` on an object — passes
-it on unchanged. An unknown filter is refused when the webhook is saved.
+it on unchanged. An unknown filter is refused when the webhook is saved, as is a `truncate`
+without a whole number.
 
 ### Conditions and loops
 
