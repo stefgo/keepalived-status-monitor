@@ -1,7 +1,8 @@
 import { Activity, Sliders, type LucideIcon } from "lucide-react";
 
-/** The settings block as the API sends it: every value a string, whatever it means. */
-export type SettingsValues = Record<string, string>;
+import type { SettingsValues } from "../../queries/settings";
+
+export type { SettingsValues };
 
 export type SectionId = "tokens" | "activity";
 

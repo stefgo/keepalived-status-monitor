@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { DescriptionList } from "@stefgo/react-ui-components";
 import type { SchedulerId } from "@kasm/shared";
-import { useSchedulerStore } from "../../../stores/useSchedulerStore";
+import { useSchedulerStatus } from "../../../queries/scheduler";
 import { EMPTY_VALUE, formatDate } from "../../../utils";
 import { describeRunResult } from "../lib/runResult";
 
@@ -12,7 +12,7 @@ import { describeRunResult } from "../lib/runResult";
  * start a run now. No field borders: these are values to read, not to edit.
  */
 export const SchedulerBox = ({ scheduler, children }: { scheduler: SchedulerId; children?: ReactNode }) => {
-    const status = useSchedulerStore((s) => s.schedulers[scheduler]);
+    const status = useSchedulerStatus(scheduler);
     const lastRun = status?.lastRun ?? null;
 
     const resultClass =

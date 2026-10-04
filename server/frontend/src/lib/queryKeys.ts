@@ -1,9 +1,9 @@
 /**
  * Every key the cache is addressed by, in one place.
  *
- * The keys are hierarchical on purpose: `invalidateQueries({ queryKey: settings.all })`
- * reaches the cleanup settings and the scheduler status alike, because a key matches
- * whatever it is a prefix of. `queryKeys.test.ts` holds the prefix relations the code
+ * The keys are hierarchical on purpose: `invalidateQueries({ queryKey: clients.all })`
+ * reaches everything that comes to live under `clients`, because a key matches whatever it
+ * is a prefix of. `queryKeys.test.ts` holds the prefix relations the code
  * relies on.
  */
 export const queryKeys = {
@@ -26,7 +26,6 @@ export const queryKeys = {
     },
     settings: {
         all: ["settings"] as const,
-        cleanup: () => ["settings", "cleanup"] as const,
         schedulerStatus: () => ["settings", "scheduler-status"] as const,
     },
     tokens: {

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Save, Settings as SettingsIcon } from "lucide-react";
 import {
     Button,
@@ -13,9 +14,8 @@ import {
 } from "@stefgo/react-ui-components";
 import { useSearchQueryParam } from "../hooks/useSearchQueryParam";
 import { describeFailure } from "../utils";
-import { apiFetch } from "../lib/apiFetch";
-import type { SchedulerStatuses } from "@kasm/shared";
-import { useSchedulerStore } from "../stores/useSchedulerStore";
+import { schedulerStatusOptions } from "../queries/scheduler";
+import { loadSettings, saveSettings } from "../queries/settings";
 import {
     DEFAULT_SETTINGS,
     SECTIONS,
@@ -29,21 +29,6 @@ import {
     ActivitySection,
     TokenRetentionSection,
 } from "../features/settings/components/SettingsSections";
-
-interface SchedulerStatusResponse {
-    schedulers?: Partial<SchedulerStatuses>;
-}
-
-/** Loads the scheduler status without touching state; null when it cannot be read. */
-async function requestSchedulerStatus(): Promise<SchedulerStatusResponse | null> {
-    try {
-        const response = await apiFetch("/api/v1/settings/scheduler-status");
-        return response.ok ? await response.json() : null;
-    } catch (e) {
-        console.error("Failed to fetch scheduler status:", e);
-        return null;
-    }
-}
 
 /**
  * The server's own settings, one section per tab.
@@ -65,7 +50,6 @@ export default function Settings() {
     const [draft, setDraft] = useState<SettingsValues>(DEFAULT_SETTINGS);
     const [savingSection, setSavingSection] = useState<SectionId | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const setSchedulers = useSchedulerStore((s) => s.setSchedulers);
 
     const [tab, setTab] = useSearchQueryParam("tab");
     const tabs = useTabs({
@@ -75,27 +59,21 @@ export default function Settings() {
         orientation: "vertical",
     });
 
-    // Split into a request that touches no state and a function that applies its answer:
-    // the effect below may only set state once the response is there, and a save loads the
-    // status again afterwards. The store's setter is stable by definition.
-    const applySchedulerStatus = useCallback((data: SchedulerStatusResponse) => {
-        if (data.schedulers) setSchedulers(data.schedulers);
-    }, [setSchedulers]);
+    const queryClient = useQueryClient();
 
-    // Settings and scheduler status are loaded once, inside the effect. isLoading starts
-    // out true, so the load only ever has to lower it.
+    // Loaded once, into the draft. Deliberately not a cache entry: one that is read again
+    // behind the form would overwrite what is typed and not yet saved. The scheduler status
+    // below the fields is one, and follows the socket. isLoading starts out true, so the
+    // load only ever has to lower it.
     useEffect(() => {
         let cancelled = false;
-        const loadSettings = async () => {
+        const load = async () => {
             try {
-                const response = await apiFetch("/api/v1/settings/cleanup");
-                if (response.ok) {
-                    const data = (await response.json()) as SettingsValues;
-                    if (!cancelled) {
-                        const loaded = { ...DEFAULT_SETTINGS, ...data };
-                        setSaved(loaded);
-                        setDraft(loaded);
-                    }
+                const data = await loadSettings();
+                if (!cancelled) {
+                    const loaded = { ...DEFAULT_SETTINGS, ...data };
+                    setSaved(loaded);
+                    setDraft(loaded);
                 }
             } catch (e) {
                 console.error("Failed to fetch settings:", e);
@@ -103,14 +81,11 @@ export default function Settings() {
                 if (!cancelled) setIsLoading(false);
             }
         };
-        loadSettings();
-        requestSchedulerStatus().then((data) => {
-            if (!cancelled && data) applySchedulerStatus(data);
-        });
+        load();
         return () => {
             cancelled = true;
         };
-    }, [applySchedulerStatus]);
+    }, []);
 
     const change = (key: string, value: string) => setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -118,21 +93,12 @@ export default function Settings() {
         const body = Object.fromEntries(section.keys.map((key) => [key, draft[key] ?? ""]));
         setSavingSection(section.id);
         try {
-            const response = await apiFetch("/api/v1/settings/cleanup", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
-            if (!response.ok) {
-                // The endpoint validates the body and names the offending field.
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error || "Failed to save settings");
-            }
+            // The endpoint validates the body and names the offending field.
+            await saveSettings(body);
             setSaved((prev) => ({ ...prev, ...body }));
             show({ variant: "success", title: `${section.label} saved` });
             // A changed interval moves the next scheduled run.
-            const status = await requestSchedulerStatus();
-            if (status) applySchedulerStatus(status);
+            void queryClient.invalidateQueries({ queryKey: schedulerStatusOptions.queryKey });
         } catch (e: unknown) {
             alert(describeFailure("Could not save the settings", e));
         } finally {

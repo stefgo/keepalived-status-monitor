@@ -22,10 +22,9 @@ describe("queryKeys", () => {
         expect(reaches(queryKeys.clients.all, queryKeys.keepalived.states())).toBe(false);
     });
 
-    it("reaches the cleanup settings and the scheduler status from settings.all, and neither from the other", () => {
-        expect(reaches(queryKeys.settings.all, queryKeys.settings.cleanup())).toBe(true);
+    it("reaches the scheduler status from settings.all, and nothing else from there", () => {
         expect(reaches(queryKeys.settings.all, queryKeys.settings.schedulerStatus())).toBe(true);
-        expect(reaches(queryKeys.settings.schedulerStatus(), queryKeys.settings.cleanup())).toBe(false);
+        expect(reaches(queryKeys.settings.all, queryKeys.webhooks.list())).toBe(false);
     });
 });
 

@@ -4,10 +4,16 @@ import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
 import { queryClient } from "../../../lib/queryClient";
 import { clientListOptions } from "../../../queries/clients";
-import { appendActivity, applyKeepalivedState, markActivitySeen, type KeepalivedStates } from "../../../lib/cacheUpdates";
+import {
+    appendActivity,
+    applyKeepalivedState,
+    applySchedulerUpdate,
+    markActivitySeen,
+    type KeepalivedStates,
+} from "../../../lib/cacheUpdates";
 import { keepalivedStatesOptions } from "../../../queries/keepalived";
 import { activityListOptions } from "../../../queries/activity";
-import { useSchedulerStore } from "../../../stores/useSchedulerStore";
+import { schedulerStatusOptions } from "../../../queries/scheduler";
 
 interface WebSocketProviderProps {
     children: ReactNode;
@@ -15,7 +21,6 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { isAuthenticated } = useAuth();
-    const applySchedulerUpdate = useSchedulerStore((s) => s.applyUpdate);
     const [isConnected, setIsConnected] = useState(false);
     const socketRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,9 +106,16 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                         );
                         break;
                     }
-                    case WS_EVENTS.SCHEDULER_STATUS_UPDATE:
-                        applySchedulerUpdate(message.data.payload);
+                    // One scheduler at a time. Only where the status has been read: an
+                    // entry made here would hold one scheduler and pass for both.
+                    case WS_EVENTS.SCHEDULER_STATUS_UPDATE: {
+                        const update = message.data.payload;
+                        queryClient.setQueryData(
+                            schedulerStatusOptions.queryKey,
+                            (schedulers) => schedulers && applySchedulerUpdate(schedulers, update),
+                        );
                         break;
+                    }
                 }
             };
 
@@ -150,7 +162,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, applySchedulerUpdate]);
+    }, [isAuthenticated]);
 
     return (
         <WebSocketContext.Provider value={{ isConnected }}>
