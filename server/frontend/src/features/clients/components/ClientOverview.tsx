@@ -1,7 +1,7 @@
-import { MoreVertical, Edit, RefreshCw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { MoreVertical, Edit, RefreshCw, WifiOff } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
-import { clientName, getErrorMessage } from "../../../utils";
+import { clientName, formatDate, getErrorMessage } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
@@ -11,6 +11,8 @@ import {
     ActionMenu,
     Badge,
     EntityHeader,
+    FOCUS_RING,
+    cn,
     type EntityDetail,
     useActionMenu,
     useToast,
@@ -20,8 +22,10 @@ import {
 import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
 import { ENTITY_HEADER } from "../../../components/entityHeader";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
-import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
-import { paths } from "../../../lib/paths";
+import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
+import { clusterLabel, summarizeKeepalived } from "../../keepalived/lib/vrrp";
+import { offlineNotice } from "../lib/offlineNotice";
+import { clusterPath, paths } from "../../../lib/paths";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface ClientOverviewProps {
@@ -33,6 +37,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     // The client list, wherever this page was opened from: its parent in the route tree.
     const back = useBackPath();
     const reading = useKeepalivedState(client.id);
+    const clusters = useVrrpClusters();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { show } = useToast();
 
@@ -64,10 +69,11 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
 
     /**
      * What the header row has no room for. keepalived's state and the time of the last
-     * reading stay on screen; the rest opens on request. An offline client shows none of
-     * it: the Offline badge says all there is to say.
+     * reading stay on screen while the client is connected; who the client is opens on
+     * request, connected or not. An offline client shows no keepalived state: the last one
+     * would read as current, and the notice below says how old it is.
      */
-    const details: EntityDetail[] = isOnline ? [
+    const details: EntityDetail[] = [
         { label: "ID", value: client.id, copyable: client.id },
         { label: "Agent", value: client.version || "Unknown" },
         isInbound
@@ -76,13 +82,26 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         ...(isInbound && client.inboundLastIp
             ? [{ label: "Last IP", value: client.inboundLastIp }]
             : []),
-        { label: "keepalived", value: keepalived, visibility: "always" },
-        {
-            label: "Last Reading",
-            value: reading ? <RelativeTime date={reading.collectedAt} seconds /> : "–",
-            visibility: "always",
-        },
-    ] : [];
+        ...(isOnline
+            ? [
+                  { label: "keepalived", value: keepalived, visibility: "always" as const },
+                  {
+                      label: "Last Reading",
+                      value: reading ? <RelativeTime date={reading.collectedAt} seconds /> : "–",
+                      visibility: "always" as const,
+                  },
+              ]
+            : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
+    ];
+
+    const notice = offlineNotice({ lastSeen: client.lastSeen, readingAt: reading?.collectedAt });
+    // Where the last reading is still on screen: dimmed, beside the hosts that report.
+    const memberOf = clusters
+        .filter((cluster) => cluster.members.some((member) => member.clientId === client.id))
+        .flatMap((cluster) => {
+            const to = clusterPath(cluster, clusters);
+            return to ? [{ key: cluster.key, label: clusterLabel(cluster), to }] : [];
+        });
 
     return (
         <div className="space-y-6">
@@ -137,7 +156,39 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 }
             />
 
-            {isOnline && <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />}
+            {/* An offline client shows no instances: the last reading would read as current.
+                It says so instead, or the page reads as a broken one. */}
+            {isOnline ? (
+                <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />
+            ) : (
+                <div role="status" className="flex gap-3 rounded-md border border-border bg-card p-4">
+                    <WifiOff size={18} className="mt-0.5 shrink-0 text-warning" />
+                    <div className="min-w-0">
+                        <div className="font-medium text-text-primary">{notice.title}</div>
+                        {notice.lines.map((line) => (
+                            <p key={line} className="mt-1 text-sm text-text-muted">{line}</p>
+                        ))}
+                        {memberOf.length > 0 && (
+                            <p className="mt-1 text-sm text-text-muted">
+                                {memberOf.length === 1 ? "Its cluster still lists" : "Its clusters still list"} it
+                                with that reading:{" "}
+                                {memberOf.map((cluster, i) => (
+                                    <span key={cluster.key}>
+                                        {i > 0 && ", "}
+                                        <Link
+                                            to={cluster.to}
+                                            className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
+                                        >
+                                            {cluster.label}
+                                        </Link>
+                                    </span>
+                                ))}
+                                .
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
