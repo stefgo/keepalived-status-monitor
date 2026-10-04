@@ -218,6 +218,11 @@ export interface CounterRow {
     problem: boolean;
     /** One value per set of counters passed in, in their order; null where it has none. */
     values: (number | null)[];
+    /**
+     * How far each value has moved past its baseline, where baselines were passed in; null
+     * where it has not moved, or has nothing to be measured from.
+     */
+    deltas?: (number | null)[];
 }
 
 export interface CounterGroup {
@@ -229,13 +234,31 @@ export interface CounterGroup {
  * The counters of several hosts side by side, grouped, and under one name whichever dump they
  * came from. A counter nobody reports is left out, as is a group left empty; a counter this
  * build does not know lands in "Other" under its own name rather than being dropped.
+ *
+ * With `baselines` -- one earlier set of counters per host, in the same order -- every row
+ * also says how far each value has moved since (`deltas`).
  */
-export function groupCounters(stats: (Record<string, number> | null | undefined)[]): CounterGroup[] {
-    const valueOf = (keys: string[]) =>
-        stats.map((counters) => {
+export function groupCounters(
+    stats: (Record<string, number> | null | undefined)[],
+    baselines?: (Record<string, number> | null | undefined)[],
+): CounterGroup[] {
+    const read = (source: (Record<string, number> | null | undefined)[], keys: string[]) =>
+        source.map((counters) => {
             const key = keys.find((k) => counters?.[k] !== undefined);
             return key !== undefined ? (counters?.[key] ?? null) : null;
         });
+    const valueOf = (keys: string[]) => {
+        const values = read(stats, keys);
+        if (!baselines) return { values };
+        const before = read(baselines, keys);
+        return {
+            values,
+            deltas: values.map((value, i) => {
+                const base = before[i];
+                return value !== null && base !== null && value > base ? value - base : null;
+            }),
+        };
+    };
 
     const groups: CounterGroup[] = COUNTER_GROUPS.map((group) => ({
         title: group.title,
@@ -243,7 +266,7 @@ export function groupCounters(stats: (Record<string, number> | null | undefined)
             .map((counter) => ({
                 label: counter.label,
                 problem: group.problem ?? false,
-                values: valueOf(counter.keys),
+                ...valueOf(counter.keys),
             }))
             .filter((row) => row.values.some((value) => value !== null)),
     }));
@@ -253,7 +276,7 @@ export function groupCounters(stats: (Record<string, number> | null | undefined)
     ].filter((key) => !KNOWN_COUNTERS.has(key));
     groups.push({
         title: "Other",
-        rows: unknown.sort().map((key) => ({ label: statLabel(key), problem: false, values: valueOf([key]) })),
+        rows: unknown.sort().map((key) => ({ label: statLabel(key), problem: false, ...valueOf([key]) })),
     });
 
     return groups.filter((group) => group.rows.length > 0);
@@ -286,8 +309,37 @@ export const silenceLabel = (reading: KeepalivedState | undefined) =>
 
 /**
  * The members whose counters a cluster page compares until the reader picks others: the ones
- * that counted errors, since they are what the comparison is for.
+ * that counted errors, since they are what the comparison is for. Where none did, all of
+ * them -- a healthy cluster's counters are still worth a glance, and an empty card asked for
+ * a pick before it showed anything.
  */
 export function defaultCompareSelection(members: VrrpClusterMember[]): Set<string> {
-    return new Set(members.filter((m) => hasProblemCounts(m.instance.stats)).map(memberKey));
+    const counted = members.filter((m) => hasProblemCounts(m.instance.stats));
+    return new Set((counted.length > 0 ? counted : members).map(memberKey));
+}
+
+/** The counters each member had when the page first saw it, by `memberKey`. */
+export type CounterBaseline = ReadonlyMap<string, Record<string, number>>;
+
+/**
+ * The baseline the counters are measured from, brought up to the members on screen: a
+ * member seen for the first time is measured from what it reports now, and so is one whose
+ * counter went down -- keepalived was restarted and counts from zero again, so the old
+ * baseline measures nothing.
+ *
+ * Returns the baseline it was given when nothing changes, so a caller can tell by identity.
+ */
+export function rebaseCounters(baseline: CounterBaseline, members: VrrpClusterMember[]): CounterBaseline {
+    let next: Map<string, Record<string, number>> | undefined;
+    for (const member of members) {
+        const stats = member.instance.stats;
+        if (!stats) continue;
+        const key = memberKey(member);
+        const before = baseline.get(key);
+        const restarted = before !== undefined && Object.entries(before).some(([name, value]) => (stats[name] ?? 0) < value);
+        if (before !== undefined && !restarted) continue;
+        next ??= new Map(baseline);
+        next.set(key, stats);
+    }
+    return next ?? baseline;
 }

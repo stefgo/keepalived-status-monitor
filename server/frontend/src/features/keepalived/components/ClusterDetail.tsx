@@ -32,9 +32,10 @@ import {
     clustersAt,
     defaultCompareSelection,
     groupCounters,
-    hasProblemCounts,
     memberKey,
     memberStale,
+    rebaseCounters,
+    type CounterBaseline,
     type CounterRow,
 } from "../lib/vrrp";
 import { ClusterCard } from "./ClusterCard";
@@ -52,6 +53,9 @@ const HISTORY_LIMIT = 20;
 type CounterTableRow =
     | { kind: "group"; key: string; title: string; children: CounterTableRow[] }
     | { kind: "counter"; key: string; row: CounterRow };
+
+/** Before a cluster has been seen there is nothing to measure from. */
+const NO_BASELINE: CounterBaseline = new Map();
 
 /** The sticky first column needs its own background to cover what scrolls under it. */
 const stickyCell = (row: CounterTableRow) =>
@@ -130,6 +134,17 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const [allGroupsOf, setAllGroupsOf] = useState<string>();
     const allGroups = allGroupsOf !== undefined && allGroupsOf === cluster?.key;
 
+    // What the counters stood at when this page first saw each host, so a counter that
+    // moves says by how much: keepalived's own numbers are sums since its start, and a 3
+    // that has been there for weeks looks like one that is counting. Kept in memory and per
+    // cluster, like the picks; reseeded while rendering, since it follows the readings.
+    const [base, setBase] = useState<{ cluster?: string; counters: CounterBaseline }>({ counters: NO_BASELINE });
+    const baseline = cluster && base.cluster === cluster.key ? base.counters : NO_BASELINE;
+    const rebased = rebaseCounters(baseline, members);
+    if (cluster && (base.cluster !== cluster.key || rebased !== baseline)) {
+        setBase({ cluster: cluster.key, counters: rebased });
+    }
+
     const label = `${site ? `${site} / ` : ""}VRID ${vrid}`;
 
     if (!cluster) {
@@ -194,7 +209,10 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     ];
 
     const compared = members.filter((m) => isCompared(memberKey(m)));
-    const allCounters = groupCounters(compared.map((m) => m.instance.stats));
+    const allCounters = groupCounters(
+        compared.map((m) => m.instance.stats),
+        compared.map((m) => rebased.get(memberKey(m))),
+    );
     const errorGroups = allCounters.filter((group) =>
         group.rows.some((row) => row.problem && row.values.some((value) => (value ?? 0) > 0)),
     );
@@ -248,7 +266,20 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                         memberStale(m) && "opacity-60",
                     );
                 },
-                tableItemRender: (row) => (row.kind === "counter" ? (row.row.values[i] ?? "–") : null),
+                tableItemRender: (row) => {
+                    if (row.kind !== "counter") return null;
+                    const delta = row.row.deltas?.[i];
+                    return (
+                        <>
+                            {row.row.values[i] ?? "–"}
+                            {delta != null && (
+                                <span className={cn("ml-2 text-xs", !row.row.problem && "text-text-muted")}>
+                                    +{delta}
+                                </span>
+                            )}
+                        </>
+                    );
+                },
             }),
         ),
     ];
@@ -338,9 +369,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
             >
                 {compared.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">
-                        {members.some((m) => hasProblemCounts(m.instance.stats))
-                            ? "Select hosts in the table above to compare their counters."
-                            : "No host counted errors. Select hosts in the table above to compare their counters."}
+                        Select hosts in the table above to compare their counters.
                     </p>
                 ) : counters.length === 0 ? (
                     <p className="p-4 text-sm text-text-secondary">keepalived reported no counters for this cluster.</p>
@@ -355,6 +384,12 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                         // more counter.
                         rowClassName={(row) => (row.kind === "group" ? "bg-hover" : "")}
                     />
+                )}
+                {compared.length > 0 && counters.length > 0 && (
+                    <p className="border-t border-border px-4 py-2 text-xs text-text-muted">
+                        The counters are sums since keepalived started. A <span className="tabular-nums">+n</span>{" "}
+                        beside one is what it counted since this page was opened.
+                    </p>
                 )}
             </Card>
 

@@ -12,6 +12,7 @@ import {
     hasProblemCounts,
     memberKey,
     nameMembers,
+    rebaseCounters,
     memberStale,
     silenceLabel,
     statLabel,
@@ -278,6 +279,51 @@ describe("cluster members", () => {
             member("c"),
         ];
         expect([...defaultCompareSelection(members)]).toEqual(["a:VI_1"]);
-        expect(defaultCompareSelection([member("c")]).size).toBe(0);
+    });
+
+    it("compares every host where none counted errors", () => {
+        expect([...defaultCompareSelection([member("c"), member("d")])]).toEqual(["c:VI_1", "d:VI_1"]);
+    });
+});
+
+describe("rebaseCounters", () => {
+    const withStats = (clientId: string, stats: Record<string, number>) =>
+        member(clientId, { instance: instance("BACKUP", { stats }) });
+
+    it("measures a member seen for the first time from what it reports now", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        expect(baseline.get("a:VI_1")).toEqual({ advert_rcvd: 5 });
+    });
+
+    it("keeps the baseline, and the map itself, while the counters only go up", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        expect(rebaseCounters(baseline, [withStats("a", { advert_rcvd: 9 })])).toBe(baseline);
+    });
+
+    it("starts over for a member whose counter went down", () => {
+        const baseline = rebaseCounters(new Map(), [withStats("a", { advert_rcvd: 5 })]);
+        const next = rebaseCounters(baseline, [withStats("a", { advert_rcvd: 1 })]);
+        expect(next.get("a:VI_1")).toEqual({ advert_rcvd: 1 });
+    });
+
+    it("leaves a member without counters out", () => {
+        const baseline = new Map();
+        expect(rebaseCounters(baseline, [member("a")])).toBe(baseline);
+    });
+});
+
+describe("groupCounters with baselines", () => {
+    it("says how far a value has moved, and nothing where it has not", () => {
+        const [group] = groupCounters(
+            [{ advert_rcvd: 9 }, { advert_rcvd: 4 }, { advert_rcvd: 2 }],
+            [{ advert_rcvd: 5 }, { advert_rcvd: 4 }, undefined],
+        );
+        const row = group.rows.find((r) => r.values[0] === 9);
+        expect(row?.deltas).toEqual([4, null, null]);
+    });
+
+    it("carries no deltas without baselines", () => {
+        const [group] = groupCounters([{ advert_rcvd: 9 }]);
+        expect(group.rows[0].deltas).toBeUndefined();
     });
 });
