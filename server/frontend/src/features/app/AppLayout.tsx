@@ -1,4 +1,4 @@
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { Outlet, useLocation, useMatches, useNavigate } from "react-router-dom";
 import {
     ConnectionBanner,
@@ -13,6 +13,8 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "./context/WebSocketContext";
 import { navEntries, type RouteHandle } from "./routes";
+import { APP_NAME, routeTitle, type TitleSubject } from "../../lib/pageTitle";
+import { clientName } from "../../utils";
 
 // Hooks, queries & stores
 import { useUIStore } from "../../stores/useUIStore";
@@ -59,6 +61,37 @@ export function AppLayout() {
 
     // Counted by the function the dashboard's card uses, so the two cannot disagree.
     const clientsBadge = useMemo(() => formatOnlineCount(clientCount(clients)), [clients]);
+
+    // The browser tab names the area and what is open in it. Here rather than in each
+    // page: the route tree says what a page is. A client is called by the name its list
+    // holds; a cluster is named by the address itself.
+    const title = useMemo(() => {
+        const { clientId, site, vrid } = matches[matches.length - 1]?.params ?? {};
+        const nameOf = (subject: TitleSubject) => {
+            switch (subject) {
+                case "client": {
+                    const client = clients.find((c) => c.id === clientId);
+                    return client && clientName(client);
+                }
+                case "cluster":
+                    // An address that names no VRID is not a cluster's, and gets no name.
+                    return vrid && /^\d+$/.test(vrid) ? `${site ? `${site} / ` : ""}VRID ${vrid}` : undefined;
+            }
+        };
+        return routeTitle(
+            matches.map((match) => match.handle as RouteHandle | undefined),
+            nameOf,
+        );
+    }, [matches, clients]);
+
+    // Taken back when the shell goes: the login page behind a logout is not the page
+    // that was open before it.
+    useEffect(() => {
+        document.title = title;
+        return () => {
+            document.title = APP_NAME;
+        };
+    }, [title]);
 
     // Dashboard Props. The name comes from /api/v1/me; the page used to decode it out of
     // the JWT, which lives in an httpOnly cookie now.

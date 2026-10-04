@@ -3,6 +3,7 @@ import { Activity, Key, LayoutDashboard, Monitor, Network, Settings as SettingsI
 import type { DashboardPage } from "@stefgo/react-ui-components";
 
 import { LEGACY_ROUTES, ROUTES } from "../../lib/paths";
+import type { TitleHandle, TitleSubject } from "../../lib/pageTitle";
 import { RouteError } from "./RouteError";
 import {
     ActivityView,
@@ -37,12 +38,21 @@ export interface NavEntry extends Pick<PageNav, "label" | "icon" | "groupId" | "
     id: string;
 }
 
-/** What a route's `handle` may carry. The router types it as `any`; this is what is read. */
-export interface RouteHandle {
+/**
+ * What a route's `handle` may carry. The router types it as `any`; this is what is read.
+ * `title` and `subject` are what the document title is made of -- see `lib/pageTitle.ts`.
+ */
+export interface RouteHandle extends TitleHandle {
     nav?: NavEntry;
 }
 
 const nav = (entry: NavEntry): RouteHandle => ({ nav: entry });
+
+/** A route called by a fixed name: a form, mostly. */
+const titled = (title: string): RouteHandle => ({ title });
+
+/** A route about one thing, called by its name -- and by `title` until the name is known. */
+const about = (subject: TitleSubject, title?: string): RouteHandle => ({ subject, title });
 
 /**
  * Everything inside the dashboard shell, as one tree. It is the only description of what
@@ -51,6 +61,8 @@ const nav = (entry: NavEntry): RouteHandle => ({ nav: entry });
  * - **Paths** come from `lib/paths.ts`, each used here exactly once.
  * - **The sidebar** is the areas that carry `handle.nav`, in this order. An entry is
  *   marked while any route below its area is open -- nothing lists those routes again.
+ * - **The document title** is the handles along the open route: the area's label, the
+ *   `subject` a route is about, the `title` of a form.
  * - **Back** is the route above in this tree (`useBackPath`): a client's editor closes
  *   onto the client, the client onto the list.
  * - **Not found and render errors** are the area's `errorElement`: the page is replaced,
@@ -69,13 +81,14 @@ export const shellRoutes: RouteObject[] = [
         errorElement: <RouteError />,
         children: [
             { index: true, element: <ClientsRoute /> },
-            { path: ROUTES.clientNew, element: <AddClientRoute /> },
+            { path: ROUTES.clientNew, handle: titled("New Client"), element: <AddClientRoute /> },
             {
                 path: ROUTES.client,
+                handle: about("client"),
                 element: <ClientBoundary />,
                 children: [
                     { index: true, element: <ClientDetailRoute /> },
-                    { path: ROUTES.clientEdit, element: <ClientEditRoute /> },
+                    { path: ROUTES.clientEdit, handle: titled("Edit"), element: <ClientEditRoute /> },
                 ],
             },
         ],
@@ -86,8 +99,9 @@ export const shellRoutes: RouteObject[] = [
         errorElement: <RouteError />,
         children: [
             { index: true, element: <ClusterOverview /> },
-            { path: ROUTES.cluster, element: <ClusterRoute /> },
-            { path: ROUTES.clusterAtSite, element: <ClusterRoute /> },
+            // Named by the address itself, so the title needs no reading to be there.
+            { path: ROUTES.cluster, handle: about("cluster"), element: <ClusterRoute /> },
+            { path: ROUTES.clusterAtSite, handle: about("cluster"), element: <ClusterRoute /> },
         ],
     },
     {
@@ -114,8 +128,10 @@ export const shellRoutes: RouteObject[] = [
         errorElement: <RouteError />,
         children: [
             { index: true, element: <WebhookOverview /> },
-            { path: ROUTES.webhookNew, element: <WebhookEditorRoute /> },
-            { path: ROUTES.webhook, element: <WebhookEditorRoute /> },
+            { path: ROUTES.webhookNew, handle: titled("New Webhook"), element: <WebhookEditorRoute /> },
+            // By its kind, not its name: the shell does not read the webhooks, and does not
+            // start to for a title.
+            { path: ROUTES.webhook, handle: titled("Webhook"), element: <WebhookEditorRoute /> },
         ],
     },
     {
@@ -133,7 +149,7 @@ export const shellRoutes: RouteObject[] = [
         children: [{ index: true, element: <ClientInstanceRoute /> }],
     },
     ...LEGACY_ROUTES.map(({ from, to }) => ({ path: from, element: <LegacyRedirect to={to} /> })),
-    { path: "*", element: <NotFound /> },
+    { path: "*", handle: titled("Not Found"), element: <NotFound /> },
 ];
 
 /** The sidebar entries, read off the tree: every area with a `handle.nav`, and its path. */
