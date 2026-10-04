@@ -1,6 +1,6 @@
 import { Badge } from "@stefgo/react-ui-components";
 import type { VrrpClusterMember, VrrpState } from "@kasm/shared";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { useKeepalivedState } from "../../../queries/keepalived";
 import { memberStale, silenceLabel, vrrpStateLabel, vrrpStateVariant } from "../lib/vrrp";
 
 export const VrrpStateBadge = ({ state }: { state: VrrpState }) => (
@@ -14,7 +14,7 @@ export const VrrpStateBadge = ({ state }: { state: VrrpState }) => (
  * outside the dimming of its row, so it stays legible.
  */
 const MemberStatusBadge = ({ member }: { member: VrrpClusterMember }) => {
-    const reading = useKeepalivedStore((s) => s.states[member.clientId]);
+    const reading = useKeepalivedState(member.clientId);
     const last = `last reported state: ${vrrpStateLabel(member.instance.state)}`;
     if (!member.online) {
         return (

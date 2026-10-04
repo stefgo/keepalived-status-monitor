@@ -1,4 +1,4 @@
-import { ReactNode, Suspense, lazy, useMemo, useEffect } from "react";
+import { ReactNode, Suspense, lazy, useMemo } from "react";
 import {
     BrowserRouter,
     Routes,
@@ -37,7 +37,6 @@ import { useClient, useClients, useCreateOutboundClient, useDeleteClient, useUpd
 import { tokenListOptions } from "../../queries/tokens";
 import { useUIStore } from "../../stores/useUIStore";
 import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
-import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
 import { NotFoundCard } from "../../components/NotFoundCard";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
@@ -219,7 +218,7 @@ function NotFound() {
 }
 
 function AppLayout() {
-    const { isAuthenticated, user, logout } = useAuth();
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -237,14 +236,9 @@ function AppLayout() {
     // Routing Helpers
     const path = location.pathname;
 
-    // The shell needs the clients for the sidebar badge, and every page reads the keepalived
-    // readings -- the WebSocket pushes both on connect, the fetch covers a slow socket.
+    // The shell needs the clients for the sidebar badge. The WebSocket pushes them on
+    // connect, the query covers a slow socket.
     const { clients } = useClients();
-    const fetchStates = useKeepalivedStore((s) => s.fetchStates);
-
-    useEffect(() => {
-        if (isAuthenticated) fetchStates();
-    }, [isAuthenticated, fetchStates]);
 
     // Stats
     const stats = useMemo(

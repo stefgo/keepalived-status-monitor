@@ -4,7 +4,8 @@ import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
 import { queryClient } from "../../../lib/queryClient";
 import { clientListOptions } from "../../../queries/clients";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { applyKeepalivedState, type KeepalivedStates } from "../../../lib/cacheUpdates";
+import { keepalivedStatesOptions } from "../../../queries/keepalived";
 import { useActivityStore } from "../../../stores/useActivityStore";
 import { useSchedulerStore } from "../../../stores/useSchedulerStore";
 
@@ -14,7 +15,6 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { isAuthenticated } = useAuth();
-    const { setState: setKeepalivedState } = useKeepalivedStore();
     // Only the actions: the whole store would re-render the provider on every activity update.
     const setEvents = useActivityStore((s) => s.setEvents);
     const appendEvents = useActivityStore((s) => s.appendEvents);
@@ -77,9 +77,14 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                     case WS_EVENTS.CLIENTS_UPDATE:
                         queryClient.setQueryData(clientListOptions.queryKey, message.data.payload);
                         break;
-                    case WS_EVENTS.KEEPALIVED_STATE_UPDATE:
-                        setKeepalivedState(message.data.payload);
+                    // One client's reading; the later one stays, whichever way it arrived.
+                    case WS_EVENTS.KEEPALIVED_STATE_UPDATE: {
+                        const state = message.data.payload;
+                        queryClient.setQueryData<KeepalivedStates>(keepalivedStatesOptions.queryKey, (states) =>
+                            applyKeepalivedState(states, state),
+                        );
                         break;
+                    }
                     case WS_EVENTS.ACTIVITY_UPDATE:
                         setEvents(message.data.payload);
                         break;
@@ -138,7 +143,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setKeepalivedState, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
+    }, [isAuthenticated, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
 
     return (
         <WebSocketContext.Provider value={{ isConnected }}>

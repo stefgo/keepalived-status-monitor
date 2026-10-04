@@ -2,7 +2,7 @@ import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
 import { ClientList } from "./ClientList";
 import { reconnectClient } from "../../../queries/clients";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { refreshKeepalived } from "../../../queries/keepalived";
 import { Button, DataAction, useConfirm } from "@stefgo/react-ui-components";
 import { describeFailure } from "../../../utils";
 import { describeDeleteClient } from "../confirmations";
@@ -35,8 +35,6 @@ export const ManagedClients = ({
     onAdd,
     onEdit,
 }: ManagedClientsProps) => {
-    const refresh = useKeepalivedStore((s) => s.refresh);
-
     const { confirm, alert } = useConfirm();
 
     // A failed delete keeps the dialog open with the message in it: the store reverts its
@@ -65,7 +63,7 @@ export const ManagedClients = ({
         }
 
         try {
-            await refresh(client.id);
+            await refreshKeepalived(client.id);
         } catch (e: unknown) {
             await alert(describeFailure("The agent could not be asked for a reading", e));
         }

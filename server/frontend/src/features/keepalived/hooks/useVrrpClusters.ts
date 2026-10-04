@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { buildVrrpClusters, CLIENT_STATUS } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { useKeepalivedStates } from "../../../queries/keepalived";
 
 /**
  * The clusters as the server would compute them, recomputed here on every reading and every
  * change of a client's connection -- the same function in `shared`, so the two cannot drift.
  */
 export function useVrrpClusters() {
-    const states = useKeepalivedStore((s) => s.states);
+    const { states } = useKeepalivedStates();
     const { clients } = useClients();
 
     return useMemo(() => {

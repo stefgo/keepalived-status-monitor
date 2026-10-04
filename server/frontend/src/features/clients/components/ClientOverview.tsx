@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
 import { clientName, describeFailure, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
-import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
+import { refreshKeepalived, useKeepalivedState } from "../../../queries/keepalived";
 import {
     ActionButton,
     ActionMenu,
@@ -29,14 +29,13 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     // The list is the only surface that opens this page today, and the honest fallback for
     // a directly opened URL -- the same `from` convention the editor reached from here uses.
     const back = (state as { from?: string } | null)?.from ?? "/clients";
-    const reading = useKeepalivedStore((s) => s.states[client.id]);
-    const refresh = useKeepalivedStore((s) => s.refresh);
+    const reading = useKeepalivedState(client.id);
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { alert } = useConfirm();
 
     const handleReloadClient = async () => {
         try {
-            await refresh(client.id);
+            await refreshKeepalived(client.id);
         } catch (e: unknown) {
             await alert(describeFailure("The agent could not be asked for a reading", e));
         }
