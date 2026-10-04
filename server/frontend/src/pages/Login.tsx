@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../features/auth/AuthContext";
 import { getErrorMessage } from "../utils";
 import { LoginPage, useTheme } from "@stefgo/react-ui-components";
+import { AuthConfigSchema } from "@kasm/shared";
+import { publicApi } from "../lib/api";
 
 export default function Login() {
     const [error, setError] = useState("");
@@ -14,9 +16,9 @@ export default function Login() {
     // session cookie itself and redirects to "/", so there is nothing to read from the URL.
 
     useEffect(() => {
-        fetch("/api/auth/config")
-            .then(res => res.json())
-            .then(data => setAuthType(data.type))
+        publicApi
+            .get("/api/auth/config", AuthConfigSchema)
+            .then((config) => setAuthType(config.type))
             .catch(() => setAuthType("local"));
     }, []);
 
@@ -24,17 +26,9 @@ export default function Login() {
         setError("");
         setIsLoading(true);
         try {
-            // Plain fetch, not apiFetch, and on purpose: a 401 from /api/login means a
-            // wrong password, not an expired session. See the note in lib/apiFetch.ts.
-            const res = await fetch("/api/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password }),
-                // What this response is worth is its Set-Cookie header.
-                credentials: "same-origin",
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Login failed");
+            // The public client, not the one behind the session, and on purpose: a 401 from
+            // /api/login means a wrong password, not an expired session. See lib/api.ts.
+            await publicApi.post("/api/login", { username, password }, undefined, { fallback: "Login failed" });
             // No token to pass on: the server has set the session cookies on this response.
             login();
         } catch (err: unknown) {
