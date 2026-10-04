@@ -20,37 +20,39 @@ const toDate = (date: Date | string | number | null | undefined): Date | null =>
 };
 
 /**
- * The one date format of the interface. Seconds only where they tell events apart -- the
- * activity list, where several steps of one operation land within the same minute.
+ * The one date format of the interface, as the viewer's own locale writes it: the order
+ * of day and month and the clock are theirs, not the application's. `locale` is for a
+ * caller that must not depend on where it runs; left out, the browser's is taken.
+ *
+ * Seconds only where they tell events apart -- the activity list, where several steps of
+ * one operation land within the same minute.
  */
 export const formatDate = (
     date: Date | string | number | null | undefined,
-    { seconds = false }: { seconds?: boolean } = {},
+    { seconds = false, locale }: { seconds?: boolean; locale?: string } = {},
 ): string => {
     const d = toDate(date);
     if (!d) return EMPTY_VALUE;
 
-    return new Intl.DateTimeFormat("de-DE", {
+    return new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
         ...(seconds ? { second: "2-digit" as const } : {}),
-        hour12: false,
     }).format(d);
 };
 
 /** The time of day alone, for entries that sit under a dated one. */
-export const formatTime = (date: Date | string | number | null | undefined): string => {
+export const formatTime = (date: Date | string | number | null | undefined, locale?: string): string => {
     const d = toDate(date);
     if (!d) return EMPTY_VALUE;
 
-    return new Intl.DateTimeFormat("de-DE", {
+    return new Intl.DateTimeFormat(locale, {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
-        hour12: false,
     }).format(d);
 };
 

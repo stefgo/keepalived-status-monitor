@@ -11,14 +11,19 @@ import {
 
 // Noon UTC is the same calendar day in every zone the tests may run in.
 const date = "2026-10-03T12:00:30Z";
+const de = { locale: "de-DE" };
 
 describe("formatDate", () => {
     it("writes day, month, year and the time without seconds", () => {
-        expect(formatDate(date)).toMatch(/^03\.10\.2026, \d{2}:\d{2}$/);
+        expect(formatDate(date, de)).toMatch(/^03\.10\.2026, \d{2}:\d{2}$/);
     });
 
     it("adds the seconds where asked", () => {
-        expect(formatDate(date, { seconds: true })).toMatch(/^03\.10\.2026, \d{2}:\d{2}:30$/);
+        expect(formatDate(date, { ...de, seconds: true })).toMatch(/^03\.10\.2026, \d{2}:\d{2}:30$/);
+    });
+
+    it("writes it the way the locale does", () => {
+        expect(formatDate(date, { locale: "en-US" })).toMatch(/^10\/03\/2026, \d{2}:\d{2}\s[AP]M$/);
     });
 
     it("takes a Date and a timestamp as well", () => {
@@ -40,11 +45,11 @@ describe("formatDate", () => {
 
 describe("formatTime", () => {
     it("writes the time of day alone, with seconds", () => {
-        expect(formatTime(date)).toMatch(/^\d{2}:\d{2}:30$/);
+        expect(formatTime(date, "de-DE")).toMatch(/^\d{2}:\d{2}:30$/);
     });
 
     it("agrees with the time formatDate writes", () => {
-        expect(formatDate(date, { seconds: true }).endsWith(formatTime(date))).toBe(true);
+        expect(formatDate(date, { ...de, seconds: true }).endsWith(formatTime(date, "de-DE"))).toBe(true);
         expect(formatTime("2026-10-03 12:00:30")).toBe(formatTime(date));
     });
 
