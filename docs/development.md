@@ -92,7 +92,7 @@ commit builds no image.
 ### Screenshots
 
 The pictures in `docs/assets/screenshots/` are taken by `npm run screenshots`
-([`scripts/screenshots.mjs`](https://github.com/stefgo/keepalived-status-monitor/blob/main/scripts/screenshots.mjs)),
+([`scripts/screenshots/capture.mjs`](https://github.com/stefgo/keepalived-status-monitor/blob/main/scripts/screenshots/capture.mjs)),
 which drives Chromium through Playwright against a running server — no fixtures, the real
 application with real readings. Playwright is not a dependency of any workspace; the script
 loads it from the directory in `PLAYWRIGHT_DIR`:

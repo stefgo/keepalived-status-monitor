@@ -6,7 +6,7 @@
 // of any workspace; install it anywhere and point PLAYWRIGHT_DIR at that directory:
 //
 //   npm install --prefix /tmp/kasm-pw playwright && npx --prefix /tmp/kasm-pw playwright install chromium
-//   PLAYWRIGHT_DIR=/tmp/kasm-pw node scripts/screenshots.mjs
+//   PLAYWRIGHT_DIR=/tmp/kasm-pw node scripts/screenshots/capture.mjs
 //
 // KASM_URL (default http://localhost:3010), KASM_USER and KASM_PASSWORD (default admin/admin)
 // select the server and the account, KASM_AGENT_URL (default http://localhost:3011, node a)
@@ -21,7 +21,7 @@ const baseUrl = process.env.KASM_URL ?? "http://localhost:3010";
 const username = process.env.KASM_USER ?? "admin";
 const password = process.env.KASM_PASSWORD ?? "admin";
 const agentUrl = process.env.KASM_AGENT_URL ?? "http://localhost:3011";
-const outDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../docs/assets/screenshots");
+const outDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../docs/assets/screenshots");
 
 const loadPlaywright = async () => {
     if (process.env.PLAYWRIGHT_DIR) {
@@ -36,8 +36,16 @@ const { chromium } = await loadPlaywright();
 const viewport = { width: 1440, height: 900 };
 const browser = await chromium.launch();
 
+// The interface writes dates the way the browser's locale does, in the browser's time zone.
+// Both are pinned, so the pictures do not depend on the machine that takes them.
 const newContext = async (theme) => {
-    const context = await browser.newContext({ viewport, deviceScaleFactor: 2, baseURL: baseUrl });
+    const context = await browser.newContext({
+        viewport,
+        deviceScaleFactor: 2,
+        baseURL: baseUrl,
+        locale: "en-US",
+        timezoneId: "UTC",
+    });
     // ThemeProvider reads the theme from localStorage before the first render. The key is
     // STORAGE_KEYS.theme in server/frontend/src/lib/storageKeys.ts.
     await context.addInitScript((value) => localStorage.setItem("kasm.app.theme", value), theme);
