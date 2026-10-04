@@ -14,6 +14,7 @@ import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network
 
 // Library Components
 import {
+    ConnectionBanner,
     Dashboard,
     DashboardPage,
     DashboardNavGroup,
@@ -249,9 +250,9 @@ function AppLayout() {
 
     const { theme, toggleTheme } = useTheme();
     const { isSidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
-    // A pulsing dot says "this is live". Without the socket nobody is watching the state
-    // any more, so no dot below pulses until it is back.
-    const isConnected = useWebSocket()?.isConnected ?? false;
+    // A pulsing dot says "this is live". Once the socket is lost nobody is watching the
+    // state any more, so no dot below pulses until it is back, and the banner says why.
+    const isLost = useWebSocket()?.isLost ?? false;
 
     // Activity. The badge only signals that something needs a look: red for an unseen error,
     // yellow for an unseen warning, nothing otherwise.
@@ -415,7 +416,7 @@ function AppLayout() {
     );
 
     return (
-        <StatusDotProvider live={isConnected}>
+        <StatusDotProvider live={!isLost}>
             <Dashboard
                 logo={logo}
                 title={title}
@@ -428,6 +429,7 @@ function AppLayout() {
                 pages={pages}
                 navGroups={navGroups}
                 currentPath={path}
+                banner={<ConnectionBanner connected={!isLost} />}
             >
                 <Suspense fallback={<LoadingIndicator />}>
                     <Routes>
