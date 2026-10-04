@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Checkbox, StatusDot } from "@stefgo/react-ui-components";
 import type { VrrpCluster } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { clientName } from "../../../utils";
 import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
@@ -32,7 +32,7 @@ interface ClusterCardProps {
  * that host.
  */
 export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
     const label = `VRID ${cluster.vrid ?? "?"}: ${clusterVipLabel(cluster)}`;
 
     const compared = compare ? cluster.members.filter((m) => compare.selected(memberKey(m))).length : 0;

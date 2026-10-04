@@ -8,7 +8,7 @@ import {
     StatusDot,
 } from "@stefgo/react-ui-components";
 import type { VrrpCluster, VrrpClusterMember } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
@@ -47,7 +47,7 @@ export const MasterList = () => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const clusters = useVrrpClusters();
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
     const rows = useMemo(

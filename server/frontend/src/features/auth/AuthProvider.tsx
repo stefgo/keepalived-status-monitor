@@ -6,6 +6,7 @@ import {
     hasSessionFlag,
     setUnauthorizedHandler,
 } from "../../lib/apiFetch";
+import { queryClient } from "../../lib/queryClient";
 
 interface AuthProviderProps {
     children: ReactNode;
@@ -39,6 +40,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(null);
         setExpiresAt(null);
         clearSessionFlag();
+        // What the cache holds was read for this session; the next one starts empty.
+        queryClient.clear();
         // The session cookie is httpOnly, so only the server can remove it. Not awaited:
         // the UI returns to the login form either way, and plain fetch because a 401 from
         // apiFetch would call straight back into this function.

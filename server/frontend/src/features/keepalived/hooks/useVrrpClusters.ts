@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { buildVrrpClusters, CLIENT_STATUS } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 
 /**
@@ -9,7 +9,7 @@ import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
  */
 export function useVrrpClusters() {
     const states = useKeepalivedStore((s) => s.states);
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
 
     return useMemo(() => {
         const sites = new Map(clients.map((client) => [client.id, client.site ?? null]));

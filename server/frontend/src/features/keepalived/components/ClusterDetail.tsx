@@ -15,7 +15,7 @@ import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } fro
 import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivityStore } from "../../../stores/useActivityStore";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
@@ -76,8 +76,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     useEscapeToLeave(back);
 
     const clusters = useVrrpClusters();
-    const clients = useClientStore((s) => s.clients);
-    const clientsLoading = useClientStore((s) => s.isLoading);
+    const { clients, isPending: clientsLoading } = useClients();
     const readings = useKeepalivedStore((s) => s.states);
     const events = useActivityStore((s) => s.events);
 

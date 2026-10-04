@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { CONNECTION_MODE, type CreatedToken } from "@kasm/shared";
 import { Card, Wizard, WizardStep } from "@stefgo/react-ui-components";
-import { apiFetch } from "../../../../lib/apiFetch";
+import { createClientToken } from "../../../../queries/clients";
 import { getErrorMessage } from "../../../../utils";
 import { TokenModal } from "../../../tokens/components/TokenModal";
 import { StepConnectionMode } from "./steps/StepConnectionMode";
@@ -63,19 +63,11 @@ export const AddClientWizard = ({
         setError(null);
         try {
             if (isInbound) {
-                const res = await apiFetch("/api/v1/tokens", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        displayName: form.displayName.trim() || undefined,
-                        inboundAllowedIp: form.restrictIp
-                            ? form.allowedIp.trim()
-                            : undefined,
-                    }),
+                const token = await createClientToken({
+                    displayName: form.displayName.trim() || undefined,
+                    inboundAllowedIp: form.restrictIp ? form.allowedIp.trim() : undefined,
                 });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || "Failed to create token");
-                setCreatedToken(data);
+                setCreatedToken(token);
                 onTokenCreated();
             } else {
                 await onCreateOutbound({

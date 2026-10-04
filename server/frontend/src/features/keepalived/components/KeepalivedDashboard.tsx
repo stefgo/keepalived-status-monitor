@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { StatCard } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { useActivityStore } from "../../../stores/useActivityStore";
 import { ActivityView } from "../../activity/components/ActivityView";
@@ -33,7 +33,7 @@ const toPanel = (value: string | null): Panel | null =>
  */
 export const KeepalivedDashboard = () => {
     const navigate = useNavigate();
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
     const states = useKeepalivedStore((s) => s.states);
     const clusters = useVrrpClusters();
     const events = useActivityStore((s) => s.events);

@@ -27,7 +27,7 @@ import {
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord, activityDetail, activityMessage } from "@kasm/shared";
 import { unseenTone, useActivityStore } from "../../../stores/useActivityStore";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
 import { ActivityLevelIcon } from "./ActivityLevelIcon";
@@ -116,7 +116,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
     // A minimum, not an exact match: "info" shows everything but the trace level. The page
     // opens on what needs a look: "error" while an error is unseen, else "warning" while a
     // warning is, else "info". That start is fixed once the list is known, so marking a row

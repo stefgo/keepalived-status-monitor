@@ -33,7 +33,8 @@ import { useWebSocket } from "./context/WebSocketContext";
 import { WebSocketProvider } from "./context/WebSocketProvider";
 
 // Hooks & Stores
-import { useClientStore } from "../../stores/useClientStore";
+import { useClient, useClients, useCreateOutboundClient, useDeleteClient, useUpdateClient } from "../../queries/clients";
+import { tokenListOptions } from "../../queries/tokens";
 import { useUIStore } from "../../stores/useUIStore";
 import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
 import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
@@ -103,14 +104,15 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 // ---------------------------------------------------------------------------
 // Routes
 //
-// Each route takes what it needs from the stores itself. The shell used to hold
+// Each route takes what it needs from the cache itself. The shell used to hold
 // the selected client for every page at once; now only the page that shows it does.
 // ---------------------------------------------------------------------------
 
 function ClientsRoute() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
-    const { clients, fetchClients, deleteClient } = useClientStore();
+    const { clients, refetch } = useClients();
+    const deleteClient = useDeleteClient();
 
     // Every editor route knows where back is because the surface that opened it says so.
     const open = (to: string) => navigate(to, { state: { from: pathname } });
@@ -120,9 +122,9 @@ function ClientsRoute() {
             clients={clients}
             onSelect={(c) => (c ? navigate(`/client/${c.id}`) : navigate("/clients"))}
             onRefresh={() => {
-                fetchClients();
+                void refetch();
             }}
-            onDelete={(id) => deleteClient(id)}
+            onDelete={(id) => deleteClient.mutateAsync(id)}
             onAdd={() => open("/clients/new")}
             onEdit={(c) => open(`/client/${c.id}/edit`)}
         />
@@ -132,20 +134,20 @@ function ClientsRoute() {
 function AddClientRoute() {
     const navigate = useNavigate();
     const { state } = useLocation();
-    const { fetchClients, createOutboundClient } = useClientStore();
+    const createOutboundClient = useCreateOutboundClient();
     const back = (state as { from?: string } | null)?.from ?? "/clients";
 
     return (
         <AddClientWizard
             onClose={() => navigate(back)}
-            onCreateOutbound={(data) => createOutboundClient(data)}
-            onTokenCreated={fetchClients}
+            onCreateOutbound={(data) => createOutboundClient.mutateAsync(data)}
+            onTokenCreated={() => void queryClient.invalidateQueries({ queryKey: tokenListOptions.queryKey })}
         />
     );
 }
 
 /**
- * The client behind `:clientId`, or `undefined` while the store is still empty.
+ * The client behind `:clientId`, or `undefined` while the list has not arrived.
  *
  * Both client routes below share the miss, and both answer it the same way: by showing the
  * list rather than redirecting to it. A link to a client arrives before the client list
@@ -153,7 +155,7 @@ function AddClientRoute() {
  */
 function useRouteClient() {
     const { clientId } = useParams();
-    return useClientStore((s) => s.clients.find((c) => c.id === clientId));
+    return useClient(clientId);
 }
 
 function ClientDetailRoute() {
@@ -200,10 +202,10 @@ function ClusterRoute() {
 
 function ClientEditRoute() {
     const client = useRouteClient();
-    const updateClient = useClientStore((s) => s.updateClient);
+    const updateClient = useUpdateClient();
     if (!client) return <ClientsRoute />;
 
-    return <ClientEditor client={client} onSave={updateClient} />;
+    return <ClientEditor client={client} onSave={(clientId, data) => updateClient.mutateAsync({ clientId, data })} />;
 }
 
 function NotFound() {
@@ -237,15 +239,12 @@ function AppLayout() {
 
     // The shell needs the clients for the sidebar badge, and every page reads the keepalived
     // readings -- the WebSocket pushes both on connect, the fetch covers a slow socket.
-    const { clients, fetchClients } = useClientStore();
+    const { clients } = useClients();
     const fetchStates = useKeepalivedStore((s) => s.fetchStates);
 
     useEffect(() => {
-        if (isAuthenticated) {
-            fetchClients();
-            fetchStates();
-        }
-    }, [isAuthenticated, fetchClients, fetchStates]);
+        if (isAuthenticated) fetchStates();
+    }, [isAuthenticated, fetchStates]);
 
     // Stats
     const stats = useMemo(

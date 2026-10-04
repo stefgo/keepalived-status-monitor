@@ -1,7 +1,7 @@
 import { Plus, Edit, Trash2, RefreshCw } from "lucide-react";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
 import { ClientList } from "./ClientList";
-import { apiFetch } from "../../../lib/apiFetch";
+import { reconnectClient } from "../../../queries/clients";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { Button, DataAction, useConfirm } from "@stefgo/react-ui-components";
 import { describeFailure } from "../../../utils";
@@ -55,10 +55,12 @@ export const ManagedClients = ({
             client.connectionMode === CONNECTION_MODE.OUTBOUND &&
             client.status === CLIENT_STATUS.OFFLINE
         ) {
-            await apiFetch(`/api/v1/clients/${client.id}/reconnect`, {
-                method: "POST",
-            });
-            onRefresh();
+            try {
+                await reconnectClient(client.id);
+                onRefresh();
+            } catch (e: unknown) {
+                await alert(describeFailure("The client could not be reconnected", e));
+            }
             return;
         }
 

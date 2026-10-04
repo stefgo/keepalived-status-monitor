@@ -9,7 +9,7 @@ import {
     StatusDot,
 } from "@stefgo/react-ui-components";
 import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
-import { useClientStore } from "../../../stores/useClientStore";
+import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
@@ -140,7 +140,7 @@ export const ClusterOverview = () => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const clusters = useVrrpClusters();
-    const clients = useClientStore((s) => s.clients);
+    const { clients } = useClients();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
     // What the reader opened or closed by hand; every other cluster follows the default below.
     const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());

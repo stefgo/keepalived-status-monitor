@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, ReactNode } from "react";
 import { DashboardMessageSchema, WS_EVENTS } from "@kasm/shared";
 import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
-import { useClientStore } from "../../../stores/useClientStore";
+import { queryClient } from "../../../lib/queryClient";
+import { clientListOptions } from "../../../queries/clients";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
 import { useActivityStore } from "../../../stores/useActivityStore";
 import { useSchedulerStore } from "../../../stores/useSchedulerStore";
@@ -13,7 +14,6 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { isAuthenticated } = useAuth();
-    const { setClients } = useClientStore();
     const { setState: setKeepalivedState } = useKeepalivedStore();
     // Only the actions: the whole store would re-render the provider on every activity update.
     const setEvents = useActivityStore((s) => s.setEvents);
@@ -73,8 +73,9 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 }
 
                 switch (message.data.type) {
+                    // The whole list, so it may also be what fills the entry first.
                     case WS_EVENTS.CLIENTS_UPDATE:
-                        setClients(message.data.payload);
+                        queryClient.setQueryData(clientListOptions.queryKey, message.data.payload);
                         break;
                     case WS_EVENTS.KEEPALIVED_STATE_UPDATE:
                         setKeepalivedState(message.data.payload);
@@ -137,7 +138,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setClients, setKeepalivedState, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
+    }, [isAuthenticated, setKeepalivedState, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
 
     return (
         <WebSocketContext.Provider value={{ isConnected }}>
