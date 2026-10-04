@@ -18,7 +18,9 @@ src/
 │   │   ├── lazyPages.ts                  # The page components, loaded on demand
 │   │   ├── AppLayout.tsx                 # The dashboard shell: sidebar, badges, document title, outlet
 │   │   ├── RouteError.tsx                # The errorElement of every area: not found, or what went wrong
+│   │   ├── HeaderBreadcrumb.tsx          # The trail to the open page, as the heading of its first card
 │   │   ├── context/
+│   │   │   ├── BreadcrumbContext.ts      # The trail AppLayout computes, and useCrumbs
 │   │   │   ├── WebSocketContext.ts       # WebSocket context object and useWebSocket hook
 │   │   │   └── WebSocketProvider.tsx     # WebSocket connection; writes each message into the query cache
 │   │   └── lib/dashboardMessages.ts      # Parses a socket message against the contract; assertNever
@@ -29,7 +31,8 @@ src/
 │   │   ├── confirmations.ts              # Delete-client text
 │   │   ├── lib/
 │   │   │   ├── clientForm.ts             # The client editor's draft, its request and its rules (pure)
-│   │   │   └── addClientForm.ts          # Whether the add-client flow holds anything to lose (pure)
+│   │   │   ├── addClientForm.ts          # Whether the add-client flow holds anything to lose (pure)
+│   │   │   └── offlineNotice.ts          # What an offline client's page says in place of its instances (pure)
 │   │   └── components/
 │   │       ├── ManagedClients.tsx        # Container for client list & actions
 │   │       ├── ClientList.tsx            # Paginated client data table
@@ -63,8 +66,11 @@ src/
 │   │   │   ├── ActivityGroupSteps.tsx    # The members of one correlated group
 │   │   │   ├── ActivityLevelIcon.tsx     # One icon per level, wherever an event is listed
 │   │   │   └── ActivityView.tsx          # The page at /activity
+│   │   ├── hooks/useProblemToasts.ts     # A new error or warning as a toast, on whatever page is open
 │   │   └── lib/
-│   │       └── groupActivity.ts          # Folds the flat list into rows by correlationId
+│   │       ├── groupActivity.ts          # Folds the flat list into rows by correlationId
+│   │       ├── activityLinks.ts          # Where an event's chips lead: its host, its cluster (pure)
+│   │       └── problemToasts.ts          # Which events are reported as a toast, and how (pure)
 │   ├── webhooks/                         # Webhooks: list and editor, each a page
 │   │   ├── confirmations.ts              # Delete-webhook text
 │   │   ├── lib/webhookForm.ts            # Draft <-> API shape, its rules, preview, placeholder list
@@ -96,12 +102,14 @@ src/
 │   ├── confirmations.ts                  # The question asked when an editor with unsaved changes is left
 │   ├── RelativeTime.tsx                  # "5 min ago" on the shared clock, the date in the tooltip
 │   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
+│   ├── entityHeader.ts                   # The title size of a header whose title is the breadcrumb
 │   └── QueryError.tsx                    # A page whose data could not be read, with the server's reason
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for what is shown as a distance from now
 │   ├── useBackPath.ts                    # Where closing a page leads: its parent in the route tree
 │   ├── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
+│   ├── useSearchHotkey.ts                # `/` puts the cursor into the search of the list on screen
 │   ├── useEntityForm.ts                  # An editor's draft, its baseline and its save, checked against a schema
 │   └── useUnsavedChangesGuard.ts         # One question for every way out of a changed editor
 ├── lib/
@@ -114,6 +122,8 @@ src/
 │   ├── paths.ts                          # Every path pattern and path builder, once
 │   ├── backPath.ts                       # parentPath: the nearest route above that is another place
 │   ├── pageTitle.ts                      # The document title, from the handles of the open route
+│   ├── breadcrumb.ts                     # The trail to the open route, from the same handles
+│   ├── searchHotkey.ts                   # Whether a key press asks for the search (pure)
 │   ├── notFound.ts                       # NotFoundError, thrown by a route whose subject is gone
 │   └── entityForm.ts                     # The rules a form is checked by: field errors, sameness of drafts (pure)
 ├── pages/                                # Route entry points
@@ -179,7 +189,16 @@ top-level route with its pages below it, and four things are read off it:
   route, most specific first -- `Edit · lb01 · Clients · KASM`. A route says `title` (a
   form) or `subject` (a client, called by its name from the cached list; a cluster, called
   `VRID 51` or `dc1 / VRID 51` from the address). Until a subject has a name the area
-  stands alone.
+  stands alone. The number of unseen errors and warnings stands in front of it,
+  `(2) VRRP Clusters · KASM` (`countedTitle`), so a tab in the background says that
+  something needs a look; it is the number the dashboard's card shows.
+- **The breadcrumb** spells the same out as links (`lib/breadcrumb.ts`,
+  `features/app/HeaderBreadcrumb.tsx`): `Clients › lb01 › Edit`, as the heading of the
+  page's first card. `AppLayout` computes the trail next to the title, from the same
+  handles and the same `nameOf`, and hands it down through `BreadcrumbContext`; a list has
+  none. A narrow screen keeps the heading and gets a `‹` to the page above. Every link is
+  a router link, so leaving a changed editor through one is asked about like any other
+  way out.
 - **Back** is the route above (`hooks/useBackPath`, `lib/backPath.ts`): the nearest match
   in the tree that is another place. The client page and the cluster page close onto their
   list, the client editor onto the client's page, the webhook editor onto the webhook list.
@@ -409,7 +428,7 @@ One flow for both connection modes, built on `Wizard` from `@stefgo/react-ui-com
 
 It lives in the workspace rather than in a modal, because the two branches end in different things: a token to carry to another machine, or a connection attempt that may fail with a reason worth reading.
 
-- **Inbound branch**: display name and allowed address for the client the token will create. Both optional — without them the agent's hostname names the client and the address it registers from becomes its allowed address. Ends in a `TokenModal`, which shows the token once.
+- **Inbound branch**: display name and allowed address for the client the token will create. Both optional — without them the agent's hostname names the client and the address it registers from becomes its allowed address. Ends in a `TokenModal`, which shows the token once, lists what to do with it — open the agent's web page, paste it, register — and names what the token carries.
 - **Outbound branch**: hostname, target address and the agent's setup PIN (or its `KASM_REGISTRATION_SECRET`); finishing dials the agent straight away, and a refusal is shown on the step with the agent's own reason.
 - The wizard renders only the current step, so the form state lives above it in `useAddClientForm` — a step holding its inputs in its own `useState` would lose them on Back.
 - Cancel, Escape and every other way out ask first once anything has been entered (`hasAddClientInput` in `lib/addClientForm.ts`). After the token was issued or the client was added, the flow leaves without a question.
@@ -427,9 +446,17 @@ failed reading's error sits in the header's `alert`. The client's identity stays
 menu reads keepalived now (online clients only) and opens the editor.
 
 Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView` and the sync
-groups. A row opens the page of the instance's cluster, where its counters are. **An
-offline client keeps its reading on screen**, dimmed and with a line saying that it is the
-last one reported rather than the present state — the server keeps it for exactly that.
+groups. A row opens the page of the instance's cluster, where its counters are.
+
+**An offline client shows a notice in place of its instances** (`lib/offlineNotice.ts`):
+since when it is gone and how old its last reading is. The instances stay away -- alone on
+this page the last reading would read as current -- and the notice leads to the clusters
+the host belongs to, where the same reading stands dimmed beside the hosts that still
+report. The header keeps the client's identity behind "Show more", with the time it was
+last seen in place of keepalived's state.
+
+"Read keepalived now" answers with a toast: the reading itself arrives over the socket, and
+one that has not changed looks like a click that was not taken.
 
 ![The detail page of client lb-01 with its VRRP instances and sync group](assets/screenshots/client-detail.png)
 
@@ -437,10 +464,17 @@ last one reported rather than the present state — the server keeps it for exac
 
 ### DashboardOverview (`features/dashboard`)
 
-The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
-count), MASTER (with the FAULT count) and errors / warnings (unseen activity rows at `warning`
-and above) — then every cluster whose health is not `ok`. A healthy fleet shows the numbers
-and nothing else.
+The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters, MASTER and errors /
+warnings (unseen activity rows at `warning` and above) — then, under the heading "Needs
+attention", every cluster whose health is not `ok`.
+
+**Every card says below its number whether anything is wrong** (`hostSummary`,
+`clusterSummary`, `problemSummary` in `lib/dashboard.ts`): "All connected" or "2 offline",
+"All healthy · 4 instances", "1 needs attention · 4 instances" or "1 unknown" for a cluster
+whose agents are all offline, "None in FAULT" or
+"1 in FAULT", "Nothing unseen" or "1 error · 2 warnings". Its icon takes the colour of
+what it says — warning for an offline host or a cluster in trouble, error for a FAULT or an
+unseen error — and is muted otherwise. A healthy fleet shows the four cards and nothing else.
 
 Every card opens its list right beneath the cards — `ClientList`, `ClusterOverview`,
 `MasterList` (each instance in MASTER on an online host: host, VRID, virtual IPs, state and
@@ -523,8 +557,8 @@ shows a list to pick from. A cluster without a VRID has no page.
   the hosts the counters are compared for.
 - **Counters side by side**, one column per compared host, ordered by effective priority, the
   counter column sticky while the rest scrolls. At first only the hosts that counted packet or
-  authentication errors are compared (`defaultCompareSelection`); where none did, the card
-  says so and waits for a pick. Where a compared host counted errors, the table shows only
+  authentication errors are compared (`defaultCompareSelection`); where none did, all of
+  them are. Where a compared host counted errors, the table shows only
   the groups holding them; "Show all" in the card header brings back the others, "Show errors
   only" narrows it again. Only the reader's own picks are kept, in memory, so a host that joins later still gets the
   default. They are only
@@ -534,6 +568,12 @@ shows a list to pick from. A cluster without a VRID has no page.
   `advertisements_received`, the JSON dump `advert_rcvd`, and one agent may send both. A
   counter this build does not know lands in "Other" rather than being dropped. An error
   count above zero is red.
+- **What moved since the page was opened.** keepalived's counters are sums since its start,
+  so a 3 that has stood for weeks looks like one that is counting. The page remembers what
+  each host reported when it first saw it (`rebaseCounters`) and writes the difference
+  beside the value, `1204 +3`. A host whose counter went down — keepalived was restarted —
+  is measured from its new reading. The baseline lives in memory, per cluster; a reload
+  starts it over.
 - The last 20 activity events of the cluster's instances, each led by its host, trace left
   out as on the activity page. Where all hosts name the instance alike, a link opens that
   page searching for the name.
@@ -562,6 +602,11 @@ reports nothing shows "Offline" or "Not Active" in place of its state, with the 
 state in the tooltip and the rest of the row dimmed — as in the cluster list. The configured
 state is left out on such a row. `VrrpStateBadge` gives every state one colour, everywhere:
 MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the rest `neutral`.
+
+`/` puts the cursor into the search of the list on screen (`hooks/useSearchHotkey`, the rule
+in `lib/searchHotkey.ts`): one listener in the shell, which takes the first visible
+`searchbox`. In a field the slash is a character, and while a dialog is open the key is the
+dialog's.
 
 `Escape` on a detail page is handled by `hooks/useEscapeToLeave` and leads where `useBackPath` says. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
 
@@ -594,18 +639,25 @@ one. Grouping is a lookup, not a guess — whoever caused the group put its id o
 in its group hours later. A group with no head yet (an action still running) is stood in for
 by its earliest member, so no event can go missing.
 
-**The level filter is a minimum.** It sits at the right end of the search bar (`searchActions`)
+**The level filter is a minimum**, and its label says so: `≥ info`. It sits at the right end of the search bar (`searchActions`)
 and opens on what needs a look: `error` while an error is unseen, else `warning` while a
 warning is, else `info` — the same rule as the sidebar badge. The start is fixed once the list
 is known, so marking rows seen does not move the filter. `trace` events — agents connecting
 and disconnecting — are hidden until `trace` is chosen.
 
-**A second filter hides what has been seen.** Next to the level filter, `all` / `unseen`
-switches between the whole list and the rows with something unseen in them; under `unseen` a
-row leaves the list once it is marked seen. It starts at `all`.
+**A second filter hides what has been seen.** Next to the level filter, `Show: all` /
+`Show: unseen` switches between the whole list and the rows with something unseen in them;
+under `unseen` a row leaves the list once it is marked seen. It starts at `unseen`.
 
 **"Mark as seen" follows the filter.** It marks the unseen events of every row the level
 filter and the search leave, across all pages, and nothing the reader has not been shown.
+
+**A new problem is reported on whatever page is open.** `useProblemToasts`, mounted in
+`AppLayout`, raises a toast for an error or a warning that joins the list while the
+dashboard is open, with the sentence the list shows. The list as it first arrives is what
+was there before; no clock decides what is new. An error stays until it is dismissed, an
+incident is reported once (by its `correlationId`), and more than three at a time are
+counted in one toast (`lib/problemToasts.ts`).
 
 **Entries are not deleted one by one.** A row can be marked seen; the history goes as a whole
 ("Delete all") or through retention. The sidebar badge does not
@@ -615,7 +667,10 @@ the server stored it) gets the name from the client list (`useClients`) by `clie
 Everything else is found through the search box, as on the other lists (`useSearchQueryParam`,
 so the query survives a reload). It matches the sentence a row shows, its detail line, the
 `kind`, and the host, VRRP instance, VRID and interface the event is about — the latter three
-are also shown as chips under the line. A group matches when
+are also shown as chips under the line. A chip is the way to what it names
+(`lib/activityLinks.ts`): the host's to its page, the instance's and the VRID's to their
+cluster, looked up among the clusters the hosts report now. A host that was deleted, or an
+instance no reading holds any more, stays text. A group matches when
 any of its events does, so a step is found under the operation it belongs to. The sidebar
 badge counts single unseen events, not groups.
 

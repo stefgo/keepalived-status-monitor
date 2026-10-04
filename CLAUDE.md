@@ -102,6 +102,8 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   lives where: the sidebar (`handle.nav`), the document title (`lib/pageTitle.ts`), "back"
   (`useBackPath`, the route above -- never `location.state`) and the `errorElement` are all
   read off it. A new page is a route there, with its lazy import in `lazyPages.ts`.
+  The breadcrumb in a page's header (`HeaderBreadcrumb`, `lib/breadcrumb.ts`) is read off
+  the same handles as the title; a page below a list uses it as its heading.
 - A route whose subject is gone for good throws `NotFoundError` (`lib/notFound.ts`); a
   cluster, which comes back with the next reading, says "not found" itself.
 - An editor keeps its draft in `useEntityForm`, checked against the request schema from
