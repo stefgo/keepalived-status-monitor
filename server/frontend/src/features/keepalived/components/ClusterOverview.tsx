@@ -17,6 +17,7 @@ import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
@@ -288,7 +289,7 @@ export const ClusterOverview = () => {
                     <Network size={18} className="text-text-muted" /> VRRP Clusters
                 </>
             }
-            viewMode={{ persist: { key: "clusterViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.clustersView, scope: "local" } }}
             data={filteredRows}
             getChildren={(row) => (row.kind === "cluster" ? row.children : null)}
             tableDef={tableDef}

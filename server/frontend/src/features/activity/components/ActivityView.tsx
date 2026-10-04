@@ -34,6 +34,7 @@ import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, formatDate } from "../../../utils";
 import { MENU_ENTRY } from "../../../components/menuEntry";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * What an event is about, and last its kind: the name a webhook filter and `{{event.kind}}`
@@ -349,7 +350,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                     <Activity size={18} className="text-text-muted" /> Activity
                 </>
             }
-            viewMode={{ persist: { key: "activityView", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.activityView, scope: "local" } }}
             data={filtered}
             tableDef={tableDef}
             keyField={(g) => g.head.id}

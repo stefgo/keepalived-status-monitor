@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { STORAGE_KEYS } from "../lib/storageKeys";
 
 interface UIState {
     isSidebarCollapsed: boolean;
@@ -19,7 +20,7 @@ export const useUIStore = create<UIState>()(
                 set({ isSidebarCollapsed: collapsed }),
         }),
         {
-            name: "kasm-ui-storage",
+            name: STORAGE_KEYS.ui,
         },
     ),
 );

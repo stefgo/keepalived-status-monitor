@@ -85,6 +85,9 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: ThemeContext, WebSocketContext, AuthContext
+- Every key in the browser's storage lives once in `lib/storageKeys.ts` (`STORAGE_KEYS`,
+  written `kasm.<area>.<what>`). No key literal anywhere else; renaming one forgets the
+  stored value and needs no migration.
 - Vite proxies `/api` and `/ws` to backend in dev
 
 ### Client (client)

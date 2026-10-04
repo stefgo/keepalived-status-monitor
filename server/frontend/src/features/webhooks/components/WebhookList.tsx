@@ -14,6 +14,7 @@ import {
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface WebhookListProps {
     webhooks: Webhook[];
@@ -199,7 +200,7 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
                 </Button>
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "webhookViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.webhooksView, scope: "local" } }}
             data={filtered}
             tableDef={tableDef}
             listColumns={listColumns}

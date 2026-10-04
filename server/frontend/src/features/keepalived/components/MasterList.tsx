@@ -15,6 +15,7 @@ import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterLabel, clusterPath } from "../lib/vrrp";
 import { Vips } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /** One MASTER instance, with the cluster it answers for. The host's name is resolved once. */
 interface MasterRow {
@@ -143,7 +144,7 @@ export const MasterList = () => {
                     <Crown size={18} className="text-text-muted" /> MASTER
                 </>
             }
-            viewMode={{ persist: { key: "masterViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.mastersView, scope: "local" } }}
             data={filteredRows}
             tableDef={tableDef}
             listColumns={listColumns}

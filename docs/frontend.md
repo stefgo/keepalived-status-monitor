@@ -90,7 +90,8 @@ src/
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
 │   └── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
 ├── lib/
-│   └── apiFetch.ts                       # fetch for authenticated endpoints, central 401 handling
+│   ├── apiFetch.ts                       # fetch for authenticated endpoints, central 401 handling
+│   └── storageKeys.ts                    # Every key in the browser's storage, once: kasm.<area>.<what>
 ├── pages/                                # Route entry points
 │   ├── Login.tsx                         # Authentication page (Local & OIDC)
 │   └── Settings.tsx                      # System settings page
@@ -168,7 +169,9 @@ We use **Zustand** split into specialized stores to maintain a clean, reactive s
 - **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
 - **`useActivityStore`**: The activity list (`ActivityRecord[]`) as the server reads it for the session's user, so `seen` needs no user id on this side. Fed by `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` (`applySeen`) and by `fetchEvents` on connect; `unseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes; `markManySeen` and `clearAll` update optimistically and then call the API.
 - **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
-- **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`kasm-ui-storage`).
+- **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`STORAGE_KEYS.ui`).
+
+**Storage keys.** That key, the theme's and those of every list's view settings are named in `lib/storageKeys.ts` and nowhere else, as `kasm.<area>.<what>`; a test holds them unique and in that form. The keys were renamed when they moved there, and the old values are not carried over: after the update a browser shows the default theme, an open sidebar and every list in its default view once, until the reader chooses again.
 
 ### Real-time Updates (WebSocket)
 
@@ -570,7 +573,7 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `Badge`                | Status pill in one of five roles (`success`, `warning`, `error`, `info`, `neutral`). |
 | `Checkbox`             | Checkbox with label, `indeterminate` for a partial selection.  |
 | `ActionButton`         | Round icon button with a tooltip — close, copy, expand, kebab.  |
-| `EntityHeader`         | Header of the client page: title, badges, actions, and details that open on request. Whether they are open is kept in `localStorage` (`kasm.client.details`). |
+| `EntityHeader`         | Header of the client page: title, badges, actions, and details that open on request. Whether they are open is kept in `localStorage` (`STORAGE_KEYS.clientDetails`). |
 | `FOCUS_RING` / `FOCUS_RING_INSET` / `FOCUS_RING_NONE` | The focus ring for the few surfaces the app still draws itself: an inline chip, a tab, a menu entry. Every library component brings its own. |
 
 **The data views own sorting and paging.** A view receives the complete set in `data` and takes the page *after* sorting, which is what makes a column sort cover every row instead of the ten on screen. The page state lives in the view, configured through `pagination(PAGE_SIZE.…)` from `components/listDefaults.ts` — 20 rows for a list that is a page of its own, 10 for one inside a tab; `usePagination` is only for holding it outside, and the app does not need it. Sorting, search and view mode follow the same shape: `sort={{ defaultValue: [...] }}`, `search={{ value, onChange }}`, `viewMode={{ persist: { key, scope: "local" } }}` — the persistence vocabulary that replaced the bare `storageKey` in library 4.0; `scope: "local"` is what `storageKey` did, so a chosen view mode survived the move.

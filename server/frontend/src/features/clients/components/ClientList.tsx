@@ -8,6 +8,7 @@ import { StatusDot } from "./StatusDot";
 import { Badge, DataTableDef } from "@stefgo/react-ui-components";
 import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
 import { DataMultiView } from "@stefgo/react-ui-components";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * What the connected agent says it can do, reported as it named it. Only the agent on the
@@ -209,7 +210,7 @@ export const ClientList = ({
             }
             extraActions={extraActions}
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "clientViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.clientsView, scope: "local" } }}
             data={filteredClients}
             tableDef={tableColumns}
             listColumns={listColumns}

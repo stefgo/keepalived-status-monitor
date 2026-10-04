@@ -17,6 +17,7 @@ import { StatusDot } from "./StatusDot";
 import { MENU_ENTRY } from "../../../components/menuEntry";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
 import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface ClientOverviewProps {
     client: Client;
@@ -96,7 +97,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 alert={reading?.error && <p className="text-error text-sm">{reading.error}</p>}
                 details={details}
                 // Names the view, not the client: one entry for every client page.
-                persist={{ key: "kasm.client.details", scope: "local" }}
+                persist={{ key: STORAGE_KEYS.clientDetails, scope: "local" }}
                 actions={
                     <div className="relative">
                         <ActionButton

@@ -11,6 +11,7 @@ import {
 import { formatDate } from "../../../utils";
 import { formatInterval, vrrpStateLabel } from "../lib/vrrp";
 import { VrrpStateBadge } from "./VrrpStateBadge";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 export interface VrrpInstanceRow {
     key: string;
@@ -239,7 +240,7 @@ export const VrrpInstanceView = ({
             title={title}
             // One key for every instance view: the choice is about how to read instances,
             // not about a particular host or cluster.
-            viewMode={{ persist: { key: "vrrpInstanceViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.instancesView, scope: "local" } }}
             data={rows}
             tableDef={tableDef}
             listColumns={listColumns}

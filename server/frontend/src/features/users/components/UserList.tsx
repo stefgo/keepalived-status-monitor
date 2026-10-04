@@ -12,6 +12,7 @@ import {
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 export interface UserData {
     id: number;
@@ -170,7 +171,7 @@ export const UserList = ({
                 </Button>
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
-            viewMode={{ persist: { key: "userViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.usersView, scope: "local" } }}
             data={filteredUsers}
             tableDef={tableDef}
             listColumns={listColumns}

@@ -12,6 +12,7 @@ import {
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
+import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface TokenListProps {
     tokens: Token[];
@@ -175,7 +176,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
                 </>
             }
             sort={{ defaultValue: [{ colIndex: 2, direction: "asc" }] }}
-            viewMode={{ persist: { key: "tokenViewMode", scope: "local" } }}
+            viewMode={{ persist: { key: STORAGE_KEYS.tokensView, scope: "local" } }}
             data={filteredTokens}
             tableDef={tableDef}
             listColumns={listColumns}

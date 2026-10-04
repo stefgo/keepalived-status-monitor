@@ -38,8 +38,9 @@ const browser = await chromium.launch();
 
 const newContext = async (theme) => {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2, baseURL: baseUrl });
-    // ThemeProvider reads the theme from localStorage before the first render.
-    await context.addInitScript((value) => localStorage.setItem("theme", value), theme);
+    // ThemeProvider reads the theme from localStorage before the first render. The key is
+    // STORAGE_KEYS.theme in server/frontend/src/lib/storageKeys.ts.
+    await context.addInitScript((value) => localStorage.setItem("kasm.app.theme", value), theme);
     return context;
 };
 
