@@ -1,5 +1,5 @@
 import { ReactNode, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
     cn,
@@ -118,12 +118,10 @@ const ClusterLink = ({
     clusters: VrrpCluster[];
     children: ReactNode;
 }) => {
-    const { pathname } = useLocation();
     const path = clusterPath(cluster, clusters);
     return path ? (
         <Link
             to={path}
-            state={{ from: pathname }}
             // The row leads to the cluster as well; without this a click would push it twice.
             onClick={(e) => e.stopPropagation()}
             className="text-text-primary hover:text-primary"
@@ -141,7 +139,6 @@ const ClusterLink = ({
  */
 export const ClusterOverview = () => {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
     const clusters = useVrrpClusters();
     const { clients, error: clientsError } = useClients();
     const { error: statesError } = useKeepalivedStates();
@@ -317,11 +314,10 @@ export const ClusterOverview = () => {
                         : "align-top cursor-default hover:bg-transparent"
                     : "align-top"
             }
-            // A cluster row opens the cluster's page, a host row the host. `from` is how the
-            // cluster page knows where back is.
+            // A cluster row opens the cluster's page, a host row the host.
             onRowClick={(row) => {
                 const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : paths.client(row.member.clientId);
-                if (to) navigate(to, { state: { from: pathname } });
+                if (to) navigate(to);
             }}
         />
     );

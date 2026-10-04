@@ -1,5 +1,5 @@
 import { ReactNode, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Network } from "lucide-react";
 import {
     Card,
@@ -13,6 +13,7 @@ import {
 } from "@stefgo/react-ui-components";
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
+import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivity } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
@@ -70,11 +71,9 @@ interface ClusterDetailProps {
  * column is picked in the host table.
  */
 export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
-    const { state } = useLocation();
-    // The surface that opened this page says where it was; a directly opened URL goes back
-    // to the cluster list.
-    const back = (state as { from?: string } | null)?.from ?? ROUTES.clusters;
-    useEscapeToLeave(back);
+    // Back is the cluster list, wherever the page was opened from. Without the query: `net`
+    // names this cluster and means nothing to the list.
+    useEscapeToLeave(useBackPath({ keepSearch: false }));
 
     const clusters = useVrrpClusters();
     const { clients, isPending: clientsLoading, error: clientsError } = useClients();
@@ -421,8 +420,6 @@ const ClusterChoice = ({
     candidates: VrrpCluster[];
     clusters: VrrpCluster[];
 }) => {
-    const { state } = useLocation();
-
     return (
         <Card title={`${label} is used by ${candidates.length} clusters`} padding="md" classNames={{ content: "space-y-4" }}>
             <p className="text-text-secondary">
@@ -433,7 +430,6 @@ const ClusterChoice = ({
                     <li key={candidate.key} className="flex flex-wrap items-center gap-2 text-sm">
                         <Link
                             to={clusterPath(candidate, clusters) ?? ROUTES.clusters}
-                            state={state}
                             className={cn("rounded-sm font-mono text-text-primary hover:text-primary", FOCUS_RING)}
                         >
                             {candidate.networks.join(", ") || clusterVipLabel(candidate)}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Send, Webhook as WebhookIcon, X } from "lucide-react";
 import { ACTIVITY_LEVELS, WEBHOOK_METHODS, type Webhook, type WebhookTestResult } from "@kasm/shared";
 import {
@@ -17,16 +17,16 @@ import {
 } from "@stefgo/react-ui-components";
 import { testWebhook, useSaveWebhook, useWebhooks } from "../../../queries/webhooks";
 import { getErrorMessage } from "../../../utils";
-import { NotFoundCard } from "../../../components/NotFoundCard";
 import { QueryError } from "../../../components/QueryError";
-import { ROUTES } from "../../../lib/paths";
+import { useBackPath } from "../../../hooks/useBackPath";
+import { NotFoundError } from "../../../lib/notFound";
 import { describeDiscardWebhookChanges } from "../confirmations";
 import { EMPTY_DRAFT, PLACEHOLDERS, draftFrom, inputFrom, previewBody, type WebhookDraft } from "../lib/webhookForm";
 
 /**
  * `/webhooks/new` and `/webhooks/:webhookId`. The webhook is read from the list --
  * there is no single-item endpoint, and the list is short. A link to an id that is gone gets the
- * way back instead of an empty form.
+ * not-found card of the route tree instead of an empty form.
  */
 export const WebhookEditorRoute = () => {
     const { webhookId } = useParams();
@@ -37,13 +37,7 @@ export const WebhookEditorRoute = () => {
     // Not "not found": without the list nothing says whether the webhook exists.
     if (!webhook && error) return <QueryError title="Could not load the webhook" error={error} />;
     if (!webhook && isPending) return <LoadingIndicator label="Loading webhook…" />;
-    if (!webhook) {
-        return (
-            <NotFoundCard title="Webhook not found" backTo={ROUTES.webhooks} backLabel="Back to webhooks">
-                There is no webhook with this id. It may have been deleted.
-            </NotFoundCard>
-        );
-    }
+    if (!webhook) throw new NotFoundError("webhook");
     // Keyed, so pointing the route at another webhook starts the form over.
     return <WebhookEditor key={webhook.id} webhook={webhook} />;
 };
@@ -51,14 +45,13 @@ export const WebhookEditorRoute = () => {
 /**
  * Adds or edits one webhook, on a page of its own. Leaving is a navigation, from the close
  * button in the card's header or with Escape, and asks first when there are unsaved edits --
- * like the client editor. Where it goes is `location.state.from`, else the list.
+ * like the client editor. Where it goes is the route above: the webhook list.
  */
 const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
     const navigate = useNavigate();
-    const location = useLocation();
     const { confirm } = useConfirm();
     const saveWebhook = useSaveWebhook();
-    const back = (location.state as { from?: string } | null)?.from ?? ROUTES.webhooks;
+    const back = useBackPath();
 
     const [initial] = useState<WebhookDraft>(() => (webhook ? draftFrom(webhook) : EMPTY_DRAFT));
     const [draft, setDraft] = useState<WebhookDraft>(initial);

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Crown } from "lucide-react";
 import {
     DataMultiView,
@@ -46,7 +46,6 @@ const lastTransition = (row: MasterRow) => formatDate(row.member.instance.lastTr
  */
 export const MasterList = () => {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
     const clusters = useVrrpClusters();
     const { clients } = useClients();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
@@ -159,10 +158,9 @@ export const MasterList = () => {
             rowClassName={(row) =>
                 clusterPath(row.cluster, clusters) ? "align-top" : "align-top cursor-default hover:bg-transparent"
             }
-            // `from` is how the cluster page knows where back is.
             onRowClick={(row) => {
                 const to = clusterPath(row.cluster, clusters);
-                if (to) navigate(to, { state: { from: pathname } });
+                if (to) navigate(to);
             }}
         />
     );

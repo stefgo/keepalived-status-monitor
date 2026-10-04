@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { VrrpInstance } from "@kasm/shared";
 import {
     cn,
@@ -102,7 +102,6 @@ export const VrrpInstanceView = ({
     leadingHeader,
 }: VrrpInstanceViewProps) => {
     const navigate = useNavigate();
-    const { pathname } = useLocation();
     const hasLeading = leadingHeader !== undefined;
 
     const tableDef: DataTableDef<VrrpInstanceRow>[] = [
@@ -246,13 +245,8 @@ export const VrrpInstanceView = ({
             listColumns={listColumns}
             keyField="key"
             rowClassName="align-top"
-            // Only where a row leads somewhere, or every row would look clickable. `from` is
-            // how the cluster page knows where back is.
-            onRowClick={
-                rows.some((row) => row.href)
-                    ? (row) => row.href && navigate(row.href, { state: { from: pathname } })
-                    : undefined
-            }
+            // Only where a row leads somewhere, or every row would look clickable.
+            onRowClick={rows.some((row) => row.href) ? (row) => row.href && navigate(row.href) : undefined}
             emptyMessage={emptyMessage}
         />
     );

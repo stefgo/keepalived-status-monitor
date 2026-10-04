@@ -1,7 +1,8 @@
 import { MoreVertical, Edit, RefreshCw } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
 import { clientName, describeFailure, formatDate } from "../../../utils";
+import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { refreshKeepalived, useKeepalivedState } from "../../../queries/keepalived";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@stefgo/react-ui-components";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
 import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
-import { ROUTES, paths } from "../../../lib/paths";
+import { paths } from "../../../lib/paths";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface ClientOverviewProps {
@@ -26,10 +27,8 @@ interface ClientOverviewProps {
 
 export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const navigate = useNavigate();
-    const { pathname, state } = useLocation();
-    // The list is the only surface that opens this page today, and the honest fallback for
-    // a directly opened URL -- the same `from` convention the editor reached from here uses.
-    const back = (state as { from?: string } | null)?.from ?? ROUTES.clients;
+    // The client list, wherever this page was opened from: its parent in the route tree.
+    const back = useBackPath();
     const reading = useKeepalivedState(client.id);
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { alert } = useConfirm();
@@ -120,13 +119,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                             </MenuItem>
                             <MenuItem
                                 icon={Edit}
-                                onClick={() =>
-                                    // `from` is how the editor knows that back is this
-                                    // page and not the client list.
-                                    navigate(paths.clientEdit(client.id), {
-                                        state: { from: pathname },
-                                    })
-                                }
+                                onClick={() => navigate(paths.clientEdit(client.id))}
                             >
                                 Edit
                             </MenuItem>

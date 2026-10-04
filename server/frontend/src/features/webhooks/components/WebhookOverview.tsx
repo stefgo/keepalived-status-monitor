@@ -11,7 +11,7 @@ import { WebhookList } from "./WebhookList";
 /** The page at `/webhooks`. Adding and editing happen on pages of their own. */
 export const WebhookOverview = () => {
     const navigate = useNavigate();
-    const { pathname, search } = useLocation();
+    const { search } = useLocation();
     const { confirm } = useConfirm();
     const queryClient = useQueryClient();
     /** Only the first load shows as loading; a reload keeps the rows on screen. */
@@ -19,8 +19,8 @@ export const WebhookOverview = () => {
     const saveWebhook = useSaveWebhook();
     const deleteWebhook = useDeleteWebhook();
 
-    // The editor goes back to where it was opened from, search included.
-    const open = (to: string) => navigate(to, { state: { from: pathname + search } });
+    // The editor closes onto this list, and takes the list's search along to bring it back.
+    const open = (pathname: string) => navigate({ pathname, search });
 
     const requestDelete = (webhook: Webhook) =>
         confirm({

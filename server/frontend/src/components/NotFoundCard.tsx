@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, type To } from "react-router-dom";
 import { Button, Card } from "@stefgo/react-ui-components";
 
 interface NotFoundCardProps {
@@ -7,7 +7,7 @@ interface NotFoundCardProps {
     /** What was looked for and not found. */
     children: ReactNode;
     /** Where the button leads, and what it says. */
-    backTo: string;
+    backTo: To;
     backLabel: string;
 }
 
