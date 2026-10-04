@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     ChevronRight,
     ChevronDown,
@@ -6,10 +7,10 @@ import {
     MoreVertical,
     Trash2,
     Eye,
-    EyeOff,
     Server,
     Network,
     Tag,
+    type LucideIcon,
 } from "lucide-react";
 import {
     ActionButton,
@@ -19,7 +20,9 @@ import {
     DataMultiView,
     DataTableDef,
     EmptyState,
+    FOCUS_RING,
     Select,
+    cn,
     useActionMenu,
     useConfirm,
     useToast,
@@ -36,46 +39,67 @@ import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
 import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
+import { type ActivityLinks, activityLinks } from "../lib/activityLinks";
+import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
 import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, getErrorMessage } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
+const CHIP = "inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted";
+
+/** One thing an event is about. With a target it is the way to that thing's page. */
+function SubjectChip({
+    icon: Icon,
+    to,
+    mono,
+    children,
+}: {
+    icon?: LucideIcon;
+    to?: string;
+    mono?: boolean;
+    children: ReactNode;
+}) {
+    const content = (
+        <>
+            {Icon && <Icon size={10} />} {children}
+        </>
+    );
+    if (!to) return <span className={cn(CHIP, mono && "font-mono")}>{content}</span>;
+    return (
+        <Link to={to} className={cn(CHIP, "hover:text-text-primary hover:underline", FOCUS_RING)}>
+            {content}
+        </Link>
+    );
+}
+
 /**
  * What an event is about, and last its kind: the name a webhook filter and `{{event.kind}}`
- * know it by, which the sentence above does not show.
+ * know it by, which the sentence above does not show. The host leads to its page, the
+ * instance and the VRID to their cluster; the interface and the kind have no page and stay text.
  */
-function SubjectBadges({ event }: { event: ActivityRecord }) {
+function SubjectBadges({ event, links }: { event: ActivityRecord; links: ActivityLinks }) {
     const subject = event.subject;
     const clientName = typeof event.data?.clientName === "string" ? event.data.clientName : null;
     return (
         <div className="flex flex-wrap gap-1 mt-1">
-            {clientName && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted">
-                    <Server size={10} /> {clientName}
-                </span>
-            )}
+            {clientName && <SubjectChip icon={Server} to={links.client}>{clientName}</SubjectChip>}
             {subject?.instanceName && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted">
-                    <Network size={10} /> {subject.instanceName}
-                </span>
+                <SubjectChip icon={Network} to={links.cluster}>{subject.instanceName}</SubjectChip>
             )}
-            {subject?.vrid !== undefined && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted">
-                    VRID {subject.vrid}
-                </span>
-            )}
-            {subject?.interface && (
-                <span className="inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted font-mono">
-                    {subject.interface}
-                </span>
-            )}
-            <span className="inline-flex items-center gap-1 text-[11px] bg-hover px-1.5 py-0.5 rounded text-text-muted">
-                <Tag size={10} /> {event.kind}
-            </span>
+            {subject?.vrid !== undefined && <SubjectChip to={links.cluster}>VRID {subject.vrid}</SubjectChip>}
+            {subject?.interface && <SubjectChip mono>{subject.interface}</SubjectChip>}
+            <SubjectChip icon={Tag}>{event.kind}</SubjectChip>
         </div>
     );
 }
+
+/**
+ * A minimum, so the label says so: "≥ info" is info and everything above it. The most
+ * severe level has nothing above it.
+ */
+const levelLabel = (level: ActivityLevel): string =>
+    level === ACTIVITY_LEVELS[ACTIVITY_LEVELS.length - 1] ? level : `≥ ${level}`;
 
 /**
  * What the search box matches an event against: the sentence a reader sees, the kind it was
@@ -139,6 +163,8 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const { confirm } = useConfirm();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { clients } = useClients();
+    const clusters = useVrrpClusters();
+    const clientIds = useMemo(() => new Set(clients.map((c) => c.id)), [clients]);
     // A minimum, not an exact match: "info" shows everything but the trace level. The page
     // opens on what needs a look: "error" while an error is unseen, else "warning" while a
     // warning is, else "info". That start is fixed once the list is known, so marking a row
@@ -251,7 +277,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                             {isExpanded && g.members.length > 0 && (
                                 <ActivityGroupSteps members={g.members} />
                             )}
-                            <SubjectBadges event={g.head} />
+                            <SubjectBadges event={g.head} links={activityLinks(g.head, clientIds, clusters)} />
                         </div>
                     </div>
                 );
@@ -269,26 +295,21 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             tableHeader: "Actions",
             tableHeaderClassName: "w-px text-center",
             tableCellClassName: "w-px content-center",
-            tableItemRender: (g) => (
-                <DataAction
-                    rowId={g.head.id}
-                    actions={[
-                        ...(g.unseen
-                            ? [{
-                                    icon: Eye,
-                                    onClick: () => handleMarkSeen(g),
-                                    tooltip: "Mark as seen",
-                                    color: "blue" as const,
-                                }]
-                            : [{
-                                    icon: EyeOff,
-                                    onClick: () => {},
-                                    tooltip: "Already seen",
-                                    color: "gray" as const,
-                                }]),
-                    ]}
-                />
-            ),
+            // A row that has been seen has nothing left to do: no button that does nothing.
+            tableItemRender: (g) =>
+                g.unseen && (
+                    <DataAction
+                        rowId={g.head.id}
+                        actions={[
+                            {
+                                icon: Eye,
+                                onClick: () => handleMarkSeen(g),
+                                tooltip: "Mark as seen",
+                                color: "blue" as const,
+                            },
+                        ]}
+                    />
+                ),
         },
     ];
 
@@ -313,8 +334,8 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                 value={seenFilter}
                 onChange={(e) => setSeenFilter(e.target.value as "all" | "unseen")}
                 options={[
-                    { value: "all", label: "all" },
-                    { value: "unseen", label: "unseen" },
+                    { value: "all", label: "Show: all" },
+                    { value: "unseen", label: "Show: unseen" },
                 ]}
             />
             <Select
@@ -323,7 +344,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                 classNames={pillSelect}
                 value={levelFilter}
                 onChange={(e) => setChosenLevel(e.target.value as ActivityLevel)}
-                options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: level }))}
+                options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: levelLabel(level) }))}
             />
         </div>
     );
