@@ -11,16 +11,13 @@ import {
     PAGE_SIZE,
     listPagination,
 } from "@stefgo/react-ui-components";
+import type { User as UserRow } from "@kasm/shared";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
-export interface UserData {
-    id: number;
-    username: string;
-    auth_methods?: string;
-    created_at: string;
-}
+/** One row of `GET /api/v1/users`, as `UserSchema` parses it. */
+export type UserData = UserRow;
 
 interface UserListProps {
     users: UserData[];
@@ -30,7 +27,7 @@ interface UserListProps {
     onCreateUser: () => void;
 }
 
-const AuthBadges = ({ methods: methodsStr }: { methods?: string }) => {
+const AuthBadges = ({ methods: methodsStr }: { methods?: string | null }) => {
     const methods = methodsStr ? methodsStr.split(",") : ["local"];
     return (
         <div className="flex gap-1">
@@ -110,7 +107,7 @@ export const UserList = ({
             tableHeader: "Created",
             tableCellClassName: "text-sm text-text-muted",
             sortable: true,
-            sortValue: (user) => user.created_at,
+            sortValue: (user) => user.created_at ?? "",
             tableItemRender: (user) => formatDate(user.created_at),
         },
         {

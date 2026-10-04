@@ -10,7 +10,7 @@ interface UserDialogProps {
         password?: string;
         auth_methods?: string;
     }) => Promise<void>;
-    editingUser: { id: number; username: string; auth_methods?: string } | null;
+    editingUser: { id: number; username: string; auth_methods?: string | null } | null;
 }
 
 export const UserDialog = ({
