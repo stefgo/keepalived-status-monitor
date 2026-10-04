@@ -1,7 +1,7 @@
 import { MoreVertical, Edit, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
-import { clientName, describeFailure } from "../../../utils";
+import { clientName, getErrorMessage } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
@@ -13,7 +13,7 @@ import {
     EntityHeader,
     type EntityDetail,
     useActionMenu,
-    useConfirm,
+    useToast,
     StatusDot,
     MenuItem,
 } from "@stefgo/react-ui-components";
@@ -34,13 +34,18 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const back = useBackPath();
     const reading = useKeepalivedState(client.id);
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
-    const { alert } = useConfirm();
+    const { show } = useToast();
 
     const handleReloadClient = async () => {
         try {
             await refreshKeepalived(client.id);
+            show({ variant: "success", title: `Asked ${clientName(client)} for a reading` });
         } catch (e: unknown) {
-            await alert(describeFailure("The agent could not be asked for a reading", e));
+            show({
+                variant: "error",
+                title: `Could not reload ${clientName(client)}`,
+                description: getErrorMessage(e),
+            });
         }
     };
 

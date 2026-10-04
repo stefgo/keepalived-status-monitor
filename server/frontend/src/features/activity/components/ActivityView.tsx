@@ -22,6 +22,7 @@ import {
     Select,
     useActionMenu,
     useConfirm,
+    useToast,
     MenuItem,
     PAGE_SIZE,
     listPagination,
@@ -36,7 +37,7 @@ import { ActivityGroupSteps } from "./ActivityGroupSteps";
 import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
-import { clientName } from "../../../utils";
+import { clientName, getErrorMessage } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
@@ -123,7 +124,16 @@ interface ActivityViewProps {
  */
 export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const { events, error } = useActivity();
-    const markSeen = useMarkActivitySeen();
+    const { mutate: markSeen } = useMarkActivitySeen();
+    const { show } = useToast();
+    // The rows turn seen at once and go back if the server refuses; the toast says why they did.
+    const markManySeen = (ids: string[]) => {
+        if (ids.length === 0) return;
+        markSeen(ids, {
+            onError: (e) =>
+                show({ variant: "error", title: "Could not mark the events as seen", description: getErrorMessage(e) }),
+        });
+    };
     const clearActivity = useClearActivity();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
@@ -189,7 +199,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
      * and only for the events that are not seen yet.
      */
     const handleMarkSeen = (group: ActivityGroup) => {
-        markSeen.mutate([group.head, ...group.members].filter((e) => !e.seen).map((e) => e.id));
+        markManySeen([group.head, ...group.members].filter((e) => !e.seen).map((e) => e.id));
     };
 
     const tableDef: DataTableDef<ActivityGroup>[] = [
@@ -321,7 +331,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const extraActions = (
         <div className="flex flex-wrap items-center gap-2">
             {unseenShown.length > 0 && (
-                <Button variant="secondary" size="sm" onClick={() => markSeen.mutate(unseenShown)}>
+                <Button variant="secondary" size="sm" onClick={() => markManySeen(unseenShown)}>
                     Mark as seen
                 </Button>
             )}
