@@ -9,6 +9,7 @@ import {
     cn,
     type DataTableDef,
     type EntityDetail,
+    LoadingIndicator,
 } from "@stefgo/react-ui-components";
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
@@ -16,7 +17,6 @@ import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivityStore } from "../../../stores/useActivityStore";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useKeepalivedStore } from "../../../stores/useKeepalivedStore";
-import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";

@@ -28,7 +28,6 @@ src/
 │   │       ├── ClientIdentityCard.tsx    # The client's own fields, edited and saved in place
 │   │       ├── ClientEditor.tsx          # Form for editing a client
 │   │       ├── ClientLabel.tsx           # Dot and name of a client, for the rows that name one
-│   │       ├── StatusDot.tsx             # Online indicator, shared by every view that shows one
 │   │       └── add-client/               # One wizard for both connection modes
 │   │           ├── AddClientWizard.tsx   # Mode choice, then the inbound or outbound branch
 │   │           ├── useAddClientForm.ts   # Form state, held above the wizard
@@ -81,10 +80,8 @@ src/
 │           ├── TokenList.tsx
 │           └── TokenModal.tsx
 ├── components/
-│   ├── LoadingIndicator.tsx              # "Something is on its way", for a view with nothing yet
 │   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
-│   ├── listDefaults.ts                   # Page size (20 own page, 10 inside a tab) and pagination
-│   └── menuEntry.ts                      # Class of a detail page's action-menu entry
+│   └── listDefaults.ts                   # Page size (20 own page, 10 inside a tab) and pagination
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
@@ -208,15 +205,17 @@ The container component for the client management view. Coordinates between the 
     - A **keepalived** column sums up the host's last reading: `2 instances · 1 MASTER`, with FAULTs called out, or "Not running" / "Unreadable".
     - Deletes clients after a confirmation that says what goes (the server-side record and last keepalived reading) and what stays (keepalived on the host; the agent keeps running but is refused).
 
-### LoadingIndicator (`components`)
+### LoadingIndicator (UI library)
 
 "Something is on its way", for a view with nothing to show yet — a lazy route, the settings loading, a client's first keepalived reading. `role="status"` announces the label when it appears; the spinner is decorative.
 
-### StatusDot (`features/clients`)
+### StatusDot (UI library)
 
 The dot that says whether the server currently holds a connection to a client — in the client list, the client header and the host column of every cluster.
 
-It takes a boolean rather than a client's status field, because two of the call sites have only the boolean: the comparison belongs to the caller, the appearance belongs to the component. The dot is `aria-hidden`, since every place that shows it also names the state in text.
+It is the library's `StatusDot` and takes a `tone`, not a client's status: the caller maps its own word onto a role (`success` for a connected client, `neutral` otherwise), the appearance belongs to the component. Without a `label` the dot is `aria-hidden`, since every place that shows it also names the state in text.
+
+`AppLayout` wraps the dashboard in `StatusDotProvider` with `live` bound to the WebSocket's `isConnected`: a pulse says "this is happening now", and while the socket is gone no dot pulses.
 
 ### Dialogs
 
@@ -562,6 +561,7 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `DataListDef` / `DataListColumnDef` | Column definitions for list mode.            |
 | `DataAction`           | Typed action descriptors for data row operations.         |
 | `ActionMenu`           | Context ("kebab") menu for per-item actions.              |
+| `MenuItem`             | One entry of a detail page's `ActionMenu`: icon, label, `variant="danger"` for an entry that destroys something. It closes the menu itself. |
 | `useActionMenu`        | Hook for `ActionMenu` state; supplies the trigger's `anchor`. |
 | `useTabs` / `TabList` / `TabPanel` | The settings page's sections. See below. |
 | `Modal`                | The base every dialog is built from — focus trap, Escape, scroll lock, focus return. |

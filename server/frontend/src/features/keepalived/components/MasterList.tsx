@@ -5,12 +5,12 @@ import {
     DataMultiView,
     type DataListColumnDef,
     type DataTableDef,
+    StatusDot,
 } from "@stefgo/react-ui-components";
 import type { VrrpCluster, VrrpClusterMember } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
-import { StatusDot } from "../../clients/components/StatusDot";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterLabel, clusterPath } from "../lib/vrrp";
 import { Vips } from "./VrrpInstanceView";
@@ -32,7 +32,7 @@ const HostLink = ({ row }: { row: MasterRow }) => (
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"
     >
-        <StatusDot online={row.member.online} />
+        <StatusDot tone={row.member.online ? "success" : "neutral"} />
         {row.hostName}
     </Link>
 );

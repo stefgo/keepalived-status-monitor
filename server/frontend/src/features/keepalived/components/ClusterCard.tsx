@@ -1,9 +1,8 @@
 import { ReactNode } from "react";
-import { Checkbox } from "@stefgo/react-ui-components";
+import { Checkbox, StatusDot } from "@stefgo/react-ui-components";
 import type { VrrpCluster } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { clientName } from "../../../utils";
-import { StatusDot } from "../../clients/components/StatusDot";
 import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { VrrpInstanceView } from "./VrrpInstanceView";
@@ -78,7 +77,7 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                         stateBadge: <MemberStateBadge member={member} />,
                         host: (
                             <span className="flex items-center gap-2">
-                                <StatusDot online={member.online} />
+                                <StatusDot tone={member.online ? "success" : "neutral"} />
                                 {name}
                             </span>
                         ),

@@ -18,6 +18,8 @@ import {
     DashboardNavGroup,
     ConfirmProvider,
     ToastProvider,
+    LoadingIndicator,
+    StatusDotProvider,
 } from "@stefgo/react-ui-components";
 import { CLIENT_STATUS } from "@kasm/shared";
 
@@ -26,6 +28,7 @@ import { useTheme } from "./context/ThemeContext";
 import { ThemeProvider } from "./context/ThemeProvider";
 import { useAuth } from "../auth/AuthContext";
 import { AuthProvider } from "../auth/AuthProvider";
+import { useWebSocket } from "./context/WebSocketContext";
 import { WebSocketProvider } from "./context/WebSocketProvider";
 
 // Hooks & Stores
@@ -33,7 +36,6 @@ import { useClientStore } from "../../stores/useClientStore";
 import { useUIStore } from "../../stores/useUIStore";
 import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
 import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
-import { LoadingIndicator } from "../../components/LoadingIndicator";
 import { NotFoundCard } from "../../components/NotFoundCard";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
@@ -218,6 +220,9 @@ function AppLayout() {
 
     const { theme, toggleTheme } = useTheme();
     const { isSidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+    // A pulsing dot says "this is live". Without the socket nobody is watching the state
+    // any more, so no dot below pulses until it is back.
+    const isConnected = useWebSocket()?.isConnected ?? false;
 
     // Activity. The badge only signals that something needs a look: red for an unseen error,
     // yellow for an unseen warning, nothing otherwise.
@@ -389,41 +394,43 @@ function AppLayout() {
     );
 
     return (
-        <Dashboard
-            logo={logo}
-            title={title}
-            username={username}
-            onLogout={logout}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            isSidebarCollapsed={isSidebarCollapsed}
-            onToggleSidebar={toggleSidebarCollapsed}
-            pages={pages}
-            navGroups={navGroups}
-            currentPath={path}
-        >
-            <Suspense fallback={<LoadingIndicator />}>
-                <Routes>
-                    <Route path="/" element={<KeepalivedDashboard />} />
-                    <Route path="/clusters" element={<ClusterOverview />} />
-                    <Route path="/clusters/:vrid" element={<ClusterRoute />} />
-                    <Route path="/clusters/:site/:vrid" element={<ClusterRoute />} />
-                    <Route path="/clients" element={<ClientsRoute />} />
-                    <Route path="/clients/new" element={<AddClientRoute />} />
-                    <Route path="/client/:clientId" element={<ClientDetailRoute />} />
-                    <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
-                    <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
-                    <Route path="/activity" element={<ActivityView />} />
-                    <Route path="/users" element={<UserOverview />} />
-                    <Route path="/tokens" element={<TokenOverview />} />
-                    <Route path="/webhooks" element={<WebhookOverview />} />
-                    <Route path="/webhooks/new" element={<WebhookEditorRoute />} />
-                    <Route path="/webhooks/:webhookId" element={<WebhookEditorRoute />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="*" element={<NotFound />} />
-                </Routes>
-            </Suspense>
-        </Dashboard>
+        <StatusDotProvider live={isConnected}>
+            <Dashboard
+                logo={logo}
+                title={title}
+                username={username}
+                onLogout={logout}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+                isSidebarCollapsed={isSidebarCollapsed}
+                onToggleSidebar={toggleSidebarCollapsed}
+                pages={pages}
+                navGroups={navGroups}
+                currentPath={path}
+            >
+                <Suspense fallback={<LoadingIndicator />}>
+                    <Routes>
+                        <Route path="/" element={<KeepalivedDashboard />} />
+                        <Route path="/clusters" element={<ClusterOverview />} />
+                        <Route path="/clusters/:vrid" element={<ClusterRoute />} />
+                        <Route path="/clusters/:site/:vrid" element={<ClusterRoute />} />
+                        <Route path="/clients" element={<ClientsRoute />} />
+                        <Route path="/clients/new" element={<AddClientRoute />} />
+                        <Route path="/client/:clientId" element={<ClientDetailRoute />} />
+                        <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
+                        <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
+                        <Route path="/activity" element={<ActivityView />} />
+                        <Route path="/users" element={<UserOverview />} />
+                        <Route path="/tokens" element={<TokenOverview />} />
+                        <Route path="/webhooks" element={<WebhookOverview />} />
+                        <Route path="/webhooks/new" element={<WebhookEditorRoute />} />
+                        <Route path="/webhooks/:webhookId" element={<WebhookEditorRoute />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="*" element={<NotFound />} />
+                    </Routes>
+                </Suspense>
+            </Dashboard>
+        </StatusDotProvider>
     );
 }
 

@@ -15,13 +15,13 @@ import {
     ActionButton,
     ActionMenu,
     Button,
-    cn,
     DataAction,
     DataMultiView,
     DataTableDef,
     Select,
     useActionMenu,
     useConfirm,
+    MenuItem,
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord, activityDetail, activityMessage } from "@kasm/shared";
 import { unseenTone, useActivityStore } from "../../../stores/useActivityStore";
@@ -32,7 +32,6 @@ import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, formatDate } from "../../../utils";
-import { MENU_ENTRY } from "../../../components/menuEntry";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
@@ -327,16 +326,15 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                         anchor={menuState?.anchor ?? null}
                         triggerRef={triggerRef}
                     >
-                        {/* Closes the menu first: the dialog would otherwise sit under it. */}
-                        <button
-                            onClick={() => {
-                                closeMenu();
-                                confirm({ ...describeDeleteAllActivity(events.length), onConfirm: clearAll });
-                            }}
-                            className={cn(MENU_ENTRY, "text-error")}
+                        <MenuItem
+                            icon={Trash2}
+                            variant="danger"
+                            onClick={() =>
+                                confirm({ ...describeDeleteAllActivity(events.length), onConfirm: clearAll })
+                            }
                         >
-                            <Trash2 size={16} /> Delete all
-                        </button>
+                            Delete all
+                        </MenuItem>
                     </ActionMenu>
                 </div>
             )}

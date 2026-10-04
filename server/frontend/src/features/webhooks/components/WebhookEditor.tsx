@@ -11,10 +11,10 @@ import {
     Switch,
     Textarea,
     useConfirm,
+    LoadingIndicator,
 } from "@stefgo/react-ui-components";
 import { apiFetch } from "../../../lib/apiFetch";
 import { getErrorMessage } from "../../../utils";
-import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { describeDiscardWebhookChanges } from "../confirmations";
 import { EMPTY_DRAFT, PLACEHOLDERS, draftFrom, inputFrom, previewBody, type WebhookDraft } from "../lib/webhookForm";

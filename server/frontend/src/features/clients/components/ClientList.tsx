@@ -4,8 +4,7 @@ import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { Client, CLIENT_STATUS } from "@kasm/shared";
 import { clientName, EMPTY_VALUE, formatDate } from "../../../utils";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
-import { StatusDot } from "./StatusDot";
-import { Badge, DataTableDef } from "@stefgo/react-ui-components";
+import { Badge, DataTableDef, StatusDot } from "@stefgo/react-ui-components";
 import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
 import { DataMultiView } from "@stefgo/react-ui-components";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
@@ -71,7 +70,7 @@ export const ClientList = ({
             sortValue: (client) => clientName(client),
             tableItemRender: (client) => (
                 <div className="flex items-center gap-3">
-                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
+                    <StatusDot tone={client.status === CLIENT_STATUS.ONLINE ? "success" : "neutral"} />
                     <div
                         className={`text-sm font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
                     >
@@ -125,7 +124,7 @@ export const ClientList = ({
         contentFields.push({
             listItemRender: (client) => (
                 <div className="flex items-center gap-2 py-1">
-                    <StatusDot online={client.status === CLIENT_STATUS.ONLINE} />
+                    <StatusDot tone={client.status === CLIENT_STATUS.ONLINE ? "success" : "neutral"} />
                     <div
                         className={`font-medium text-text-primary ${client.status === CLIENT_STATUS.ONLINE ? "" : "opacity-70"} truncate`}
                     >

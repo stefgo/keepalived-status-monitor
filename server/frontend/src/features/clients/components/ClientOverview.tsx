@@ -12,9 +12,9 @@ import {
     type EntityDetail,
     useActionMenu,
     useConfirm,
+    StatusDot,
+    MenuItem,
 } from "@stefgo/react-ui-components";
-import { StatusDot } from "./StatusDot";
-import { MENU_ENTRY } from "../../../components/menuEntry";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
 import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
@@ -80,7 +80,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     return (
         <div className="space-y-6">
             <EntityHeader
-                leading={<StatusDot online={isOnline} size="md" />}
+                leading={<StatusDot tone={isOnline ? "success" : "neutral"} size="md" />}
                 title={`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}
                 meta={
                     <>
@@ -111,29 +111,25 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                             anchor={menuState?.anchor ?? null}
                             triggerRef={triggerRef}
                         >
-                            <button
+                            <MenuItem
+                                icon={RefreshCw}
                                 disabled={!isOnline}
-                                onClick={() => {
-                                    void handleReloadClient();
-                                    closeMenu();
-                                }}
-                                className={MENU_ENTRY}
+                                onClick={() => void handleReloadClient()}
                             >
-                                <RefreshCw size={16} /> Read keepalived now
-                            </button>
-                            <button
-                                onClick={() => {
+                                Read keepalived now
+                            </MenuItem>
+                            <MenuItem
+                                icon={Edit}
+                                onClick={() =>
                                     // `from` is how the editor knows that back is this
                                     // page and not the client list.
                                     navigate(`/client/${client.id}/edit`, {
                                         state: { from: pathname },
-                                    });
-                                    closeMenu();
-                                }}
-                                className={MENU_ENTRY}
+                                    })
+                                }
                             >
-                                <Edit size={16} /> Edit
-                            </button>
+                                Edit
+                            </MenuItem>
                         </ActionMenu>
                     </div>
                 }

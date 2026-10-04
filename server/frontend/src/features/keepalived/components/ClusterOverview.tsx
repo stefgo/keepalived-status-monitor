@@ -6,12 +6,12 @@ import {
     DataMultiView,
     type DataListColumnDef,
     type DataTableDef,
+    StatusDot,
 } from "@stefgo/react-ui-components";
 import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
 import { useClientStore } from "../../../stores/useClientStore";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
-import { StatusDot } from "../../clients/components/StatusDot";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
@@ -100,7 +100,7 @@ const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => 
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"
     >
-        <StatusDot online={row.member.online} />
+        <StatusDot tone={row.member.online ? "success" : "neutral"} />
         {row.hostName}
     </Link>
 );
