@@ -2,18 +2,18 @@ import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { StatCard } from "@stefgo/react-ui-components";
-import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
 import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { useActivity } from "../../../queries/activity";
 import { ActivityView } from "../../activity/components/ActivityView";
-import { groupActivity } from "../../activity/lib/groupActivity";
 import { ClientList } from "../../clients/components/ClientList";
-import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { ClusterCard } from "./ClusterCard";
-import { ClusterOverview } from "./ClusterOverview";
-import { MasterList } from "./MasterList";
+import { SEARCH_PARAM, paths } from "../../../lib/paths";
+import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
+import { clientCount, formatOnlineCount, instanceCount, needsAttention, unseenProblems } from "../lib/dashboard";
+import { ClusterCard } from "../../keepalived/components/ClusterCard";
+import { ClusterOverview } from "../../keepalived/components/ClusterOverview";
+import { MasterList } from "../../keepalived/components/MasterList";
 
 /**
  * The list a card opens beneath the cards. One at a time: the lists keep their search in
@@ -32,7 +32,7 @@ const toPanel = (value: string | null): Panel | null =>
  * The landing page: how many hosts report, how many instances they run, and the clusters
  * that need a look. A healthy fleet shows the four numbers and nothing else.
  */
-export const KeepalivedDashboard = () => {
+export const DashboardOverview = () => {
     const navigate = useNavigate();
     const { clients, error: clientsError } = useClients();
     const { states, error: statesError } = useKeepalivedStates();
@@ -53,35 +53,17 @@ export const KeepalivedDashboard = () => {
                 } else {
                     params.set(PANEL_PARAM, next);
                 }
-                params.delete("search");
+                params.delete(SEARCH_PARAM);
                 return params;
             },
             { replace: true },
         );
     };
 
-    const summary = useMemo(() => {
-        const online = clients.filter((client) => client.status === CLIENT_STATUS.ONLINE);
-        const onlineStates = online.map((client) => states[client.id]).filter(Boolean);
-        const instances = onlineStates.flatMap((state) => state.instances);
-        return {
-            online: online.length,
-            instances: instances.length,
-            masters: instances.filter((instance) => instance.state === "MASTER").length,
-            faults: instances.filter((instance) => instance.state === "FAULT").length,
-        };
-    }, [clients, states]);
-
-    const attention = clusters.filter((cluster) => cluster.health !== "ok" && cluster.health !== "unknown");
-
-    // What the activity list opens on from the Errors / Warnings card: unseen rows at warning
-    // and above, counted as rows -- grouped the way the list groups them.
-    const unseenWarnings = useMemo(() => {
-        const warning = ACTIVITY_LEVELS.indexOf("warning");
-        return groupActivity(events).filter(
-            (group) => group.unseen && ACTIVITY_LEVELS.indexOf(group.level) >= warning,
-        ).length;
-    }, [events]);
+    const hosts = useMemo(() => clientCount(clients), [clients]);
+    const summary = useMemo(() => instanceCount(clients, states), [clients, states]);
+    const attention = useMemo(() => needsAttention(clusters), [clusters]);
+    const unseenWarnings = useMemo(() => unseenProblems(events), [events]);
 
     // Four zeroes would say the fleet is empty, which is another statement altogether.
     const loadError = clientsError ?? statesError;
@@ -92,7 +74,7 @@ export const KeepalivedDashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 <StatCard
                     label="Hosts online"
-                    value={`${summary.online} / ${clients.length}`}
+                    value={formatOnlineCount(hosts)}
                     icon={Monitor}
                     onClick={() => togglePanel("hosts")}
                     selected={panel === "hosts"}
@@ -131,7 +113,7 @@ export const KeepalivedDashboard = () => {
                     {panel === "hosts" && (
                         <ClientList
                             clients={clients}
-                            setSelectedClient={(client) => client && navigate(`/client/${client.id}`)}
+                            setSelectedClient={(client) => client && navigate(paths.client(client.id))}
                         />
                     )}
                     {panel === "clusters" && <ClusterOverview />}

@@ -17,6 +17,7 @@ import {
 } from "@stefgo/react-ui-components";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
 import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
+import { ROUTES, paths } from "../../../lib/paths";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 interface ClientOverviewProps {
@@ -28,7 +29,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const { pathname, state } = useLocation();
     // The list is the only surface that opens this page today, and the honest fallback for
     // a directly opened URL -- the same `from` convention the editor reached from here uses.
-    const back = (state as { from?: string } | null)?.from ?? "/clients";
+    const back = (state as { from?: string } | null)?.from ?? ROUTES.clients;
     const reading = useKeepalivedState(client.id);
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { alert } = useConfirm();
@@ -122,7 +123,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                                 onClick={() =>
                                     // `from` is how the editor knows that back is this
                                     // page and not the client list.
-                                    navigate(`/client/${client.id}/edit`, {
+                                    navigate(paths.clientEdit(client.id), {
                                         state: { from: pathname },
                                     })
                                 }

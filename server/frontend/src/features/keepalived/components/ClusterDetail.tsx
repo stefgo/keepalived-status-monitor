@@ -20,11 +20,11 @@ import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
+import { ROUTES, activitySearch, clusterPath, paths } from "../../../lib/paths";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import {
     clusterNetworkKey,
     clusterLabel,
-    clusterPath,
     clusterVipLabel,
     clustersAt,
     defaultCompareSelection,
@@ -73,7 +73,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const { state } = useLocation();
     // The surface that opened this page says where it was; a directly opened URL goes back
     // to the cluster list.
-    const back = (state as { from?: string } | null)?.from ?? "/clusters";
+    const back = (state as { from?: string } | null)?.from ?? ROUTES.clusters;
     useEscapeToLeave(back);
 
     const clusters = useVrrpClusters();
@@ -138,7 +138,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         if (loadError) return <QueryError title="Could not load the cluster" error={loadError} />;
         if (clientsLoading || readingsLoading) return <LoadingIndicator />;
         return (
-            <NotFoundCard title="Cluster not found" backTo="/clusters" backLabel="Back to clusters">
+            <NotFoundCard title="Cluster not found" backTo={ROUTES.clusters} backLabel="Back to clusters">
                 No host reports a VRRP instance for {label}.
             </NotFoundCard>
         );
@@ -149,7 +149,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         return c ? clientName(c) : clientId;
     };
     const hostLink = (clientId: string) => (
-        <Link to={`/client/${clientId}`} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
+        <Link to={paths.client(clientId)} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
             {hostName(clientId)}
         </Link>
     );
@@ -229,7 +229,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 tableHeader: (
                     <div className="flex flex-col items-end gap-1">
                         <Link
-                            to={`/client/${m.clientId}`}
+                            to={paths.client(m.clientId)}
                             className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
                         >
                             {hostName(m.clientId)}
@@ -364,7 +364,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                 action={
                     instanceNames.length === 1 && (
                         <Link
-                            to={`/activity?search=${encodeURIComponent(instanceNames[0])}`}
+                            to={activitySearch(instanceNames[0])}
                             className={cn("rounded-sm text-sm text-text-secondary hover:text-primary", FOCUS_RING)}
                         >
                             Show all
@@ -432,7 +432,7 @@ const ClusterChoice = ({
                 {candidates.map((candidate) => (
                     <li key={candidate.key} className="flex flex-wrap items-center gap-2 text-sm">
                         <Link
-                            to={clusterPath(candidate, clusters) ?? "/clusters"}
+                            to={clusterPath(candidate, clusters) ?? ROUTES.clusters}
                             state={state}
                             className={cn("rounded-sm font-mono text-text-primary hover:text-primary", FOCUS_RING)}
                         >

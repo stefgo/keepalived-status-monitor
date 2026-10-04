@@ -12,7 +12,8 @@ import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterLabel, clusterPath } from "../lib/vrrp";
+import { clusterPath, paths } from "../../../lib/paths";
+import { clusterLabel } from "../lib/vrrp";
 import { Vips } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
@@ -27,7 +28,7 @@ interface MasterRow {
 
 const HostLink = ({ row }: { row: MasterRow }) => (
     <Link
-        to={`/client/${row.member.clientId}`}
+        to={paths.client(row.member.clientId)}
         // The row leads to the cluster; the host name leads to the host.
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"

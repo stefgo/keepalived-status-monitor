@@ -25,7 +25,7 @@ import {
     ThemeProvider,
     useTheme,
 } from "@stefgo/react-ui-components";
-import { CLIENT_STATUS, type Client } from "@kasm/shared";
+import type { Client } from "@kasm/shared";
 
 import Login from "../../pages/Login";
 import { useAuth } from "../auth/AuthContext";
@@ -42,7 +42,9 @@ import { NotFoundCard } from "../../components/NotFoundCard";
 import { QueryError } from "../../components/QueryError";
 import { useKeepalivedStates } from "../../queries/keepalived";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
-import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
+import { clusterOf } from "../keepalived/lib/vrrp";
+import { CLUSTER_NET_PARAM, ROUTES, clusterPath, paths } from "../../lib/paths";
+import { clientCount, formatOnlineCount } from "../dashboard/lib/dashboard";
 import { STORAGE_KEYS } from "../../lib/storageKeys";
 import { queryClient } from "../../lib/queryClient";
 
@@ -63,10 +65,8 @@ const AddClientWizard = lazy(() =>
         default: m.AddClientWizard,
     })),
 );
-const KeepalivedDashboard = lazy(() =>
-    import("../keepalived/components/KeepalivedDashboard").then((m) => ({
-        default: m.KeepalivedDashboard,
-    })),
+const DashboardOverview = lazy(() =>
+    import("../dashboard/components/DashboardOverview").then((m) => ({ default: m.DashboardOverview })),
 );
 const ClusterDetail = lazy(() =>
     import("../keepalived/components/ClusterDetail").then((m) => ({ default: m.ClusterDetail })),
@@ -98,7 +98,7 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     const { isAuthenticated } = useAuth();
     if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to={ROUTES.login} replace />;
     }
     return <>{children}</>;
 };
@@ -125,13 +125,13 @@ function ClientsRoute() {
     return (
         <ManagedClients
             clients={clients}
-            onSelect={(c) => (c ? navigate(`/client/${c.id}`) : navigate("/clients"))}
+            onSelect={(c) => navigate(c ? paths.client(c.id) : ROUTES.clients)}
             onRefresh={() => {
                 void refetch();
             }}
             onDelete={(id) => deleteClient.mutateAsync(id)}
-            onAdd={() => open("/clients/new")}
-            onEdit={(c) => open(`/client/${c.id}/edit`)}
+            onAdd={() => open(ROUTES.clientNew)}
+            onEdit={(c) => open(paths.clientEdit(c.id))}
         />
     );
 }
@@ -140,7 +140,7 @@ function AddClientRoute() {
     const navigate = useNavigate();
     const { state } = useLocation();
     const createOutboundClient = useCreateOutboundClient();
-    const back = (state as { from?: string } | null)?.from ?? "/clients";
+    const back = (state as { from?: string } | null)?.from ?? ROUTES.clients;
 
     return (
         <AddClientWizard
@@ -170,7 +170,7 @@ function RouteClient({ children }: { children: (client: Client) => ReactNode }) 
     if (error) return <QueryError title="Could not load the client" error={error} />;
     if (isPending) return <LoadingIndicator label="Loading client…" />;
     return (
-        <NotFoundCard title="Client not found" backTo="/clients" backLabel="Back to clients">
+        <NotFoundCard title="Client not found" backTo={ROUTES.clients} backLabel="Back to clients">
             There is no client with this id. It may have been deleted.
         </NotFoundCard>
     );
@@ -201,7 +201,7 @@ function ClientInstanceRedirect({ client }: { client: Client }) {
         if (error) return <QueryError title="Could not load the keepalived readings" error={error} />;
         if (isPending) return <LoadingIndicator />;
         return (
-            <NotFoundCard title="Instance not found" backTo={`/client/${client.id}`} backLabel="Back to the host">
+            <NotFoundCard title="Instance not found" backTo={paths.client(client.id)} backLabel="Back to the host">
                 No cluster has the VRRP instance <code className="font-mono text-sm">{instanceName}</code> of this
                 host.
             </NotFoundCard>
@@ -217,7 +217,7 @@ function ClusterRoute() {
     const [searchParams] = useSearchParams();
     if (!/^\d+$/.test(vrid)) return <NotFound />;
 
-    return <ClusterDetail site={site ?? null} vrid={Number(vrid)} net={searchParams.get("net")} />;
+    return <ClusterDetail site={site ?? null} vrid={Number(vrid)} net={searchParams.get(CLUSTER_NET_PARAM)} />;
 }
 
 function ClientEditRoute() {
@@ -237,7 +237,7 @@ function NotFound() {
     const { pathname } = useLocation();
 
     return (
-        <NotFoundCard title="Page not found" backTo="/clients" backLabel="Back to clients">
+        <NotFoundCard title="Page not found" backTo={ROUTES.clients} backLabel="Back to clients">
             There is nothing at <code className="font-mono text-sm">{pathname}</code>.
         </NotFoundCard>
     );
@@ -266,16 +266,8 @@ function AppLayout() {
     // connect, the query covers a slow socket.
     const { clients } = useClients();
 
-    // Stats
-    const stats = useMemo(
-        () => ({
-            clients: {
-                active: clients.filter((c) => c.status === CLIENT_STATUS.ONLINE).length,
-                total: clients.length,
-            },
-        }),
-        [clients],
-    );
+    // Counted by the function the dashboard's card uses, so the two cannot disagree.
+    const clientsBadge = useMemo(() => formatOnlineCount(clientCount(clients)), [clients]);
 
     // Dashboard Props. The name comes from /api/v1/me; the page used to decode it out of
     // the JWT, which lives in an httpOnly cookie now.
@@ -326,93 +318,93 @@ function AppLayout() {
         () => [
             {
                 id: "dashboard",
-                path: "/",
+                path: ROUTES.root,
                 nav: {
                     groupId: "overview",
                     label: "Dashboard",
                     icon: LayoutDashboard,
-                    onClick: () => navigate("/"),
+                    onClick: () => navigate(ROUTES.root),
                 },
             },
             {
                 id: "clients",
-                path: ["/clients", "/client/:clientId"],
+                path: [ROUTES.clients, ROUTES.client],
                 nav: {
                     groupId: "resources",
                     label: "Clients",
                     icon: Monitor,
-                    badge: `${stats.clients.active} / ${stats.clients.total}`,
-                    onClick: () => navigate("/clients"),
+                    badge: clientsBadge,
+                    onClick: () => navigate(ROUTES.clients),
                 },
             },
             {
                 id: "clusters",
-                path: ["/clusters", "/clusters/:vrid", "/clusters/:site/:vrid"],
+                path: [ROUTES.clusters, ROUTES.cluster, ROUTES.clusterAtSite],
                 nav: {
                     groupId: "resources",
                     label: "VRRP Clusters",
                     icon: Network,
-                    onClick: () => navigate("/clusters"),
+                    onClick: () => navigate(ROUTES.clusters),
                 },
             },
             {
                 id: "activity",
-                path: "/activity",
+                path: ROUTES.activity,
                 nav: {
                     groupId: "activity",
                     label: "Activity",
                     icon: Activity,
                     badgeDot: activityTone !== undefined,
                     badgeTone: activityTone,
-                    onClick: () => navigate("/activity"),
+                    onClick: () => navigate(ROUTES.activity),
                 },
             },
             {
                 id: "users",
-                path: "/users",
+                path: ROUTES.users,
                 nav: {
                     groupId: "admin",
                     placement: "mobile-more",
                     label: "Users",
                     icon: Users,
-                    onClick: () => navigate("/users"),
+                    onClick: () => navigate(ROUTES.users),
                 },
             },
             {
                 id: "tokens",
-                path: "/tokens",
+                path: ROUTES.tokens,
                 nav: {
                     groupId: "admin",
                     placement: "mobile-more",
                     label: "Client Tokens",
                     icon: Key,
-                    onClick: () => navigate("/tokens"),
+                    onClick: () => navigate(ROUTES.tokens),
                 },
             },
             {
                 id: "webhooks",
-                path: ["/webhooks", "/webhooks/new", "/webhooks/:webhookId"],
+                path: [ROUTES.webhooks, ROUTES.webhookNew, ROUTES.webhook],
                 nav: {
                     groupId: "admin",
                     placement: "mobile-more",
                     label: "Webhooks",
                     icon: Webhook,
-                    onClick: () => navigate("/webhooks"),
+                    onClick: () => navigate(ROUTES.webhooks),
                 },
             },
             {
                 id: "settings",
-                path: "/settings",
+                path: ROUTES.settings,
                 nav: {
                     groupId: "admin",
                     placement: "mobile-more",
                     label: "Settings",
                     icon: SettingsIcon,
-                    onClick: () => navigate("/settings"),
+                    onClick: () => navigate(ROUTES.settings),
                 },
             },
         ],
-        [stats, navigate, activityTone],
+        [clientsBadge, navigate, activityTone],
     );
 
     return (
@@ -433,22 +425,22 @@ function AppLayout() {
             >
                 <Suspense fallback={<LoadingIndicator />}>
                     <Routes>
-                        <Route path="/" element={<KeepalivedDashboard />} />
-                        <Route path="/clusters" element={<ClusterOverview />} />
-                        <Route path="/clusters/:vrid" element={<ClusterRoute />} />
-                        <Route path="/clusters/:site/:vrid" element={<ClusterRoute />} />
-                        <Route path="/clients" element={<ClientsRoute />} />
-                        <Route path="/clients/new" element={<AddClientRoute />} />
-                        <Route path="/client/:clientId" element={<ClientDetailRoute />} />
-                        <Route path="/client/:clientId/edit" element={<ClientEditRoute />} />
-                        <Route path="/client/:clientId/instance/:instanceName" element={<ClientInstanceRoute />} />
-                        <Route path="/activity" element={<ActivityView />} />
-                        <Route path="/users" element={<UserOverview />} />
-                        <Route path="/tokens" element={<TokenOverview />} />
-                        <Route path="/webhooks" element={<WebhookOverview />} />
-                        <Route path="/webhooks/new" element={<WebhookEditorRoute />} />
-                        <Route path="/webhooks/:webhookId" element={<WebhookEditorRoute />} />
-                        <Route path="/settings" element={<Settings />} />
+                        <Route path={ROUTES.root} element={<DashboardOverview />} />
+                        <Route path={ROUTES.clusters} element={<ClusterOverview />} />
+                        <Route path={ROUTES.cluster} element={<ClusterRoute />} />
+                        <Route path={ROUTES.clusterAtSite} element={<ClusterRoute />} />
+                        <Route path={ROUTES.clients} element={<ClientsRoute />} />
+                        <Route path={ROUTES.clientNew} element={<AddClientRoute />} />
+                        <Route path={ROUTES.client} element={<ClientDetailRoute />} />
+                        <Route path={ROUTES.clientEdit} element={<ClientEditRoute />} />
+                        <Route path={ROUTES.clientInstance} element={<ClientInstanceRoute />} />
+                        <Route path={ROUTES.activity} element={<ActivityView />} />
+                        <Route path={ROUTES.users} element={<UserOverview />} />
+                        <Route path={ROUTES.tokens} element={<TokenOverview />} />
+                        <Route path={ROUTES.webhooks} element={<WebhookOverview />} />
+                        <Route path={ROUTES.webhookNew} element={<WebhookEditorRoute />} />
+                        <Route path={ROUTES.webhook} element={<WebhookEditorRoute />} />
+                        <Route path={ROUTES.settings} element={<Settings />} />
                         <Route path="*" element={<NotFound />} />
                     </Routes>
                 </Suspense>
@@ -489,8 +481,8 @@ function AppRoutes() {
         <BrowserRouter>
             <Routes>
                 <Route
-                    path="/login"
-                    element={isAuthenticated ? <Navigate to="/" /> : <Login />}
+                    path={ROUTES.login}
+                    element={isAuthenticated ? <Navigate to={ROUTES.root} /> : <Login />}
                 />
                 <Route
                     path="/*"

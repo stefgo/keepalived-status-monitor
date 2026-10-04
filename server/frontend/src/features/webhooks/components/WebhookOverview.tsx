@@ -4,6 +4,7 @@ import { useConfirm } from "@stefgo/react-ui-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { describeDeleteWebhook } from "../confirmations";
 import { QueryError } from "../../../components/QueryError";
+import { ROUTES, paths } from "../../../lib/paths";
 import { useDeleteWebhook, useSaveWebhook, useWebhooks, webhookListOptions } from "../../../queries/webhooks";
 import { WebhookList } from "./WebhookList";
 
@@ -43,8 +44,8 @@ export const WebhookOverview = () => {
             <WebhookList
                 webhooks={webhooks}
                 isLoading={isPending}
-                onAdd={() => open("/webhooks/new")}
-                onEdit={(webhook) => open(`/webhooks/${webhook.id}`)}
+                onAdd={() => open(ROUTES.webhookNew)}
+                onEdit={(webhook) => open(paths.webhook(webhook.id))}
                 onDelete={requestDelete}
                 onToggleEnabled={toggleEnabled}
             />

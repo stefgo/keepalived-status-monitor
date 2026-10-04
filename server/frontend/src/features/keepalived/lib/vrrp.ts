@@ -108,21 +108,6 @@ export function clustersAt(clusters: VrrpCluster[], site: string | null, vrid: n
     return clusters.filter((cluster) => cluster.site === site && cluster.vrid === vrid);
 }
 
-/**
- * Where a cluster has its page: `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for a
- * client with a site. Only where another cluster shares both does `?net=` name the one
- * meant. A cluster without a VRID has no page -- keepalived reports one for every instance.
- */
-export function clusterPath(cluster: VrrpCluster, clusters: VrrpCluster[]): string | undefined {
-    if (cluster.vrid === null) return undefined;
-    const path = cluster.site
-        ? `/clusters/${encodeURIComponent(cluster.site)}/${cluster.vrid}`
-        : `/clusters/${cluster.vrid}`;
-    return clustersAt(clusters, cluster.site, cluster.vrid).length > 1
-        ? `${path}?net=${encodeURIComponent(clusterNetworkKey(cluster))}`
-        : path;
-}
-
 /** The cluster one host's instance takes part in. */
 export function clusterOf(
     clusters: VrrpCluster[],

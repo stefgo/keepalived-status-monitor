@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Client, UpdateClient } from "@kasm/shared";
 import { X } from "lucide-react";
 import { ActionButton, useConfirm } from "@stefgo/react-ui-components";
+import { ROUTES } from "../../../lib/paths";
 import { useClient } from "../../../queries/clients";
 import { ClientIdentityCard } from "./ClientIdentityCard";
 import { describeDiscardChanges } from "../confirmations";
@@ -26,7 +27,7 @@ export const ClientEditor = ({ client, onSave }: ClientEditorProps) => {
     const location = useLocation();
     // A directly opened URL carries no state -- the list is the honest fallback, since it
     // is the surface this client is guaranteed to appear on.
-    const back = (location.state as { from?: string } | null)?.from ?? "/clients";
+    const back = (location.state as { from?: string } | null)?.from ?? ROUTES.clients;
 
     // The caller may hold a snapshot from when the editor opened; status and version arrive
     // over the socket afterwards, so read the client from the cache rather than the prop.

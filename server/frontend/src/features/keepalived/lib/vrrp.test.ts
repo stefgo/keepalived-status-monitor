@@ -4,7 +4,6 @@ import {
     clusterLabel,
     clusterNetworkKey,
     clusterOf,
-    clusterPath,
     clustersAt,
     clusterVipLabel,
     defaultCompareSelection,
@@ -145,35 +144,16 @@ describe("clusterNetworkKey", () => {
     });
 });
 
-describe("clustersAt and clusterPath", () => {
+describe("clustersAt", () => {
     const plain = cluster();
-    const sited = cluster({ site: "dc 1/a" });
     const first = cluster({ site: "dc2" });
     const second = cluster({ site: "dc2", networks: ["10.0.1.0/24"] });
-    const all = [plain, sited, first, second];
+    const all = [plain, first, second];
 
     it("finds the clusters behind one site and VRID", () => {
         expect(clustersAt(all, null, 51)).toEqual([plain]);
         expect(clustersAt(all, "dc2", 51)).toEqual([first, second]);
         expect(clustersAt(all, "dc2", 52)).toEqual([]);
-    });
-
-    it("is the VRID alone for a cluster without a site", () => {
-        expect(clusterPath(plain, all)).toBe("/clusters/51");
-    });
-
-    it("puts the site first, encoded", () => {
-        expect(clusterPath(sited, all)).toBe("/clusters/dc%201%2Fa/51");
-    });
-
-    it("names the network only where another cluster shares site and VRID", () => {
-        expect(clusterPath(first, all)).toBe("/clusters/dc2/51?net=10.0.0.0%2F24");
-        expect(clusterPath(second, all)).toBe("/clusters/dc2/51?net=10.0.1.0%2F24");
-        expect(clusterPath(first, [first])).toBe("/clusters/dc2/51");
-    });
-
-    it("has no page for a cluster without a VRID", () => {
-        expect(clusterPath(cluster({ vrid: null }), all)).toBeUndefined();
     });
 });
 

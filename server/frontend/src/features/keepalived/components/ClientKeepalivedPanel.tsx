@@ -2,7 +2,8 @@ import { Network } from "lucide-react";
 import { Card, LoadingIndicator } from "@stefgo/react-ui-components";
 import type { KeepalivedState } from "@kasm/shared";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterOf, clusterPath } from "../lib/vrrp";
+import { clusterPath } from "../../../lib/paths";
+import { clusterOf } from "../lib/vrrp";
 import { VrrpInstanceView } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 

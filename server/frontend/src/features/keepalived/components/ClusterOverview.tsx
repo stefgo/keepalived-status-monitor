@@ -15,7 +15,8 @@ import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
-import { clusterLabel, clusterPath, clusterVipLabel, memberStale } from "../lib/vrrp";
+import { clusterPath, paths } from "../../../lib/paths";
+import { clusterLabel, clusterVipLabel, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
@@ -97,7 +98,7 @@ function matches(row: ClusterRow, query: string): boolean {
 
 const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => (
     <Link
-        to={`/client/${row.member.clientId}`}
+        to={paths.client(row.member.clientId)}
         // The row leads to the host as well; without this a click would push it twice.
         onClick={(e) => e.stopPropagation()}
         className="flex items-center gap-2 hover:text-primary"
@@ -319,7 +320,7 @@ export const ClusterOverview = () => {
             // A cluster row opens the cluster's page, a host row the host. `from` is how the
             // cluster page knows where back is.
             onRowClick={(row) => {
-                const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : `/client/${row.member.clientId}`;
+                const to = row.kind === "cluster" ? clusterPath(row.cluster, clusters) : paths.client(row.member.clientId);
                 if (to) navigate(to, { state: { from: pathname } });
             }}
         />

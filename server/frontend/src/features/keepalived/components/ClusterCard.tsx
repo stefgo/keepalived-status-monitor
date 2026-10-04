@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Checkbox, StatusDot } from "@stefgo/react-ui-components";
 import type { VrrpCluster } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
+import { paths } from "../../../lib/paths";
 import { clientName } from "../../../utils";
 import { clusterVipLabel, memberKey, memberStale } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
@@ -71,7 +72,7 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                     const key = memberKey(member);
                     return {
                         key,
-                        href: `/client/${member.clientId}`,
+                        href: paths.client(member.clientId),
                         instance: member.instance,
                         stale: memberStale(member),
                         stateBadge: <MemberStateBadge member={member} />,
