@@ -36,7 +36,7 @@ import { WebSocketProvider } from "./context/WebSocketProvider";
 import { useClient, useClients, useCreateOutboundClient, useDeleteClient, useUpdateClient } from "../../queries/clients";
 import { tokenListOptions } from "../../queries/tokens";
 import { useUIStore } from "../../stores/useUIStore";
-import { unseenTone, useActivityStore } from "../../stores/useActivityStore";
+import { useUnseenTone } from "../../queries/activity";
 import { NotFoundCard } from "../../components/NotFoundCard";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
@@ -231,7 +231,7 @@ function AppLayout() {
     // Activity. The badge only signals that something needs a look: red for an unseen error,
     // yellow for an unseen warning, nothing otherwise.
     const activityTone =
-        useActivityStore((s) => unseenTone(s.events)) ?? undefined;
+        useUnseenTone() ?? undefined;
 
     // Routing Helpers
     const path = location.pathname;

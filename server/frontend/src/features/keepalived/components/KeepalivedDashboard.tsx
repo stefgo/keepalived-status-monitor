@@ -5,7 +5,7 @@ import { StatCard } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
 import { useKeepalivedStates } from "../../../queries/keepalived";
-import { useActivityStore } from "../../../stores/useActivityStore";
+import { useActivity } from "../../../queries/activity";
 import { ActivityView } from "../../activity/components/ActivityView";
 import { groupActivity } from "../../activity/lib/groupActivity";
 import { ClientList } from "../../clients/components/ClientList";
@@ -36,7 +36,7 @@ export const KeepalivedDashboard = () => {
     const { clients } = useClients();
     const { states } = useKeepalivedStates();
     const clusters = useVrrpClusters();
-    const events = useActivityStore((s) => s.events);
+    const { events } = useActivity();
     const [searchParams, setSearchParams] = useSearchParams();
     const panel = toPanel(searchParams.get(PANEL_PARAM));
     // A second click on the open card closes its list again. The search is dropped either

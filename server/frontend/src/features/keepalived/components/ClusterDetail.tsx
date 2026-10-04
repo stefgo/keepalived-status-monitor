@@ -14,7 +14,7 @@ import {
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
 import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
-import { useActivityStore } from "../../../stores/useActivityStore";
+import { useActivity } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { NotFoundCard } from "../../../components/NotFoundCard";
@@ -78,7 +78,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const clusters = useVrrpClusters();
     const { clients, isPending: clientsLoading } = useClients();
     const { states: readings } = useKeepalivedStates();
-    const events = useActivityStore((s) => s.events);
+    const { events } = useActivity();
 
     const candidates = clustersAt(clusters, site, vrid);
     const cluster =

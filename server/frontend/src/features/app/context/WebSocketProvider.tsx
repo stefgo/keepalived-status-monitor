@@ -4,9 +4,9 @@ import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
 import { queryClient } from "../../../lib/queryClient";
 import { clientListOptions } from "../../../queries/clients";
-import { applyKeepalivedState, type KeepalivedStates } from "../../../lib/cacheUpdates";
+import { appendActivity, applyKeepalivedState, markActivitySeen, type KeepalivedStates } from "../../../lib/cacheUpdates";
 import { keepalivedStatesOptions } from "../../../queries/keepalived";
-import { useActivityStore } from "../../../stores/useActivityStore";
+import { activityListOptions } from "../../../queries/activity";
 import { useSchedulerStore } from "../../../stores/useSchedulerStore";
 
 interface WebSocketProviderProps {
@@ -15,11 +15,6 @@ interface WebSocketProviderProps {
 
 export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     const { isAuthenticated } = useAuth();
-    // Only the actions: the whole store would re-render the provider on every activity update.
-    const setEvents = useActivityStore((s) => s.setEvents);
-    const appendEvents = useActivityStore((s) => s.appendEvents);
-    const applySeen = useActivityStore((s) => s.applySeen);
-    const fetchEvents = useActivityStore((s) => s.fetchEvents);
     const applySchedulerUpdate = useSchedulerStore((s) => s.applyUpdate);
     const [isConnected, setIsConnected] = useState(false);
     const socketRef = useRef<WebSocket | null>(null);
@@ -50,7 +45,6 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
-                fetchEvents();
             };
 
             socket.onmessage = (event) => {
@@ -85,15 +79,28 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                         );
                         break;
                     }
+                    // The whole list: on connect, and empty after "Delete all".
                     case WS_EVENTS.ACTIVITY_UPDATE:
-                        setEvents(message.data.payload);
+                        queryClient.setQueryData(activityListOptions.queryKey, message.data.payload);
                         break;
-                    case WS_EVENTS.ACTIVITY_APPENDED:
-                        appendEvents(message.data.payload);
+                    // Only onto a list that is there: the events alone would pass for all
+                    // of it. The list itself arrives with the connect, before any of these.
+                    case WS_EVENTS.ACTIVITY_APPENDED: {
+                        const incoming = message.data.payload;
+                        queryClient.setQueryData(
+                            activityListOptions.queryKey,
+                            (events) => events && appendActivity(events, incoming),
+                        );
                         break;
-                    case WS_EVENTS.ACTIVITY_SEEN:
-                        applySeen(message.data.payload.ids);
+                    }
+                    case WS_EVENTS.ACTIVITY_SEEN: {
+                        const { ids } = message.data.payload;
+                        queryClient.setQueryData(
+                            activityListOptions.queryKey,
+                            (events) => events && markActivitySeen(events, ids),
+                        );
                         break;
+                    }
                     case WS_EVENTS.SCHEDULER_STATUS_UPDATE:
                         applySchedulerUpdate(message.data.payload);
                         break;
@@ -143,7 +150,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                 clearTimeout(reconnectTimeoutRef.current);
             }
         };
-    }, [isAuthenticated, setEvents, appendEvents, applySeen, fetchEvents, applySchedulerUpdate]);
+    }, [isAuthenticated, applySchedulerUpdate]);
 
     return (
         <WebSocketContext.Provider value={{ isConnected }}>

@@ -26,7 +26,8 @@ import {
     listPagination,
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord, activityDetail, activityMessage } from "@kasm/shared";
-import { unseenTone, useActivityStore } from "../../../stores/useActivityStore";
+import { unseenTone } from "../../../lib/cacheUpdates";
+import { useActivity, useClearActivity, useMarkActivitySeen } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
@@ -112,7 +113,9 @@ interface ActivityViewProps {
  * that; the search box covers everything a reader would look for by name.
  */
 export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
-    const { events, markManySeen, clearAll } = useActivityStore();
+    const { events } = useActivity();
+    const markSeen = useMarkActivitySeen();
+    const clearActivity = useClearActivity();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const { confirm } = useConfirm();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
@@ -176,9 +179,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
      * and only for the events that are not seen yet.
      */
     const handleMarkSeen = (group: ActivityGroup) => {
-        markManySeen(
-            [group.head, ...group.members].filter((e) => !e.seen).map((e) => e.id),
-        );
+        markSeen.mutate([group.head, ...group.members].filter((e) => !e.seen).map((e) => e.id));
     };
 
     const tableDef: DataTableDef<ActivityGroup>[] = [
@@ -310,7 +311,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
     const extraActions = (
         <div className="flex flex-wrap items-center gap-2">
             {unseenShown.length > 0 && (
-                <Button variant="secondary" size="sm" onClick={() => markManySeen(unseenShown)}>
+                <Button variant="secondary" size="sm" onClick={() => markSeen.mutate(unseenShown)}>
                     Mark as seen
                 </Button>
             )}
@@ -331,7 +332,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                             icon={Trash2}
                             variant="danger"
                             onClick={() =>
-                                confirm({ ...describeDeleteAllActivity(events.length), onConfirm: clearAll })
+                                confirm({ ...describeDeleteAllActivity(events.length), onConfirm: () => clearActivity.mutateAsync() })
                             }
                         >
                             Delete all
