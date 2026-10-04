@@ -49,6 +49,8 @@ npm run build            # Build all workspaces
 npm run clean            # Clean build artifacts
 npm run lint             # ESLint over shared, client and server/backend
 npm run lint:frontend    # ESLint over server/frontend (its own config)
+npm test                 # Vitest over shared and the frontend, once
+npm run test:watch       # Vitest, re-running what a change touches
 npm run screenshots      # docs/assets/screenshots from a running server (see docs/development.md)
 
 # Frontend only (server/frontend)
@@ -184,11 +186,21 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
 
 ## Testing
 
-No test framework is configured. TypeScript and ESLint are the primary quality gates.
-CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm run typecheck -w server/frontend`,
-`npm run lint -w server/frontend` and `npm run lint` on every branch and pull request;
-`build.yml` calls the same workflow and only builds images once it passes. Run the four
-locally before pushing.
+Vitest, configured in `vitest.config.mts` at the root with one project per workspace that
+has tests: `shared` and `frontend`. Both run in plain Node, so what is tested is logic —
+nothing renders a component or starts the backend. `client` and `server/backend` have no
+tests yet.
+
+- A test lives next to its module (`vrrpCluster.ts`, `vrrpCluster.test.ts`).
+- The frontend project sets the `development` condition, so its tests read `shared/src` and
+  need no build first.
+- `shared` builds with `tsconfig.build.json`, which keeps the tests out of `dist`;
+  `npm run typecheck -w shared` is what type-checks them.
+
+CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm test`, `npm run typecheck -w shared`,
+`npm run typecheck -w server/frontend`, `npm run lint -w server/frontend` and `npm run lint`
+on every branch and pull request; `build.yml` calls the same workflow and only builds images
+once it passes. Run the six locally before pushing.
 
 ## Docs
 

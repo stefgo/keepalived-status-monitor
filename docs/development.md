@@ -185,11 +185,11 @@ Each architecture is built on a native GitHub runner (`ubuntu-latest` and `ubunt
 
 ### Continuous Integration
 
-There are no automated tests, so type checking and linting are the quality gates. Every job declares its own `permissions`, and every workflow has a `concurrency` group; a tag build is never cancelled.
+Type checking, linting and the [tests](#tests) of the pure logic are the quality gates; nothing renders a component or starts the backend. Every job declares its own `permissions`, and every workflow has a `concurrency` group; a tag build is never cancelled.
 
 | Workflow | Trigger | What it does |
 | :------- | :------ | :----------- |
-| **Check Code** (`ci.yml`) | Push to any branch except `main`, every pull request, and `workflow_call` | Job `verify`: checks that the registry cleanup names every image `build.yml` publishes, then `npm ci`, `npm run build` (type-checks `shared`, `client` and `server/backend`, builds the frontend), `npm run typecheck -w server/frontend` (the Vite build does not type-check), `npm run lint -w server/frontend`, `npm run lint` (the root ESLint config, covering `shared`, `client` and `server/backend`). |
+| **Check Code** (`ci.yml`) | Push to any branch except `main`, every pull request, and `workflow_call` | Job `verify`: checks that the registry cleanup names every image `build.yml` publishes, then `npm ci`, `npm run build` (type-checks `shared`, `client` and `server/backend`, builds the frontend), `npm test` (Vitest over `shared` and the frontend; reads `shared` from source, so it does not depend on the build before it), `npm run typecheck -w shared` (the build leaves the tests of `shared` out of `dist`, and Vitest does not check types), `npm run typecheck -w server/frontend` (the Vite build does not type-check), `npm run lint -w server/frontend`, `npm run lint` (the root ESLint config, covering `shared`, `client` and `server/backend`). |
 | **Build Images** (`build.yml`) | Push to `main` or `dev` (except documentation-only commits), `v*.*.*` tags, manual dispatch — which is how a release reaches it | See the job graph below. |
 | **Create Release** (`release.yml`) | Manual, `main` only | See [Release](#release). |
 | **Prune Registry** (`cleanup-packages.yml`) | Nightly, manual | See [Registry Cleanup](#registry-cleanup). |
@@ -216,16 +216,44 @@ A build that fails the smoke test leaves its digests in the registry untagged; t
 
 **Smoke test.** The `smoke` job is the only place where the images are executed: everything before it proves that the code compiles, not that the result starts. **It is a gate, not a report** — nothing is tagged until it has passed, so `latest` cannot move to an image that never started. It runs on both architectures, each on its native runner, and addresses the images as `<image>@sha256:…` from the artefacts of this run: there is no tag yet, and a digest leaves nothing for Docker to choose. It starts the server and the agent (which, with no keepalived on the runner, reports it as not running and idles) and waits up to 60 s each for `{"status":"ok"}` from `/api/health` — the agent's through `docker exec`, since its route answers loopback only. A second step checks that the same request from the runner does **not** answer. On failure it prints the container logs.
 
-To reproduce the gate locally, run the same four commands without `VITE_USE_LOCAL_UI` set:
+To reproduce the gate locally, run the same commands without `VITE_USE_LOCAL_UI` set:
 
 ```bash
 npm run build
+npm test
+npm run typecheck -w shared
 npm run typecheck -w server/frontend
 npm run lint -w server/frontend
 npm run lint
 ```
 
 ESLint is configured twice, once per kind of code: [`eslint.config.mjs`](https://github.com/stefgo/keepalived-status-monitor/blob/main/eslint.config.mjs) at the root lints `shared`, `client` and `server/backend` as Node TypeScript and ignores `server/frontend`, which has its own config with the React plugins. Two configs matching the same file would be two truths about it; a new Node workspace, on the other hand, is covered by the root config without another file.
+
+### Tests
+
+```bash
+npm test             # once, as CI runs it
+npm run test:watch   # re-runs what a change touches
+```
+
+[Vitest](https://vitest.dev), configured in
+[`vitest.config.mts`](https://github.com/stefgo/keepalived-status-monitor/blob/main/vitest.config.mts)
+at the root, with one project per workspace that has tests: `shared` and `frontend`.
+`client` and `server/backend` have none yet.
+
+- **A test lives next to its module** — `vrrpCluster.ts` and `vrrpCluster.test.ts`.
+- **Logic only.** Both projects run in the `node` environment. There is no DOM, so logic
+  that sits inside a hook or a component is first moved into a module of its own and tested
+  there.
+- **The frontend tests read `shared` from source.** `@kasm/shared` exports `src` under the
+  `development` condition, which the `frontend` project sets; without it they would read
+  `shared/dist`, which needs a build first and is stale the moment `shared/src` changes.
+- **`shared` builds without its tests** (`tsconfig.build.json`), so they do not end up in
+  `dist`. Vitest strips types without checking them, so `npm run typecheck -w shared` is what
+  checks those files; the frontend's are covered by its own `typecheck`.
+- **A special case that so far only a comment guarded gets a test named after it** — a host
+  whose agent is offline, an address written without its prefix, an incident whose opening
+  arrives after its update.
 
 ### Registry Cleanup
 
