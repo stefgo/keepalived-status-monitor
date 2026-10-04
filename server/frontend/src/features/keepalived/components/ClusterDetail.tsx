@@ -198,7 +198,6 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
             label: "Network",
             value:
                 cluster.networks.length > 0 ? cluster.networks.map((net) => <div key={net}>{net}</div>) : "–",
-            mono: true,
             visibility: "always",
         },
         {
