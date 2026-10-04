@@ -3,9 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { Crown } from "lucide-react";
 import {
     DataMultiView,
-    type DataListColumnDef,
-    type DataTableDef,
+    type DataColumnDef,
     StatusDot,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import type { VrrpCluster, VrrpClusterMember } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
@@ -38,8 +38,6 @@ const HostLink = ({ row }: { row: MasterRow }) => (
         {row.hostName}
     </Link>
 );
-
-const lastTransition = (row: MasterRow) => <RelativeTime date={row.member.instance.lastTransition} seconds />;
 
 /**
  * Every instance in MASTER on an online host -- the ones the MASTER card counts. A row leads
@@ -81,60 +79,52 @@ export const MasterList = () => {
         );
     }, [rows, searchQuery]);
 
-    const tableDef: DataTableDef<MasterRow>[] = [
+    const columns: DataColumnDef<MasterRow>[] = [
         {
-            tableHeader: "Host",
+            header: "Host",
             sortable: true,
             sortValue: (row) => row.hostName,
-            tableCellClassName: "text-sm",
-            tableItemRender: (row) => <HostLink row={row} />,
+            table: { cellClassName: "text-sm" },
+            list: { label: null },
+            // The list has no VRID and no State column: both stand beside the host.
+            render: (row, view) =>
+                view === "list" ? (
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                        <span className="font-medium text-text-primary">
+                            <HostLink row={row} />
+                        </span>
+                        <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
+                        <VrrpStateBadge state={row.member.instance.state} />
+                    </div>
+                ) : (
+                    <HostLink row={row} />
+                ),
         },
         {
-            tableHeader: "VRID",
+            header: "VRID",
             sortable: true,
             // By site first, then numerically by VRID (1–255, hence the padding).
             sortValue: (row) => `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`,
-            tableCellClassName: "text-sm",
-            tableItemRender: (row) => clusterLabel(row.cluster),
+            table: { cellClassName: "text-sm" },
+            list: false,
+            render: (row) => clusterLabel(row.cluster),
         },
         {
-            tableHeader: "Virtual IPs",
-            tableCellClassName: "text-sm",
-            tableItemRender: (row) => <Vips instance={row.member.instance} />,
+            header: "Virtual IPs",
+            table: { cellClassName: "text-sm" },
+            render: (row) => <Vips instance={row.member.instance} />,
         },
         {
-            tableHeader: "State",
-            tableItemRender: (row) => <VrrpStateBadge state={row.member.instance.state} />,
+            header: "State",
+            list: false,
+            render: (row) => <VrrpStateBadge state={row.member.instance.state} />,
         },
         {
-            tableHeader: "Last transition",
+            header: "Last transition",
             sortable: true,
             sortValue: (row) => row.member.instance.lastTransition ?? "",
-            tableHeaderClassName: "whitespace-nowrap",
-            tableCellClassName: "text-sm whitespace-nowrap",
-            tableItemRender: lastTransition,
-        },
-    ];
-
-    const listColumns: DataListColumnDef<MasterRow>[] = [
-        {
-            columnClassName: "flex-1",
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (row) => (
-                        <div className="flex flex-wrap items-center gap-2 py-1">
-                            <span className="font-medium text-text-primary">
-                                <HostLink row={row} />
-                            </span>
-                            <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
-                            <VrrpStateBadge state={row.member.instance.state} />
-                        </div>
-                    ),
-                },
-                { listLabel: "Virtual IPs", listItemRender: (row) => <Vips instance={row.member.instance} /> },
-                { listLabel: "Last transition", listItemRender: lastTransition },
-            ],
+            table: { headerClassName: "whitespace-nowrap", cellClassName: "text-sm whitespace-nowrap" },
+            render: (row) => <RelativeTime date={row.member.instance.lastTransition} seconds />,
         },
     ];
 
@@ -147,8 +137,8 @@ export const MasterList = () => {
             }
             viewMode={{ persist: { key: STORAGE_KEYS.mastersView, scope: "local" } }}
             data={filteredRows}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            columns={columns}
+            listGroups={listGroups()}
             keyField="key"
             searchable
             searchPlaceholder="Search host, VRID, site or address…"

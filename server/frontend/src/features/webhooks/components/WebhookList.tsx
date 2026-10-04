@@ -5,13 +5,13 @@ import {
     Badge,
     Button,
     DataAction,
-    DataListColumnDef,
-    DataListDef,
     DataMultiView,
-    DataTableDef,
+    type DataColumnDef,
     Switch,
     PAGE_SIZE,
     listPagination,
+    actionsColumn,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
@@ -96,7 +96,6 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
         return webhooks.filter((w) => w.name.toLowerCase().includes(q) || w.url.toLowerCase().includes(q));
     }, [webhooks, searchQuery]);
 
-    // One set of actions for both views, so the table and the list cannot drift apart.
     const renderActions = (webhook: Webhook) => (
         <DataAction
             rowId={webhook.id}
@@ -129,63 +128,39 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
         </div>
     );
 
-    const tableDef: DataTableDef<Webhook>[] = [
+    const columns: DataColumnDef<Webhook>[] = [
         {
-            tableHeader: "Name",
+            header: "Name",
             sortable: true,
             sortValue: (w) => w.name.toLowerCase(),
-            tableItemRender: (w) => <Name webhook={w} />,
+            list: { label: null },
+            // The list has no Enabled column: the name carries the state instead.
+            render: (w, view) =>
+                view === "list" ? (
+                    <div className="py-1">
+                        <Name webhook={w} withState />
+                    </div>
+                ) : (
+                    <Name webhook={w} />
+                ),
         },
         {
-            tableHeader: "Enabled",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
+            header: "Enabled",
             sortable: true,
             sortValue: (w) => (w.enabled ? 0 : 1),
-            tableItemRender: renderEnabled,
+            table: { headerClassName: "text-center", cellClassName: "content-center" },
+            list: false,
+            render: renderEnabled,
         },
+        { header: "Target", table: false, render: (w) => <Target webhook={w} /> },
+        { header: "Filter", table: false, render: (w) => <Filter webhook={w} /> },
         {
-            tableHeader: "Last Delivery",
+            header: "Last Delivery",
             sortable: true,
             sortValue: (w) => w.lastAttemptAt ?? "",
-            tableItemRender: (w) => <LastDelivery webhook={w} />,
+            render: (w) => <LastDelivery webhook={w} />,
         },
-        {
-            tableHeader: "Actions",
-            tableHeaderClassName: "text-center",
-            tableCellClassName: "content-center",
-            tableItemRender: renderActions,
-        },
-    ];
-
-    const listColumns: DataListColumnDef<Webhook>[] = [
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (w) => (
-                        <div className="py-1">
-                            <Name webhook={w} withState />
-                        </div>
-                    ),
-                },
-                { listLabel: "Target", listItemRender: (w) => <Target webhook={w} /> },
-                { listLabel: "Filter", listItemRender: (w) => <Filter webhook={w} /> },
-                { listLabel: "Last Delivery", listItemRender: (w) => <LastDelivery webhook={w} /> },
-            ] satisfies DataListDef<Webhook>[],
-            columnClassName: "flex-1 min-w-0",
-        },
-        {
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (w) => (
-                        <div className="mt-2 md:mt-0 flex justify-center">{renderActions(w)}</div>
-                    ),
-                },
-            ] satisfies DataListDef<Webhook>[],
-            columnClassName: "md:text-right",
-        },
+        actionsColumn(renderActions),
     ];
 
     return (
@@ -203,8 +178,8 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
             viewMode={{ persist: { key: STORAGE_KEYS.webhooksView, scope: "local" } }}
             data={filtered}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            columns={columns}
+            listGroups={listGroups("flex-1 min-w-0")}
             keyField="id"
             isLoading={isLoading}
             loadingMessage="Loading webhooks…"

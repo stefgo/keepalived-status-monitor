@@ -4,9 +4,9 @@ import type { VrrpInstance } from "@kasm/shared";
 import {
     cn,
     DataMultiView,
-    type DataListColumnDef,
-    type DataListDef,
-    type DataTableDef,
+    type DataColumnDef,
+    type DataColumnView,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { formatInterval, vrrpStateLabel } from "../lib/vrrp";
@@ -80,14 +80,16 @@ const State = ({ row }: { row: VrrpInstanceRow }) =>
 export const Vips = ({ instance }: { instance: VrrpInstance }) =>
     instance.vips.length > 0 ? <>{instance.vips.map((vip) => <div key={vip}>{vip}</div>)}</> : <>–</>;
 
-const lastTransition = (instance: VrrpInstance) => <RelativeTime date={instance.lastTransition} seconds />;
-
 /** The dimming of a stale row, applied per cell rather than to the row -- see `stateBadge`. */
 const dim = (row: VrrpInstanceRow) => (row.stale ? "opacity-60" : "");
 
 /** A list field's content, dimmed where its row is stale. */
 const Dimmed = ({ row, children }: { row: VrrpInstanceRow; children: ReactNode }) =>
     row.stale ? <div className="opacity-60">{children}</div> : <>{children}</>;
+
+/** A value both views show: the table dims its cell through the cell's class, the list has to wrap it. */
+const inView = (row: VrrpInstanceRow, view: DataColumnView, children: ReactNode) =>
+    view === "list" ? <Dimmed row={row}>{children}</Dimmed> : children;
 
 /**
  * VRRP instances as a table or a list, the reader's choice; a narrow screen always gets the
@@ -104,45 +106,63 @@ export const VrrpInstanceView = ({
     const navigate = useNavigate();
     const hasLeading = leadingHeader !== undefined;
 
-    const tableDef: DataTableDef<VrrpInstanceRow>[] = [
+    // Interface, advertisement interval and the virtual addresses are in the list only: an
+    // address list needs a line of its own per row, and the table is wide enough without them.
+    const columns: DataColumnDef<VrrpInstanceRow>[] = [
         ...(hasLeading
             ? [
                   {
-                      tableHeader: leadingHeader,
-                      tableHeaderClassName: "w-px",
-                      tableCellClassName: dim,
-                      tableItemRender: (row: VrrpInstanceRow) => row.leading,
-                  },
+                      header: leadingHeader,
+                      table: { headerClassName: "w-px", cellClassName: dim },
+                      // In the list it opens the row's first line instead.
+                      list: false,
+                      render: (row) => row.leading,
+                  } satisfies DataColumnDef<VrrpInstanceRow>,
               ]
             : []),
         ...(showHost
             ? [
                   {
-                      tableHeader: "Host",
-                      tableCellClassName: (row: VrrpInstanceRow) => cn("text-sm", dim(row)),
-                      tableItemRender: (row: VrrpInstanceRow) => row.host,
-                  },
+                      header: "Host",
+                      table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+                      list: false,
+                      render: (row) => row.host,
+                  } satisfies DataColumnDef<VrrpInstanceRow>,
               ]
             : []),
         {
-            tableHeader: "Instance",
+            header: "Instance",
             sortable: true,
             sortValue: (row) => row.instance.name,
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: ({ instance }) => (
-                <>
-                    {instance.name}
-                    {instance.syncGroup && (
-                        <div className="text-xs text-text-muted">Sync group {instance.syncGroup}</div>
-                    )}
-                </>
-            ),
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: { label: null },
+            // The list's first line names the row: what leads it, its host, the instance, its state.
+            render: (row, view) =>
+                view === "list" ? (
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                        {hasLeading && <span className={dim(row)}>{row.leading}</span>}
+                        {row.host && <span className={cn("font-medium text-text-primary", dim(row))}>{row.host}</span>}
+                        <span className={cn(row.host ? "text-text-secondary" : "font-medium text-text-primary", dim(row))}>
+                            {row.instance.name}
+                        </span>
+                        <State row={row} />
+                        <WantedState row={row} />
+                    </div>
+                ) : (
+                    <>
+                        {row.instance.name}
+                        {row.instance.syncGroup && (
+                            <div className="text-xs text-text-muted">Sync group {row.instance.syncGroup}</div>
+                        )}
+                    </>
+                ),
         },
         {
-            tableHeader: "State",
+            header: "State",
             sortable: true,
             sortValue: (row) => row.instance.state,
-            tableItemRender: (row) => (
+            list: false,
+            render: (row) => (
                 <>
                     <State row={row} />
                     <div className="mt-1">
@@ -151,88 +171,59 @@ export const VrrpInstanceView = ({
                 </>
             ),
         },
-        // Interface, advertisement interval and the virtual addresses are in the list only:
-        // an address list needs a line of its own per row, and the table is wide enough
-        // without them.
-        ...(showVrid
-            ? [
-                  {
-                      tableHeader: "VRID",
-                      tableCellClassName: (row: VrrpInstanceRow) => cn("text-sm", dim(row)),
-                      tableItemRender: ({ instance }: VrrpInstanceRow) => instance.vrid ?? "–",
-                  },
-              ]
-            : []),
-        {
-            tableHeader: "Priority",
-            sortable: true,
-            sortValue: (row) => effectivePriority(row.instance),
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: ({ instance }) => <Priority instance={instance} />,
-        },
-        {
-            tableHeader: "Last transition",
-            tableHeaderClassName: "whitespace-nowrap",
-            tableCellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
-            tableItemRender: ({ instance }) => lastTransition(instance),
-        },
-    ];
-
-    const fields: DataListDef<VrrpInstanceRow>[] = [
-        {
-            listLabel: null,
-            listItemRender: (row) => (
-                <div className="flex flex-wrap items-center gap-2 py-1">
-                    {hasLeading && <span className={dim(row)}>{row.leading}</span>}
-                    {row.host && <span className={cn("font-medium text-text-primary", dim(row))}>{row.host}</span>}
-                    <span className={cn(row.host ? "text-text-secondary" : "font-medium text-text-primary", dim(row))}>
-                        {row.instance.name}
-                    </span>
-                    <State row={row} />
-                    <WantedState row={row} />
-                </div>
-            ),
-        },
         ...(rows.some((row) => row.instance.syncGroup)
             ? [
                   {
-                      listLabel: "Sync group",
-                      listItemRender: (row: VrrpInstanceRow) => <Dimmed row={row}>{row.instance.syncGroup ?? "–"}</Dimmed>,
-                  },
+                      header: "Sync group",
+                      table: false,
+                      render: (row) => <Dimmed row={row}>{row.instance.syncGroup ?? "–"}</Dimmed>,
+                  } satisfies DataColumnDef<VrrpInstanceRow>,
               ]
             : []),
-        { listLabel: "Interface", listItemRender: (row) => <Dimmed row={row}>{row.instance.interface ?? "–"}</Dimmed> },
+        {
+            header: "Interface",
+            table: false,
+            render: (row) => <Dimmed row={row}>{row.instance.interface ?? "–"}</Dimmed>,
+        },
         ...(showVrid
             ? [
                   {
-                      listLabel: "VRID",
-                      listItemRender: (row: VrrpInstanceRow) => <Dimmed row={row}>{row.instance.vrid ?? "–"}</Dimmed>,
-                  },
+                      header: "VRID",
+                      table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+                      render: (row, view) => inView(row, view, row.instance.vrid ?? "–"),
+                  } satisfies DataColumnDef<VrrpInstanceRow>,
               ]
             : []),
         {
-            listLabel: "Priority",
-            listItemRender: (row) => (
-                <Dimmed row={row}>
-                    <Priority instance={row.instance} />
-                </Dimmed>
-            ),
+            header: "Priority",
+            sortable: true,
+            sortValue: (row) => effectivePriority(row.instance),
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            render: (row, view) => inView(row, view, <Priority instance={row.instance} />),
         },
         {
-            listLabel: "Advert",
-            listItemRender: (row) => <Dimmed row={row}>{formatInterval(row.instance.advertInterval)}</Dimmed>,
+            header: "Advert",
+            table: false,
+            render: (row) => <Dimmed row={row}>{formatInterval(row.instance.advertInterval)}</Dimmed>,
         },
         {
-            listLabel: "Virtual IPs",
-            listItemRender: (row) => (
+            header: "Virtual IPs",
+            table: false,
+            render: (row) => (
                 <Dimmed row={row}>
                     <Vips instance={row.instance} />
                 </Dimmed>
             ),
         },
-        { listLabel: "Last transition", listItemRender: (row) => <Dimmed row={row}>{lastTransition(row.instance)}</Dimmed> },
+        {
+            header: "Last transition",
+            table: {
+                headerClassName: "whitespace-nowrap",
+                cellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
+            },
+            render: (row, view) => inView(row, view, <RelativeTime date={row.instance.lastTransition} seconds />),
+        },
     ];
-    const listColumns: DataListColumnDef<VrrpInstanceRow>[] = [{ fields, columnClassName: "flex-1" }];
 
     return (
         <DataMultiView
@@ -241,8 +232,8 @@ export const VrrpInstanceView = ({
             // not about a particular host or cluster.
             viewMode={{ persist: { key: STORAGE_KEYS.instancesView, scope: "local" } }}
             data={rows}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            columns={columns}
+            listGroups={listGroups()}
             keyField="key"
             rowClassName="align-top"
             // Only where a row leads somewhere, or every row would look clickable.

@@ -4,9 +4,9 @@ import { Network } from "lucide-react";
 import {
     cn,
     DataMultiView,
-    type DataListColumnDef,
-    type DataTableDef,
+    type DataColumnDef,
     StatusDot,
+    listGroups,
 } from "@stefgo/react-ui-components";
 import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
@@ -180,22 +180,39 @@ export const ClusterOverview = () => {
     // Every sortable column gives both kinds of row a value, since the tree sorts each level
     // with the same comparator. A constant for the clusters keeps their order where the
     // column is about the hosts only.
-    const tableDef: DataTableDef<ClusterRow>[] = [
+    //
+    // The list shows the first level only, so each cluster carries its hosts inside it: the
+    // first column is the cluster's line there, and "Hosts" is the one column the table lacks.
+    const columns: DataColumnDef<ClusterRow>[] = [
         {
-            tableHeader: "VRID / Host",
+            header: "VRID / Host",
             sortable: true,
             // By site first, then numerically by VRID (1–255, hence the padding).
             sortValue: (row) =>
                 row.kind === "cluster"
                     ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
                     : row.hostName,
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) => (row.kind === "cluster" ? clusterLabel(row.cluster) : <HostLink row={row} />),
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: { label: null },
+            render: (row, view) => {
+                if (row.kind === "member") return <HostLink row={row} />;
+                if (view === "table") return clusterLabel(row.cluster);
+                return (
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                        <ClusterLink cluster={row.cluster} clusters={clusters}>
+                            {clusterVipLabel(row.cluster)}
+                        </ClusterLink>
+                        <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
+                        <ClusterHealthBadge health={row.cluster.health} />
+                    </div>
+                );
+            },
         },
         {
-            tableHeader: "Virtual IPs / Instance",
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) =>
+            header: "Virtual IPs / Instance",
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: false,
+            render: (row) =>
                 row.kind === "cluster" ? (
                     clusterVipLabel(row.cluster)
                 ) : (
@@ -210,11 +227,12 @@ export const ClusterOverview = () => {
                 ),
         },
         {
-            tableHeader: "State",
+            header: "State",
             sortable: true,
             sortValue: (row) =>
                 row.kind === "cluster" ? HEALTH_RANK[row.cluster.health] : STATE_RANK[row.member.instance.state],
-            tableItemRender: (row) =>
+            list: false,
+            render: (row) =>
                 row.kind === "cluster" ? (
                     <ClusterHealthBadge health={row.cluster.health} />
                 ) : (
@@ -222,65 +240,45 @@ export const ClusterOverview = () => {
                 ),
         },
         {
-            tableHeader: "Priority",
+            header: "Hosts",
+            table: false,
+            render: (row) =>
+                row.kind === "cluster" && (
+                    <ul className="space-y-1">
+                        {row.children.map(
+                            (child) =>
+                                child.kind === "member" && (
+                                    <li key={child.key} className="flex flex-wrap items-center gap-2">
+                                        <span className={dim(child)}>
+                                            <HostLink row={child} />
+                                        </span>
+                                        <span className={cn("text-text-secondary", dim(child))}>
+                                            {child.member.instance.name}
+                                        </span>
+                                        <MemberStateBadge member={child.member} />
+                                    </li>
+                                ),
+                        )}
+                    </ul>
+                ),
+        },
+        {
+            header: "Priority",
             sortable: true,
             sortValue: (row) => (row.kind === "cluster" ? 0 : effectivePriority(row.member)),
-            tableCellClassName: (row) => cn("text-sm", dim(row)),
-            tableItemRender: (row) => (row.kind === "member" ? <Priority instance={row.member.instance} /> : null),
+            table: { cellClassName: (row) => cn("text-sm", dim(row)) },
+            list: false,
+            render: (row) => (row.kind === "member" ? <Priority instance={row.member.instance} /> : null),
         },
         {
-            tableHeader: "Last transition",
-            tableHeaderClassName: "whitespace-nowrap",
-            tableCellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
-            tableItemRender: (row) =>
+            header: "Last transition",
+            table: {
+                headerClassName: "whitespace-nowrap",
+                cellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
+            },
+            list: false,
+            render: (row) =>
                 row.kind === "member" ? <RelativeTime date={row.member.instance.lastTransition} seconds /> : null,
-        },
-    ];
-
-    // The list shows the first level only, so each cluster carries its hosts inside it.
-    const listColumns: DataListColumnDef<ClusterRow>[] = [
-        {
-            columnClassName: "flex-1",
-            fields: [
-                {
-                    listLabel: null,
-                    listItemRender: (row) =>
-                        row.kind === "cluster" && (
-                            <div className="flex flex-wrap items-center gap-2 py-1">
-                                <ClusterLink cluster={row.cluster} clusters={clusters}>
-                                    {clusterVipLabel(row.cluster)}
-                                </ClusterLink>
-                                <span className="text-sm text-text-muted">{clusterLabel(row.cluster)}</span>
-                                <ClusterHealthBadge health={row.cluster.health} />
-                            </div>
-                        ),
-                },
-                {
-                    listLabel: "Hosts",
-                    listItemRender: (row) =>
-                        row.kind === "cluster" && (
-                            <ul className="space-y-1">
-                                {row.children.map(
-                                    (child) =>
-                                        child.kind === "member" && (
-                                            <li
-                                                key={child.key}
-                                                className="flex flex-wrap items-center gap-2"
-                                            >
-                                                <span className={dim(child)}>
-                                                    <HostLink row={child} />
-                                                </span>
-                                                <span className={cn("text-text-secondary", dim(child))}>
-                                                    {child.member.instance.name}
-                                                </span>
-                                                <MemberStateBadge member={child.member} />
-                                            </li>
-                                        ),
-                                )}
-                            </ul>
-                        ),
-                },
-            ],
         },
     ];
 
@@ -297,8 +295,8 @@ export const ClusterOverview = () => {
             viewMode={{ persist: { key: STORAGE_KEYS.clustersView, scope: "local" } }}
             data={filteredRows}
             getChildren={(row) => (row.kind === "cluster" ? row.children : null)}
-            tableDef={tableDef}
-            listColumns={listColumns}
+            columns={columns}
+            listGroups={listGroups()}
             treeExpanded={{ value: expanded, onChange: onExpandedChange }}
             keyField="key"
             searchable
