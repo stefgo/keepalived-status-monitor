@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { WebSocketContext } from "./WebSocketContext";
 import { queryClient } from "../../../lib/queryClient";
 import { assertNever, createDashboardMessageReader } from "../lib/dashboardMessages";
+import { isPushedOnConnect } from "../../../lib/queryKeys";
 import { clientListOptions } from "../../../queries/clients";
 import {
     appendActivity,
@@ -42,6 +43,8 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
 
         let isClosing = false;
         let connectTimeout: ReturnType<typeof setTimeout> | null = null;
+        // Per effect run: a login after a logout is a first connection again, not a resync.
+        let hasConnected = false;
         let lostTimeout: ReturnType<typeof setTimeout> | null = null;
 
         const armLostTimer = () => {
@@ -72,6 +75,15 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
+                // What the server pushed while the socket was down is lost. The client
+                // list, the readings and the activity come again with this connect;
+                // everything else on screen is read again, the rest marked stale and read
+                // when it is next shown. On the first connect there is nothing to make up
+                // for: whatever a page needs, its query reads.
+                if (hasConnected) {
+                    void queryClient.invalidateQueries({ predicate: (query) => !isPushedOnConnect(query.queryKey) });
+                }
+                hasConnected = true;
             };
 
             socket.onmessage = (event) => {
