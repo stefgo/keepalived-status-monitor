@@ -47,7 +47,7 @@ src/
 │   │       └── DashboardOverview.tsx     # Numbers, the list behind each, clusters in trouble
 │   ├── keepalived/                       # VRRP: clusters, a host's instances
 │   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
-│   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the cache, recomputed live
+│   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the cache, recomputed live, hosts named
 │   │   └── components/
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── MasterList.tsx            # The instances in MASTER, opened from the dashboard
@@ -94,11 +94,12 @@ src/
 │           └── TokenModal.tsx
 ├── components/
 │   ├── confirmations.ts                  # The question asked when an editor with unsaved changes is left
+│   ├── RelativeTime.tsx                  # "5 min ago" on the shared clock, the date in the tooltip
 │   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
 │   └── QueryError.tsx                    # A page whose data could not be read, with the server's reason
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
-│   ├── useNow.ts                         # One shared clock for durations that keep counting
+│   ├── useNow.ts                         # One shared clock for what is shown as a distance from now
 │   ├── useBackPath.ts                    # Where closing a page leads: its parent in the route tree
 │   ├── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
 │   ├── useEntityForm.ts                  # An editor's draft, its baseline and its save, checked against a schema
@@ -311,6 +312,42 @@ The container component for the client management view. Coordinates between the 
     - A **keepalived** column sums up the host's last reading: `2 instances · 1 MASTER`, with FAULTs called out, or "Not running" / "Unreadable".
     - Deletes clients after a confirmation that says what goes (the server-side record and last keepalived reading) and what stays (keepalived on the host; the agent keeps running but is refused).
 
+### Lists (`DataMultiView`)
+
+Every list is one `DataMultiView`, and its columns are described **once**, as a
+`DataColumnDef[]` passed as `columns`: the heading is also the list label, and one `render`
+serves the table and the list. A column that belongs to one view only says so
+(`table: false`, `list: false`), and the rare cell that has to differ reads the `view` its
+`render` is given. The actions come from `actionsColumn`, the list's two blocks from
+`listGroups` — both the library's. `sort.defaultValue` counts table columns, so a column
+with `table: false` has no index.
+
+`ActivityView` is the exception: it is a table on every screen, so it keeps a `tableDef`.
+A `columns` array would give it a list view.
+
+A list with nothing in it shows the library's `EmptyState` as its `emptyMessage` — an icon,
+what is missing, and what makes entries appear. A search without a hit is a different
+message, `noResultsMessage`: "No clients match …" must not read like a list nobody has added
+to yet. The view can only tell the two apart when it does the filtering, so a list passes
+all of its rows as `data` and its match function as `searchFilter`; rows filtered in front
+of the view look like an empty list to it. A filter that is not the search — the activity's
+level and seen state — is applied in front, and the list words its `emptyMessage` for it.
+
+### Dates and times (`utils.ts`, `components/RelativeTime.tsx`)
+
+`formatDate` and `formatTime` write a date the way **the browser's locale** does; no locale
+is fixed in the code. Both take a `locale` for a caller that must not depend on where it
+runs, which is what the tests pass.
+
+Where the question is "how recent", the date is written as its distance from now:
+`<RelativeTime date={…} />` shows `just now`, `5 min ago`, `2 h ago`, `3 d ago`
+(`formatRelative`), and the date itself in the tooltip. Past thirty days, and for a date
+that lies ahead, it writes the date. It reads `useNow`, the page's one clock, so the text
+moves on every 30 seconds without anything else re-rendering the row. Used for a client's
+last seen, an instance's last transition, a host's and a cluster's last reading, and the
+time of an activity entry. A date that is a fact rather than a distance — a token's expiry,
+a user's creation, a scheduler's next run — stays a date.
+
 ### LoadingIndicator (UI library)
 
 "Something is on its way", for a view with nothing to show yet — a lazy route, the settings loading, a client's first keepalived reading. `role="status"` announces the label when it appears; the spinner is decorative.
@@ -439,8 +476,9 @@ always carries exactly one badge. The cluster page keeps both, state and red bad
 in the tree with the instance it last reported, instead of dropping out of the cluster. The
 dimming is applied cell by cell, not to the row, so the badge itself stays at full contrast. A cluster row opens the cluster's page, a host row the host.
 The search matches VRID, site, network, address, host and instance name and keeps a whole
-cluster when one of its hosts matches. The list view, which narrow screens always get, shows
-one entry per cluster with its hosts inside it; its addresses open the cluster's page.
+cluster when one of its hosts matches. The list view, which narrow screens always get, is
+the same tree with one line per row: a cluster by its addresses, which open its page, and
+under it one row per host with its instance and state.
 
 `ClusterCard` is the same cluster as a single card — `VRID <vrid>: <virtual addresses>` and
 its health badge as its title, a `VrrpInstanceView` with a host column as its body,
@@ -458,6 +496,11 @@ plain title, since its header says the rest.
 page and the endpoint cannot disagree, and a client going offline changes a cluster's health
 on the next render without anything being sent. Readings of clients that have since been
 deleted are left out.
+
+The server's clusters name a member by its client id. The hook adds `hostName` to every
+member (`nameMembers` in `lib/vrrp.ts`) — the client's display name, its hostname while it
+has none, the id for a client the list no longer holds. Every view reads the name off the
+member, so the tree, its search and a sentence about the same host cannot differ.
 
 ### ClusterDetail (`features/keepalived`)
 
@@ -686,8 +729,9 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `Button`               | Button with variants (primary, secondary, danger).        |
 | `DataTable`            | Table view with sorting and paging.                       |
 | `DataMultiView`        | Switches between table, list and tree views for data.     |
-| `DataTableDef`         | Column definitions for table mode.                        |
-| `DataListDef` / `DataListColumnDef` | Column definitions for list mode.            |
+| `DataColumnDef`        | One column for table and list alike; with `actionsColumn` and `listGroups`. |
+| `DataTableDef`         | Column definitions for a view that is a table only (`ActivityView`, the counters). |
+| `EmptyState`           | An empty list: icon, what is missing, what fills it.      |
 | `DataAction`           | Typed action descriptors for data row operations.         |
 | `ActionMenu`           | Context ("kebab") menu for per-item actions.              |
 | `MenuItem`             | One entry of a detail page's `ActionMenu`: icon, label, `variant="danger"` for an entry that destroys something. It closes the menu itself. |

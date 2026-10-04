@@ -110,7 +110,16 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   (the router's blocker); an editor navigates away with its `close` or `leave`, never with
   `navigate` of its own.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
-  backend endpoint and by the dashboard (`useVrrpClusters`) alike
+  backend endpoint and by the dashboard (`useVrrpClusters`) alike. The hook names every
+  member's host (`member.hostName`); no view looks a client up for its name.
+- A list describes its columns once, as `DataColumnDef[]` (`columns`), with `actionsColumn`
+  and `listGroups` from the library; its `emptyMessage` is an `EmptyState`, a search without
+  a hit a `noResultsMessage`. The search goes to the view as `searchFilter`, never applied
+  to `data` beforehand, or the view cannot tell the two apart.
+- Dates follow the browser's locale (`formatDate`, `formatTime` in `utils.ts`; no locale
+  literal). "How long ago" is `<RelativeTime>` on `useNow`, the date in its tooltip.
+- "Client" is the kasm agent registered with the server, "host" the machine keepalived runs
+  on. Both words are used on purpose; neither is renamed into the other.
 - React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,
   mounted with `STORAGE_KEYS.theme`
 - Every key in the browser's storage lives once in `lib/storageKeys.ts` (`STORAGE_KEYS`,
