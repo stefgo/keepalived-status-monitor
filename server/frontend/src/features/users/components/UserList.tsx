@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Plus, Trash2, Edit2, User, Key, Globe } from "lucide-react";
 import {
     Badge,
@@ -46,6 +45,10 @@ const AuthBadges = ({ methods: methodsStr }: { methods?: string | null }) => {
     );
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (user: UserData, query: string) => user.username.toLowerCase().includes(query.toLowerCase());
+
 /**
  * The accounts that may sign in. Built like every other list of the app -- search, a list
  * view for narrow screens, the add button in the list's own header -- where it used to be
@@ -59,12 +62,6 @@ export const UserList = ({
     onCreateUser,
 }: UserListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
-
-    const filteredUsers = useMemo(() => {
-        if (!searchQuery) return users;
-        const q = searchQuery.toLowerCase();
-        return users.filter((u) => u.username.toLowerCase().includes(q));
-    }, [users, searchQuery]);
 
     const renderActions = (user: UserData) => (
         <div onClick={(e) => e.stopPropagation()}>
@@ -136,7 +133,7 @@ export const UserList = ({
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
             viewMode={{ persist: { key: STORAGE_KEYS.usersView, scope: "local" } }}
-            data={filteredUsers}
+            data={users}
             columns={columns}
             listGroups={listGroups()}
             keyField="id"
@@ -145,6 +142,7 @@ export const UserList = ({
             searchable
             searchPlaceholder="Search users…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             noResultsMessage={`No users match “${searchQuery}”.`}
             emptyMessage={
                 <EmptyState

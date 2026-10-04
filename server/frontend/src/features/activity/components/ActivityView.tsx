@@ -97,6 +97,12 @@ function searchText(event: ActivityRecord): string {
         .toLowerCase();
 }
 
+/** A group matches when any of its events does, so a step is found under its operation. */
+const matchesSearch = (group: ActivityGroup, query: string) => {
+    const q = query.toLowerCase();
+    return [group.head, ...group.members].some((event) => searchText(event).includes(q));
+};
+
 interface ActivityViewProps {
     /**
      * The level the filter opens on, in place of the one worked out from the unseen events.
@@ -158,14 +164,15 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                 if (ACTIVITY_LEVELS.indexOf(group.level) < ACTIVITY_LEVELS.indexOf(levelFilter)) {
                     return false;
                 }
-                if (seenFilter === "unseen" && !group.unseen) return false;
-                if (!searchQuery) return true;
-                const q = searchQuery.toLowerCase();
-                return [group.head, ...group.members].some((event) =>
-                    searchText(event).includes(q),
-                );
+                return seenFilter !== "unseen" || group.unseen;
             }),
-        [groups, levelFilter, seenFilter, searchQuery],
+        [groups, levelFilter, seenFilter],
+    );
+    // The search is the view's (`searchFilter`), so it can say that nothing matched. What is
+    // on screen is needed here as well, for "Mark as seen".
+    const shown = useMemo(
+        () => (searchQuery ? filtered.filter((group) => matchesSearch(group, searchQuery)) : filtered),
+        [filtered, searchQuery],
     );
 
     const toggleExpand = (id: string) => {
@@ -277,7 +284,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
 
     // "Mark as seen" acts on what the level filter and the search leave on screen, every page
     // of it -- not on events the reader has not been shown.
-    const unseenShown = filtered
+    const unseenShown = shown
         .flatMap((g) => [g.head, ...g.members])
         .filter((e) => !e.seen)
         .map((e) => e.id);
@@ -374,11 +381,12 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
                     "No events match these filters."
                 )
             }
-            noResultsMessage="No events match these filters."
+            noResultsMessage={`No events match “${searchQuery}”.`}
             pagination={listPagination(PAGE_SIZE.page)}
             searchable
             searchPlaceholder="Search activity…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             searchActions={filterSelects}
             extraActions={extraActions}
             classNames={{ table: { table: "w-full" } }}

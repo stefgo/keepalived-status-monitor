@@ -93,6 +93,11 @@ function matches(row: ClusterRow, query: string): boolean {
     );
 }
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it. The view asks about the clusters alone; a
+// cluster that matches keeps all of its hosts.
+const matchesSearch = (row: ClusterRow, search: string) => matches(row, search.trim().toLowerCase());
+
 const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => (
     <Link
         to={paths.client(row.member.clientId)}
@@ -145,10 +150,6 @@ export const ClusterOverview = () => {
 
     const rows = useMemo(() => toRows(clusters), [clusters]);
     const searching = searchQuery.trim() !== "";
-    const filteredRows = useMemo(() => {
-        const query = searchQuery.trim().toLowerCase();
-        return query ? rows.filter((row) => matches(row, query)) : rows;
-    }, [rows, searchQuery]);
 
     // Open are the clusters that need a look -- any health but `ok`, which covers an offline
     // or inactive member, since that makes a cluster degraded at least -- and, while a search
@@ -278,7 +279,7 @@ export const ClusterOverview = () => {
                 </>
             }
             viewMode={{ persist: { key: STORAGE_KEYS.clustersView, scope: "local" } }}
-            data={filteredRows}
+            data={rows}
             getChildren={(row) => (row.kind === "cluster" ? row.children : null)}
             columns={columns}
             listGroups={listGroups()}
@@ -287,6 +288,7 @@ export const ClusterOverview = () => {
             searchable
             searchPlaceholder="Search VRID, site, network, address or host…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             emptyMessage={
                 <EmptyState
                     icon={Network}

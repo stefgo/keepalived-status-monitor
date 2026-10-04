@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Key, Trash2 } from "lucide-react";
 import { Token } from "@kasm/shared";
 import {
@@ -65,6 +64,17 @@ const StatusBadge = ({ token: t }: { token: Token }) => {
     return <Badge variant="success">Active</Badge>;
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (t: Token, query: string) => {
+    const q = query.toLowerCase();
+    return (
+        t.tokenHash.includes(q) ||
+        (t.displayName ?? "").toLowerCase().includes(q) ||
+        (t.inboundAllowedIp ?? "").toLowerCase().includes(q)
+    );
+};
+
 /**
  * The registration tokens, built like every other list of the app. Tokens are issued in the
  * add-client wizard, which is also where the two defaults a token carries are entered -- a
@@ -72,17 +82,6 @@ const StatusBadge = ({ token: t }: { token: Token }) => {
  */
 export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
-
-    const filteredTokens = useMemo(() => {
-        if (!searchQuery) return tokens;
-        const q = searchQuery.toLowerCase();
-        return tokens.filter(
-            (t) =>
-                t.tokenHash.includes(q) ||
-                (t.displayName ?? "").toLowerCase().includes(q) ||
-                (t.inboundAllowedIp ?? "").toLowerCase().includes(q),
-        );
-    }, [tokens, searchQuery]);
 
     const renderActions = (t: Token) => (
         <div onClick={(e) => e.stopPropagation()}>
@@ -153,7 +152,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
             }
             sort={{ defaultValue: [{ colIndex: 2, direction: "asc" }] }}
             viewMode={{ persist: { key: STORAGE_KEYS.tokensView, scope: "local" } }}
-            data={filteredTokens}
+            data={tokens}
             columns={columns}
             listGroups={listGroups("flex-1 min-w-0")}
             keyField="tokenHash"
@@ -162,6 +161,7 @@ export const TokenList = ({ tokens, isLoading, deleteToken }: TokenListProps) =>
             searchable
             searchPlaceholder="Search tokens…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             noResultsMessage={`No tokens match “${searchQuery}”.`}
             emptyMessage={
                 <EmptyState

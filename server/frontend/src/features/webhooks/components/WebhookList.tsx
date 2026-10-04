@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Edit2, Plus, Trash2, Webhook as WebhookIcon } from "lucide-react";
 import type { Webhook } from "@kasm/shared";
 import {
@@ -87,15 +86,16 @@ const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
     );
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (w: Webhook, query: string) => {
+    const q = query.toLowerCase();
+    return w.name.toLowerCase().includes(q) || w.url.toLowerCase().includes(q);
+};
+
 /** The webhooks, built like every other list of the app. Only the edit button opens the editor. */
 export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onToggleEnabled }: WebhookListProps) => {
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
-
-    const filtered = useMemo(() => {
-        if (!searchQuery) return webhooks;
-        const q = searchQuery.toLowerCase();
-        return webhooks.filter((w) => w.name.toLowerCase().includes(q) || w.url.toLowerCase().includes(q));
-    }, [webhooks, searchQuery]);
 
     const renderActions = (webhook: Webhook) => (
         <DataAction
@@ -178,7 +178,7 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
             }
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
             viewMode={{ persist: { key: STORAGE_KEYS.webhooksView, scope: "local" } }}
-            data={filtered}
+            data={webhooks}
             columns={columns}
             listGroups={listGroups("flex-1 min-w-0")}
             keyField="id"
@@ -187,6 +187,7 @@ export const WebhookList = ({ webhooks, isLoading, onAdd, onEdit, onDelete, onTo
             searchable
             searchPlaceholder="Search webhooks…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             noResultsMessage={`No webhooks match “${searchQuery}”.`}
             emptyMessage={
                 <EmptyState

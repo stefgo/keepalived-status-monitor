@@ -37,6 +37,18 @@ const HostLink = ({ row }: { row: MasterRow }) => (
     </Link>
 );
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (row: MasterRow, search: string) => {
+    const query = search.trim().toLowerCase();
+    return (
+        row.member.hostName.toLowerCase().includes(query) ||
+        String(row.cluster.vrid ?? "").includes(query) ||
+        !!row.cluster.site?.toLowerCase().includes(query) ||
+        row.member.instance.vips.some((vip) => vip.toLowerCase().includes(query))
+    );
+};
+
 /**
  * Every instance in MASTER on an online host -- the ones the MASTER card counts. A row leads
  * to its cluster, the host name to the host.
@@ -61,18 +73,6 @@ export const MasterList = () => {
             ),
         [clusters],
     );
-
-    const filteredRows = useMemo(() => {
-        const query = searchQuery.trim().toLowerCase();
-        if (!query) return rows;
-        return rows.filter(
-            (row) =>
-                row.member.hostName.toLowerCase().includes(query) ||
-                String(row.cluster.vrid ?? "").includes(query) ||
-                !!row.cluster.site?.toLowerCase().includes(query) ||
-                row.member.instance.vips.some((vip) => vip.toLowerCase().includes(query)),
-        );
-    }, [rows, searchQuery]);
 
     const columns: DataColumnDef<MasterRow>[] = [
         {
@@ -131,13 +131,14 @@ export const MasterList = () => {
                 </>
             }
             viewMode={{ persist: { key: STORAGE_KEYS.mastersView, scope: "local" } }}
-            data={filteredRows}
+            data={rows}
             columns={columns}
             listGroups={listGroups()}
             keyField="key"
             searchable
             searchPlaceholder="Search host, VRID, site or address…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             emptyMessage={
                 <EmptyState
                     icon={Crown}

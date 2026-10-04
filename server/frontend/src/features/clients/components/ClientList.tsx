@@ -38,6 +38,18 @@ const CapabilitiesCell = ({ client }: { client: Client }) => {
     );
 };
 
+// Handed to the view instead of applied in front of it: only then can the view tell a search
+// without a hit from a list with nothing in it.
+const matchesSearch = (c: Client, query: string) => {
+    const q = query.toLowerCase();
+    return (
+        (c.displayName ?? "").toLowerCase().includes(q) ||
+        c.hostname.toLowerCase().includes(q) ||
+        (c.site ?? "").toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q)
+    );
+};
+
 interface ClientListProps {
     clients: Client[];
     setSelectedClient?: (client: Client | null) => void;
@@ -57,17 +69,6 @@ export const ClientList = ({
         () => [...clients].sort((a, b) => clientName(a).localeCompare(clientName(b))),
         [clients],
     );
-
-    const filteredClients = useMemo(() => {
-        if (!searchQuery) return sortedClients;
-        const q = searchQuery.toLowerCase();
-        return sortedClients.filter(c =>
-            (c.displayName ?? "").toLowerCase().includes(q) ||
-            c.hostname.toLowerCase().includes(q) ||
-            (c.site ?? "").toLowerCase().includes(q) ||
-            c.id.toLowerCase().includes(q),
-        );
-    }, [sortedClients, searchQuery]);
 
     const isOnline = (client: Client) => client.status === CLIENT_STATUS.ONLINE;
 
@@ -138,13 +139,14 @@ export const ClientList = ({
             extraActions={extraActions}
             sort={{ defaultValue: [{ colIndex: 0, direction: "asc" }] }}
             viewMode={{ persist: { key: STORAGE_KEYS.clientsView, scope: "local" } }}
-            data={filteredClients}
+            data={sortedClients}
             columns={columns}
             listGroups={listGroups()}
             keyField="id"
             searchable
             searchPlaceholder="Search name, hostname, site or ID…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
+            searchFilter={matchesSearch}
             noResultsMessage={`No clients match “${searchQuery}”.`}
             emptyMessage={
                 <EmptyState
