@@ -13,6 +13,7 @@ import {
     SideTab,
 } from "@stefgo/react-ui-components";
 import { useSearchQueryParam } from "../hooks/useSearchQueryParam";
+import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard";
 import { describeFailure } from "../utils";
 import { QueryError } from "../components/QueryError";
 import { schedulerStatusOptions } from "../queries/scheduler";
@@ -22,6 +23,8 @@ import {
     SECTIONS,
     SECTION_IDS,
     isDirty,
+    sectionBody,
+    sectionError,
     type SectionDef,
     type SectionId,
     type SettingsValues,
@@ -31,13 +34,17 @@ import {
     TokenRetentionSection,
 } from "../features/settings/components/SettingsSections";
 
+/** Escape leaves an editor; this page is no editor and has nowhere to close onto. */
+const stayOnEscape = () => true;
+
 /**
  * The server's own settings, one section per tab.
  *
  * Each section saves on its own and sends only its own keys; the server merges them into the
  * stored block. It used to be one Save under all tabs, which wrote whatever had been
  * touched anywhere -- including edits in a tab that was no longer on screen. A tab with
- * edits that are not saved yet carries a dot, so they are not forgotten either.
+ * edits that are not saved yet carries a dot, so they are not forgotten either -- and
+ * leaving the page asks first for as long as any section has some.
  *
  * The open tab is in the URL, so a reload lands on it.
  */
@@ -63,6 +70,11 @@ export default function Settings() {
     });
 
     const queryClient = useQueryClient();
+
+    // Switching tabs is not leaving: the guard asks when the path changes, and a tab is
+    // the page's query.
+    const hasUnsaved = SECTIONS.some((section) => isDirty(section, draft, saved));
+    useUnsavedChangesGuard(hasUnsaved, "settings", { onEscape: stayOnEscape });
 
     // Loaded once, into the draft. Deliberately not a cache entry: one that is read again
     // behind the form would overwrite what is typed and not yet saved. The scheduler status
@@ -93,7 +105,7 @@ export default function Settings() {
     const change = (key: string, value: string) => setDraft((prev) => ({ ...prev, [key]: value }));
 
     const save = async (section: SectionDef) => {
-        const body = Object.fromEntries(section.keys.map((key) => [key, draft[key] ?? ""]));
+        const body = sectionBody(section, draft);
         setSavingSection(section.id);
         try {
             // The endpoint validates the body and names the offending field.
@@ -167,30 +179,40 @@ export default function Settings() {
                 </TabList>
 
                 <div className="flex-1 min-w-0 flex flex-col">
-                    {SECTIONS.map((section) => (
-                        <TabPanel
-                            key={section.id}
-                            tabs={tabs}
-                            value={section.id}
-                            className="flex-1 flex flex-col px-8 pt-8 pb-4 animate-in fade-in slide-in-from-right-2 duration-300"
-                        >
-                            <div className="flex-1 flex flex-col gap-8">
-                                {renderSection(section.id)}
+                    {SECTIONS.map((section) => {
+                        const invalid = sectionError(section, draft);
+                        return (
+                            <TabPanel
+                                key={section.id}
+                                tabs={tabs}
+                                value={section.id}
+                                className="flex-1 flex flex-col px-8 pt-8 pb-4 animate-in fade-in slide-in-from-right-2 duration-300"
+                            >
+                                <div className="flex-1 flex flex-col gap-8">
+                                    {renderSection(section.id)}
 
-                                <div className="mt-auto flex justify-end border-t border-border pt-4">
-                                    <Button
-                                        variant="primary"
-                                        icon={Save}
-                                        onClick={() => save(section)}
-                                        disabled={!isDirty(section, draft, saved) || savingSection !== null}
-                                        isLoading={savingSection === section.id}
-                                    >
-                                        Save
-                                    </Button>
+                                    <div className="mt-auto flex items-center justify-end gap-4 border-t border-border pt-4">
+                                        {invalid && (
+                                            <p role="alert" className="text-sm text-error">
+                                                {invalid}
+                                            </p>
+                                        )}
+                                        <Button
+                                            variant="primary"
+                                            icon={Save}
+                                            onClick={() => save(section)}
+                                            disabled={
+                                                !isDirty(section, draft, saved) || invalid !== null || savingSection !== null
+                                            }
+                                            isLoading={savingSection === section.id}
+                                        >
+                                            Save
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                        </TabPanel>
-                    ))}
+                            </TabPanel>
+                        );
+                    })}
                 </div>
             </div>
         </Card>

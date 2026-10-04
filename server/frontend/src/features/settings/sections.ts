@@ -1,4 +1,5 @@
 import { Activity, Sliders, type LucideIcon } from "lucide-react";
+import { CleanupSettingsSchema } from "@kasm/shared";
 
 import type { SettingsValues } from "../../queries/settings";
 
@@ -50,6 +51,22 @@ export const DEFAULT_SETTINGS: SettingsValues = {
 /** Whether the draft differs from what the server holds in any of the section's keys. */
 export const isDirty = (section: SectionDef, draft: SettingsValues, saved: SettingsValues): boolean =>
     section.keys.some((key) => (draft[key] ?? "") !== (saved[key] ?? ""));
+
+/** What a section's Save sends: its own keys, as the fields show them. */
+export const sectionBody = (section: SectionDef, draft: SettingsValues): SettingsValues =>
+    Object.fromEntries(section.keys.map((key) => [key, draft[key] ?? ""]));
+
+/**
+ * What the server would refuse about a section, or `null`. Checked against the schema the
+ * endpoint parses the request with, so the reason is on the page before anything is sent.
+ */
+export function sectionError(section: SectionDef, draft: SettingsValues): string | null {
+    const parsed = CleanupSettingsSchema.safeParse(sectionBody(section, draft));
+    if (parsed.success) return null;
+    const issue = parsed.error.issues[0];
+    const key = issue.path.join(".");
+    return key ? `${key}: ${issue.message}` : issue.message;
+}
 
 /** Props every section component takes: its values, and a way to change one of them. */
 export interface SectionProps {
