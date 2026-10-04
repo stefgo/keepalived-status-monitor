@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VrrpCluster } from "@kasm/shared";
-import { activitySearch, clusterPath, paths } from "./paths";
+import { generatePath } from "react-router-dom";
+import { LEGACY_ROUTES, activitySearch, clusterPath, paths } from "./paths";
 
 const cluster = (over: Partial<VrrpCluster> = {}): VrrpCluster => {
     const site = over.site ?? null;
@@ -20,13 +21,20 @@ const cluster = (over: Partial<VrrpCluster> = {}): VrrpCluster => {
 
 describe("paths", () => {
     it("fills a pattern with its parameter", () => {
-        expect(paths.client("h1")).toBe("/client/h1");
-        expect(paths.clientEdit("h1")).toBe("/client/h1/edit");
+        expect(paths.client("h1")).toBe("/clients/h1");
+        expect(paths.clientEdit("h1")).toBe("/clients/h1/edit");
         expect(paths.webhook("w1")).toBe("/webhooks/w1");
     });
 
     it("encodes what a path segment cannot carry", () => {
         expect(paths.webhook("a/b")).toBe("/webhooks/a%2Fb");
+    });
+});
+
+describe("LEGACY_ROUTES", () => {
+    it("lead to a pattern that takes the same parameters", () => {
+        const params = { clientId: "h1" };
+        expect(LEGACY_ROUTES.map(({ to }) => generatePath(to, params))).toEqual(["/clients/h1", "/clients/h1/edit"]);
     });
 });
 

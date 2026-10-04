@@ -17,10 +17,10 @@ export const ROUTES = {
 
     clients: "/clients",
     clientNew: "/clients/new",
-    client: "/client/:clientId",
-    clientEdit: "/client/:clientId/edit",
+    client: "/clients/:clientId",
+    clientEdit: "/clients/:clientId/edit",
     // The page of one host's instance, which the cluster page has replaced. Kept as a
-    // redirect to the cluster the instance takes part in.
+    // redirect to the cluster the instance takes part in, under the address it always had.
     clientInstance: "/client/:clientId/instance/:instanceName",
 
     clusters: "/clusters",
@@ -38,6 +38,17 @@ export const ROUTES = {
 
     settings: "/settings",
 } as const;
+
+/**
+ * The addresses the client pages had before they took the plural of their list, each with
+ * the pattern that replaced it. The parameters keep their names, so a redirect fills the
+ * new pattern with what the old one matched. Kept for one release, for bookmarks and for
+ * links that were shared before the change.
+ */
+export const LEGACY_ROUTES: readonly { from: string; to: string }[] = [
+    { from: "/client/:clientId", to: ROUTES.client },
+    { from: "/client/:clientId/edit", to: ROUTES.clientEdit },
+];
 
 /**
  * The patterns with their parameters filled in. A pattern without one is used as it is.

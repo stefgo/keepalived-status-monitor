@@ -15,7 +15,7 @@ interface ClientEditorProps {
 
 /**
  * Edits what a client *is*: its name, and the address it is reached at or the addresses it
- * may connect from. A page of its own, at `/client/:clientId/edit`.
+ * may connect from. A page of its own, at `/clients/:clientId/edit`.
  *
  * Leaving is a navigation, and the control for it sits in the card's header -- the one part
  * of the form that is in reach from every scroll position without a floating bar over the

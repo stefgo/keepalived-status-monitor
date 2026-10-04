@@ -8,6 +8,7 @@ import {
     useLocation,
     useParams,
     useSearchParams,
+    generatePath,
 } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Monitor, Key, Users, Settings as SettingsIcon, LayoutDashboard, Network, Activity, Webhook } from "lucide-react";
@@ -43,7 +44,7 @@ import { QueryError } from "../../components/QueryError";
 import { useKeepalivedStates } from "../../queries/keepalived";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf } from "../keepalived/lib/vrrp";
-import { CLUSTER_NET_PARAM, ROUTES, clusterPath, paths } from "../../lib/paths";
+import { CLUSTER_NET_PARAM, LEGACY_ROUTES, ROUTES, clusterPath, paths } from "../../lib/paths";
 import { clientCount, formatOnlineCount } from "../dashboard/lib/dashboard";
 import { STORAGE_KEYS } from "../../lib/storageKeys";
 import { queryClient } from "../../lib/queryClient";
@@ -231,6 +232,19 @@ function ClientEditRoute() {
             )}
         </RouteClient>
     );
+}
+
+/**
+ * An address from before the client pages took the plural of their list (`LEGACY_ROUTES`),
+ * sent on to the pattern that replaced it. The parameters keep their names; query and
+ * fragment travel along, and the old address leaves the history.
+ */
+function LegacyRedirect({ to }: { to: string }) {
+    const params = useParams();
+    const { search, hash } = useLocation();
+    const pathname = generatePath(to, params as Record<string, string>);
+
+    return <Navigate to={{ pathname, search, hash }} replace />;
 }
 
 function NotFound() {
@@ -441,6 +455,9 @@ function AppLayout() {
                         <Route path={ROUTES.webhookNew} element={<WebhookEditorRoute />} />
                         <Route path={ROUTES.webhook} element={<WebhookEditorRoute />} />
                         <Route path={ROUTES.settings} element={<Settings />} />
+                        {LEGACY_ROUTES.map(({ from, to }) => (
+                            <Route key={from} path={from} element={<LegacyRedirect to={to} />} />
+                        ))}
                         <Route path="*" element={<NotFound />} />
                     </Routes>
                 </Suspense>

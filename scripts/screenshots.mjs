@@ -116,7 +116,7 @@ await mkdir(outDir, { recursive: true });
     await shoot(page, "/clusters", "clusters.png", expandAll);
     await shoot(page, clusterRoute, "cluster-detail.png");
     await shoot(page, "/clients", "clients.png");
-    await shoot(page, `/client/${client.id}`, "client-detail.png");
+    await shoot(page, `/clients/${client.id}`, "client-detail.png");
     await shoot(page, "/clients/new", "add-client.png");
     // The view opens on the unseen warnings; the whole history tells more.
     await shoot(page, "/activity", "activity.png", async (p) => {
