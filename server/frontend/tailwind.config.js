@@ -30,7 +30,8 @@ export default {
             // `shadow-glow-success`, which the preset derives from the success token,
             // instead of the fixed green `shadow-glow-online` carried before.
             fontFamily: {
-                sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+                // The name `@fontsource-variable/inter` registers, imported in `Main.tsx`.
+                sans: ["Inter Variable", "ui-sans-serif", "system-ui", "sans-serif"],
             },
         },
     },

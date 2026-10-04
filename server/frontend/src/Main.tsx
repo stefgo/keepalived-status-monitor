@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./features/app/App";
+// The font ships with the bundle: opening the application asks nobody else for anything.
+import "@fontsource-variable/inter";
 import "./index.css";
 
 // A deploy replaces the hashed chunks, so a tab still running the previous build fails
