@@ -84,7 +84,8 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - Zustand stores in `stores/` (useClientStore, useKeepalivedStore, useActivityStore, useSchedulerStore, useUIStore)
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
-- React Contexts: ThemeContext, WebSocketContext, AuthContext
+- React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,
+  mounted with `STORAGE_KEYS.theme`
 - Every key in the browser's storage lives once in `lib/storageKeys.ts` (`STORAGE_KEYS`,
   written `kasm.<area>.<what>`). No key literal anywhere else; renaming one forgets the
   stored value and needs no migration.

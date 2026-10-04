@@ -1,7 +1,8 @@
+import { NumberField, SectionHeader } from "@stefgo/react-ui-components";
 import { apiFetch } from "../../../lib/apiFetch";
 import type { SectionProps } from "../sections";
 import { SchedulerBox } from "./SchedulerBox";
-import { ManualRun, NumberField, SectionHeader } from "./SettingsParts";
+import { ManualRun } from "./SettingsParts";
 
 /** Starts a maintenance job and returns its answer; throws when the server refuses. */
 async function runJob<T>(url: string): Promise<T> {

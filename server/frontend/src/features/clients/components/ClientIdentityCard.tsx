@@ -10,7 +10,7 @@ import {
     UpdateClient,
 } from "@kasm/shared";
 import { Save } from "lucide-react";
-import { Badge, Button, Card, Checkbox, DescriptionList, Input, StatusDot } from "@stefgo/react-ui-components";
+import { Badge, Button, Card, Checkbox, DescriptionList, Input, StatusDot, FieldLabel } from "@stefgo/react-ui-components";
 import { clientName, formatDate, getErrorMessage } from "../../../utils";
 
 interface ClientIdentityCardProps {
@@ -182,12 +182,10 @@ export const ClientIdentityCard = ({
                         address or an IP restriction below at all, so it reads as context for
                         the fields under it rather than as a footnote after them. */}
                     <div>
-                        {/* Not an `Input`: there is no control to label. The classes are
-                            copied from its stacked label and hint so a read-only value
-                            lines up with the editable fields under it. */}
-                        <div className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1">
-                            Connection Mode
-                        </div>
+                        {/* Not an `Input`: there is no control to label. The caption is the one
+                            an input gets, and the hint's classes are copied from it, so a
+                            read-only value lines up with the editable fields under it. */}
+                        <FieldLabel as="div">Connection Mode</FieldLabel>
                         {/* `lg` is text-sm -- the size the inputs and the agent version
                             below use, so the read-only value does not read as a footnote. */}
                         <Badge variant="info">
@@ -201,9 +199,7 @@ export const ClientIdentityCard = ({
                     </div>
 
                     <div>
-                        <div className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1">
-                            Agent Version
-                        </div>
+                        <FieldLabel as="div">Agent Version</FieldLabel>
                         {/* Always rendered, even without a value: a field that vanishes reads
                             as "not applicable", while an agent that has never reported one is
                             a fact worth seeing. */}

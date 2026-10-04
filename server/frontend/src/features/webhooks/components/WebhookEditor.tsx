@@ -12,6 +12,8 @@ import {
     Textarea,
     useConfirm,
     LoadingIndicator,
+    Alert,
+    FieldLabel,
 } from "@stefgo/react-ui-components";
 import { apiFetch } from "../../../lib/apiFetch";
 import { getErrorMessage } from "../../../utils";
@@ -164,7 +166,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
             padding="none"
         >
             <form onSubmit={handleSubmit} className="space-y-4 p-6">
-                {error && <div className="bg-error-bg text-error p-3 rounded-lg text-sm">{error}</div>}
+                {error && <Alert>{error}</Alert>}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Input
@@ -175,12 +177,7 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                     />
                     {/* Switch only lays its label out inline; this one is stacked like the other fields. */}
                     <div>
-                        <label
-                            htmlFor="webhook-enabled"
-                            className="block text-xs font-bold text-text-muted uppercase mb-1.5 ml-1"
-                        >
-                            Enabled
-                        </label>
+                        <FieldLabel htmlFor="webhook-enabled">Enabled</FieldLabel>
                         <div className="flex h-[42px] items-center">
                             <Switch
                                 id="webhook-enabled"
@@ -306,18 +303,16 @@ const WebhookEditor = ({ webhook }: { webhook: Webhook | null }) => {
                 </details>
 
                 {testResult && (
-                    <div
-                        className={`p-3 rounded-lg text-sm ${testResult.ok ? "bg-success-bg text-success" : "bg-error-bg text-error"}`}
+                    <Alert
+                        tone={testResult.ok ? "success" : "error"}
+                        title={testResult.ok ? `Delivered (HTTP ${testResult.status})` : `Failed: ${testResult.error}`}
                     >
-                        <div className="font-medium">
-                            {testResult.ok ? `Delivered (HTTP ${testResult.status})` : `Failed: ${testResult.error}`}
-                        </div>
                         {testResult.response && (
-                            <pre className="mt-1 whitespace-pre-wrap break-all text-xs font-mono opacity-80">
+                            <pre className="whitespace-pre-wrap break-all text-xs font-mono opacity-80">
                                 {testResult.response}
                             </pre>
                         )}
-                    </div>
+                    </Alert>
                 )}
 
                 <div className="flex justify-between gap-3 pt-4 border-t border-border">

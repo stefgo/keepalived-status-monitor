@@ -12,8 +12,6 @@ src/
 │   ├── app/                              # Application shell
 │   │   ├── App.tsx                       # Main router, navGroups and pages configuration
 │   │   └── context/
-│   │       ├── ThemeContext.ts           # Theme context object and useTheme hook
-│   │       ├── ThemeProvider.tsx         # Dark/light theme management
 │   │       ├── WebSocketContext.ts       # WebSocket context object and useWebSocket hook
 │   │       └── WebSocketProvider.tsx     # WebSocket connection for real-time updates
 │   ├── auth/
@@ -72,7 +70,7 @@ src/
 │   │   └── components/
 │   │       ├── SettingsSections.tsx      # One component per section
 │   │       ├── SchedulerBox.tsx          # Status, last and next run of a scheduler, and Run Now
-│   │       └── SettingsParts.tsx         # Section header, field captions and the other shared pieces
+│   │       └── SettingsParts.tsx         # ManualRun: the library's, reading a failure the app's way
 │   └── tokens/                           # Registration token management
 │       ├── confirmations.ts              # Delete-token text
 │       └── components/
@@ -479,7 +477,7 @@ unsaved draft to `/api/v1/webhooks/test`. See [Webhooks](webhooks.md) for the te
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 
-System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel`, and the open one is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
+System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel` with a `SideTab` per section, the sections are built from its `SectionHeader` and `NumberField`, and the open tab is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
 
@@ -515,7 +513,7 @@ wire, and a connected agent that declares none shows "None".
 ## 🎨 Styling & Theming
 
 - **Tech Stack**: Tailwind CSS v3 with the `@stefgo/react-ui-components/tailwind-preset` as the base configuration.
-- **Dark Mode**: Supported via the `class` strategy. The `dark` class is applied to the `<html>` tag, controlled by `ThemeProvider`. **A colour is one class, not two:** `bg-card` resolves per theme because the preset redefines the custom property behind it in its `.dark` block. The `…-dark` twins (`dark:bg-card-dark`) are gone with library 3.0, and the preset sets `darkMode` itself.
+- **Dark Mode**: Supported via the `class` strategy. The `dark` class is applied to the `<html>` tag, controlled by the library's `ThemeProvider`, which `App` mounts with `STORAGE_KEYS.theme`; `useTheme()` comes from the library as well. **A colour is one class, not two:** `bg-card` resolves per theme because the preset redefines the custom property behind it in its `.dark` block. The `…-dark` twins (`dark:bg-card-dark`) are gone with library 3.0, and the preset sets `darkMode` itself.
 - **UI Library**: All generic components (Buttons, Inputs, Cards, Dashboard shell, etc.) come from `@stefgo/react-ui-components`. Domain-specific components live in `src/features/`.
 - **Colours are roles, not palette values**: `bg-success`, `text-error`, `text-warning`, `text-info`, `bg-error-bg`. The library decides once what a role looks like in either theme, so a status dot cannot be a different green from one view to the next. Status pills are the `Badge` component.
 - **Custom Tailwind Extensions**: the font family **Inter**, and nothing else. The font ships with the bundle (`@fontsource-variable/inter`, imported in `Main.tsx`), so opening the application makes no request to another origin, and the server's CSP names none. The former `app.text-footer` (`#444444`) only existed to stay readable on a white panel, and `shadow-glow-online` was a fixed green; the online dot uses `shadow-glow-success`, which the preset derives from the success token.
@@ -543,7 +541,7 @@ Always switch all three together; otherwise the compiler checks one version of t
 
 ## 📦 UI Library (`@stefgo/react-ui-components`)
 
-The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an exact version (4.3.1). Components used:
+The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an exact version (4.6.0). Components used:
 
 | Component / Type       | Usage                                                     |
 | :--------------------- | :-------------------------------------------------------- |
@@ -570,6 +568,12 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `cn`                   | Class-name join; the app uses it where it draws a surface itself. |
 | `ConfirmProvider` / `useConfirm` | Every confirmation and failure notice. See [Confirmations](#confirmations). |
 | `Badge`                | Status pill in one of five roles (`success`, `warning`, `error`, `info`, `neutral`). |
+| `SideTab` / `SectionHeader` / `NumberField` / `ManualRun` | What the settings page is made of: a tab of the side list, a section's heading, a whole-number field clamped to its minimum, and "run the job now". |
+| `Alert`                | The box a refused save and the result of a webhook test are shown in. An error is `role="alert"`, every other tone `role="status"`. |
+| `FieldLabel`           | The caption of a stacked field, for something that is no library control: a read-only value, a switch. |
+| `CopyField`            | A value to take away next to the button that copies it: the registration token. |
+| `ThemeProvider` / `useTheme` | Which theme is on, the class on `<html>` and the stored choice. |
+| `StatusDot` / `StatusDotProvider` / `LoadingIndicator` | See [StatusDot](#statusdot-ui-library) and [LoadingIndicator](#loadingindicator-ui-library). |
 | `Checkbox`             | Checkbox with label, `indeterminate` for a partial selection.  |
 | `ActionButton`         | Round icon button with a tooltip — close, copy, expand, kebab.  |
 | `EntityHeader`         | Header of the client page: title, badges, actions, and details that open on request. Whether they are open is kept in `localStorage` (`STORAGE_KEYS.clientDetails`). |

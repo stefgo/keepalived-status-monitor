@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getErrorMessage } from "../../../utils";
-import { Button, Checkbox, Input, Modal } from "@stefgo/react-ui-components";
+import { Button, Checkbox, Input, Modal, Alert } from "@stefgo/react-ui-components";
 
 interface UserDialogProps {
     isOpen: boolean;
@@ -110,11 +110,7 @@ export const UserDialog = ({
             closeOnOverlayClick={false}
         >
             <form onSubmit={handleSubmit} className="space-y-4 p-6">
-                {error && (
-                    <div className="bg-error-bg text-error p-3 rounded-lg text-sm">
-                        {error}
-                    </div>
-                )}
+                {error && <Alert>{error}</Alert>}
 
                 <Input
                     label="Username"

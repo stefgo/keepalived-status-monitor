@@ -20,12 +20,12 @@ import {
     ToastProvider,
     LoadingIndicator,
     StatusDotProvider,
+    ThemeProvider,
+    useTheme,
 } from "@stefgo/react-ui-components";
 import { CLIENT_STATUS } from "@kasm/shared";
 
 import Login from "../../pages/Login";
-import { useTheme } from "./context/ThemeContext";
-import { ThemeProvider } from "./context/ThemeProvider";
 import { useAuth } from "../auth/AuthContext";
 import { AuthProvider } from "../auth/AuthProvider";
 import { useWebSocket } from "./context/WebSocketContext";
@@ -39,6 +39,7 @@ import { useKeepalivedStore } from "../../stores/useKeepalivedStore";
 import { NotFoundCard } from "../../components/NotFoundCard";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
+import { STORAGE_KEYS } from "../../lib/storageKeys";
 
 // Page components -- loaded on demand, so a chunk only arrives when its route does. The
 // previous shape built the element tree of every page on every render of the shell,
@@ -444,7 +445,7 @@ function AppLayout() {
  */
 function App() {
     return (
-        <ThemeProvider>
+        <ThemeProvider storageKey={STORAGE_KEYS.theme}>
             <AuthProvider>
                 <WebSocketProvider>
                     <ToastProvider>
