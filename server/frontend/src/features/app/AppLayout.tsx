@@ -19,6 +19,7 @@ import { breadcrumb } from "../../lib/breadcrumb";
 import { clientName } from "../../utils";
 
 // Hooks, queries & stores
+import { useSearchHotkey } from "../../hooks/useSearchHotkey";
 import { useUIStore } from "../../stores/useUIStore";
 import { clientCount, formatOnlineCount } from "../dashboard/lib/dashboard";
 import { useUnseenTone } from "../../queries/activity";
@@ -45,6 +46,8 @@ export function AppLayout() {
         .map((match) => (match.handle as RouteHandle | undefined)?.nav?.id)
         .filter(Boolean)
         .pop();
+
+    useSearchHotkey();
 
     const { theme, toggleTheme } = useTheme();
     const { isSidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
