@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CONNECTION_MODE, ConnectionMode, Ipv4OrCidrSchema, normaliseTargetAddress } from "@kasm/shared";
+import { hasAddClientInput } from "../../lib/addClientForm";
 
 /**
  * Everything the add-client flow collects, held above the wizard.
@@ -43,6 +44,8 @@ export interface AddClientForm {
 
     /** Whether the details step holds enough to go on. */
     canContinue: boolean;
+    /** Whether anything has been entered that leaving would throw away. */
+    isDirty: boolean;
 }
 
 export function useAddClientForm(): AddClientForm {
@@ -108,5 +111,6 @@ export function useAddClientForm(): AddClientForm {
         touch,
         missing,
         canContinue,
+        isDirty: hasAddClientInput({ displayName, restrictIp, allowedIp, hostname, targetAddress, registrationSecret }),
     };
 }

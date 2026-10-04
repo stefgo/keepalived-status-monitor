@@ -7,7 +7,6 @@ import Login from "../../pages/Login";
 import { NotFoundCard } from "../../components/NotFoundCard";
 import { QueryError } from "../../components/QueryError";
 import { useAuth } from "../auth/AuthContext";
-import { useBackPath } from "../../hooks/useBackPath";
 import { NotFoundError } from "../../lib/notFound";
 import { CLUSTER_NET_PARAM, ROUTES, clusterPath, paths } from "../../lib/paths";
 import { queryClient } from "../../lib/queryClient";
@@ -92,13 +91,10 @@ export function ClientsRoute() {
 }
 
 export function AddClientRoute() {
-    const navigate = useNavigate();
-    const back = useBackPath();
     const createOutboundClient = useCreateOutboundClient();
 
     return (
         <AddClientWizard
-            onClose={() => navigate(back)}
             onCreateOutbound={(data) => createOutboundClient.mutateAsync(data)}
             onTokenCreated={() => void queryClient.invalidateQueries({ queryKey: tokenListOptions.queryKey })}
         />
