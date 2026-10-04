@@ -82,7 +82,7 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - SQLite with WAL mode; schema managed via Umzug migrations in `migrations/`
 
 ### Frontend (server/frontend/src)
-- Feature-based structure under `features/` (keepalived, clients, activity, users, auth, tokens, settings, app)
+- Feature-based structure under `features/` (dashboard, keepalived, clients, activity, users, auth, tokens, webhooks, settings, app)
 - What the server holds lives in one TanStack Query cache (`lib/queryClient.ts`), read through
   the modules in `queries/` and addressed by `lib/queryKeys.ts`. Zustand holds only
   `useUIStore`, what this browser alone knows.
@@ -97,6 +97,13 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   After a reconnect everything the server does not push on connect (`isPushedOnConnect` in
   `lib/queryKeys.ts`) is invalidated. A new cache area the server pushes on connect has to
   be added there.
+- Every path lives once in `lib/paths.ts` (`ROUTES`, `paths`, `clusterPath`). No path literal
+  anywhere else. The route tree in `features/app/routes.tsx` is the one description of what
+  lives where: the sidebar (`handle.nav`), the document title (`lib/pageTitle.ts`), "back"
+  (`useBackPath`, the route above -- never `location.state`) and the `errorElement` are all
+  read off it. A new page is a route there, with its lazy import in `lazyPages.ts`.
+- A route whose subject is gone for good throws `NotFoundError` (`lib/notFound.ts`); a
+  cluster, which comes back with the next reading, says "not found" itself.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,

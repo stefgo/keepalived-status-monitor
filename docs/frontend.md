@@ -10,7 +10,14 @@ The structure follows a **Feature-First Approach**, where code belonging to a sp
 src/
 ├── features/
 │   ├── app/                              # Application shell
-│   │   ├── App.tsx                       # Main router, navGroups and pages configuration
+│   │   ├── App.tsx                       # The providers and the RouterProvider
+│   │   ├── router.tsx                    # createBrowserRouter: /login, and the shell behind ProtectedRoute
+│   │   ├── routes.tsx                    # The route tree: paths, sidebar entries, titles, error elements
+│   │   ├── routeElements.tsx             # What the tree renders: ClientBoundary, the redirects, NotFound
+│   │   ├── routeContext.ts               # useRouteClient: the client of the route above
+│   │   ├── lazyPages.ts                  # The page components, loaded on demand
+│   │   ├── AppLayout.tsx                 # The dashboard shell: sidebar, badges, document title, outlet
+│   │   ├── RouteError.tsx                # The errorElement of every area: not found, or what went wrong
 │   │   ├── context/
 │   │   │   ├── WebSocketContext.ts       # WebSocket context object and useWebSocket hook
 │   │   │   └── WebSocketProvider.tsx     # WebSocket connection; writes each message into the query cache
@@ -31,11 +38,14 @@ src/
 │   │           ├── AddClientWizard.tsx   # Mode choice, then the inbound or outbound branch
 │   │           ├── useAddClientForm.ts   # Form state, held above the wizard
 │   │           └── steps/                # StepConnectionMode, StepInboundDetails, StepOutboundDetails
-│   ├── keepalived/                       # VRRP: dashboard, clusters, a host's instances
+│   ├── dashboard/                        # The landing page
+│   │   ├── lib/dashboard.ts              # What the cards and the sidebar badge count
+│   │   └── components/
+│   │       └── DashboardOverview.tsx     # Numbers, the list behind each, clusters in trouble
+│   ├── keepalived/                       # VRRP: clusters, a host's instances
 │   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
 │   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the cache, recomputed live
 │   │   └── components/
-│   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── MasterList.tsx            # The instances in MASTER, opened from the dashboard
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
@@ -84,6 +94,7 @@ src/
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
+│   ├── useBackPath.ts                    # Where closing a page leads: its parent in the route tree
 │   └── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
 ├── lib/
 │   ├── api.ts                            # The API client: checks every response against its schema
@@ -91,7 +102,11 @@ src/
 │   ├── queryClient.ts                    # The one query cache; readUnlessPushed
 │   ├── queryKeys.ts                      # Every key the cache is addressed by
 │   ├── cacheUpdates.ts                   # How a message or an answer changes a cache entry (pure)
-│   └── storageKeys.ts                    # Every key in the browser's storage, once: kasm.<area>.<what>
+│   ├── storageKeys.ts                    # Every key in the browser's storage, once: kasm.<area>.<what>
+│   ├── paths.ts                          # Every path pattern and path builder, once
+│   ├── backPath.ts                       # parentPath: the nearest route above that is another place
+│   ├── pageTitle.ts                      # The document title, from the handles of the open route
+│   └── notFound.ts                       # NotFoundError, thrown by a route whose subject is gone
 ├── pages/                                # Route entry points
 │   ├── Login.tsx                         # Authentication page (Local & OIDC)
 │   └── Settings.tsx                      # System settings page
@@ -112,35 +127,81 @@ src/
 
 ## 🚦 Routing & Navigation
 
-Routing is controlled via `react-router-dom` v7 in `App.tsx`.
+Routing is a `react-router-dom` v7 data router (`createBrowserRouter` in `features/app/router.tsx`).
+`/login` stands alone; everything else lives behind `ProtectedRoute`, which redirects
+unauthenticated users to `/login`, inside `AppLayout`.
 
-| Path                | Component       | Description                                                         |
-| :------------------ | :-------------- | :------------------------------------------------------------------ |
-| `/login`            | `Login.tsx`     | Authentication page (Local & OIDC).                                 |
-| `/`                 | `AppLayout`     | The `KeepalivedDashboard`.                                          |
-| `/clusters`         | `AppLayout`     | Every VRRP cluster (`ClusterOverview`).                             |
-| `/clusters/:vrid`, `/clusters/:site/:vrid` | `AppLayout` | One VRRP cluster (`ClusterDetail`); `?net=` where several share site and VRID. |
-| `/clients`          | `AppLayout`     | Registered clients overview.                                        |
-| `/clients/new`      | `AppLayout`     | The `AddClientWizard`.                                              |
-| `/client/:clientId` | `AppLayout`     | Detail view of a specific client: identity and keepalived.          |
-| `/client/:clientId/edit` | `AppLayout` | The `ClientEditor` for that client.                               |
-| `/client/:clientId/instance/:instanceName` | `AppLayout` | Redirects to the cluster of that instance; kept for old links. |
-| `/activity`         | `AppLayout`     | The activity list.                                                  |
-| `/users`            | `AppLayout`     | User management.                                                    |
-| `/tokens`           | `AppLayout`     | Registration token management.                                      |
-| `/webhooks`         | `AppLayout`     | The webhooks events are reported to (`WebhookOverview`).            |
-| `/webhooks/new`, `/webhooks/:webhookId` | `AppLayout` | The `WebhookEditor`, adding or editing one webhook.  |
-| `/settings`         | `AppLayout`     | System settings (retention of tokens and activity).                 |
+| Path                | Description                                                         |
+| :------------------ | :------------------------------------------------------------------ |
+| `/login`            | Authentication page (Local & OIDC).                                 |
+| `/`                 | The `DashboardOverview`.                                            |
+| `/clusters`         | Every VRRP cluster (`ClusterOverview`).                             |
+| `/clusters/:vrid`, `/clusters/:site/:vrid` | One VRRP cluster (`ClusterDetail`); `?net=` where several share site and VRID. |
+| `/clients`          | Registered clients overview.                                        |
+| `/clients/new`      | The `AddClientWizard`.                                              |
+| `/clients/:clientId` | Detail view of a specific client: identity and keepalived.         |
+| `/clients/:clientId/edit` | The `ClientEditor` for that client.                           |
+| `/activity`         | The activity list.                                                  |
+| `/users`            | User management.                                                    |
+| `/tokens`           | Registration token management.                                      |
+| `/webhooks`         | The webhooks events are reported to (`WebhookOverview`).            |
+| `/webhooks/new`, `/webhooks/:webhookId` | The `WebhookEditor`, adding or editing one webhook.  |
+| `/settings`         | System settings (retention of tokens and activity).                 |
+| `/client/:clientId`, `/client/:clientId/edit` | The addresses the client pages had before; redirect to `/clients/…` for one release (`LEGACY_ROUTES`). |
+| `/client/:clientId/instance/:instanceName` | Redirects to the cluster of that instance; kept for old links. |
 
-All routes except `/login` are wrapped in a `ProtectedRoute` component that redirects unauthenticated users to `/login`.
+### One definition (`lib/paths.ts`, `features/app/routes.tsx`)
 
-The `AppLayout` uses the `Dashboard` component from `@stefgo/react-ui-components`. Since library 3.0 it renders **only the navigation** and highlights the entry whose `path` matches; the page content is a `<Routes>` element passed to it as `children`. A `DashboardPage` entry is therefore `{ id, path, nav }` — path (with `:param` segments), plus label, icon and an optional badge. Navigation is organised into `navGroups` (`overview` with the dashboard, `resources` titled "Monitoring" with clusters and clients, `activity`, `admin`).
+**Every path is written once**, in `lib/paths.ts`: `ROUTES` holds the patterns, `paths` the
+builders that fill them (`paths.client(id)`), and `clusterPath` and `activitySearch` the two
+addresses that carry a query. No component spells a path; the routes take their `path` from
+`ROUTES`, and whatever navigates takes a pattern or a builder.
 
-A path no entry claims reaches the catch-all route and renders a **404 card** that names the path and leads back to the clients view. The Dashboard used to fall back to its first page silently, so an unknown URL looked like the clients page.
+**The tree in `routes.tsx` is the only description of what lives where.** An area is a
+top-level route with its pages below it, and four things are read off it:
 
-**The pages are loaded on demand** (`React.lazy` with a `Suspense` fallback), so a chunk arrives with the route that needs it. The previous shape passed every page as an element to the Dashboard, which built the tree of every page on every render of the shell even though one was on screen.
+- **The sidebar** is the areas that carry `handle.nav` (label, icon, group), in the tree's
+  order. `AppLayout` adds what only the running application knows -- the client count, the
+  dot for unseen activity -- and marks the entry of the innermost matched area
+  (`DashboardPage.active`), so an editor or a detail page keeps its area marked without its
+  path being listed anywhere. The groups are `overview`, `resources` (titled "Monitoring"),
+  `activity` and `admin`.
+- **The browser tab** names the open page (`lib/pageTitle.ts`): the handles along the open
+  route, most specific first -- `Edit · lb01 · Clients · KASM`. A route says `title` (a
+  form) or `subject` (a client, called by its name from the cached list; a cluster, called
+  `VRID 51` or `dc1 / VRID 51` from the address). Until a subject has a name the area
+  stands alone.
+- **Back** is the route above (`hooks/useBackPath`, `lib/backPath.ts`): the nearest match
+  in the tree that is another place. The client page and the cluster page close onto their
+  list, the client editor onto the client's page, the webhook editor onto the webhook list.
+  It is read from the URL alone, so a reloaded or shared link closes onto the same place as
+  one opened by a click -- which also means a cluster opened from the dashboard closes onto
+  the cluster list, not the dashboard. The query string travels along: the webhook list
+  hands its `search` to the editor and has it back on return. The cluster page drops it,
+  since `net` means nothing to the list.
+- **Not found and render errors** are the area's `errorElement`, `RouteError`: the page is
+  replaced, the shell around it stays, and the URL stays where it was.
 
-Each route takes what it needs from the query cache itself: `ClientsRoute` reads `useClients`, the keepalived pages read `useKeepalivedStates` and `useClients`. The routes under `/client/:clientId` resolve their client through `RouteClient`: while the list is pending it shows the spinner, because a link to a client arrives before the client list does, and only once the list has answered is a missing client really gone. That case gets the not-found card, and the URL stays where it was. The routes used to show the client list instead, under an address that named a client.
+A path no route claims reaches the catch-all and renders a **404 card** that names the path
+and leads back to the clients view.
+
+**The pages are loaded on demand** (`React.lazy` in `lazyPages.ts`, with a `Suspense`
+fallback around the outlet), so a chunk arrives with the route that needs it.
+
+### Subjects that do not exist
+
+Each route takes what it needs from the query cache itself. The routes under
+`/clients/:clientId` share the layout route `ClientBoundary`, which resolves the client once
+and hands it down as the outlet context (`useRouteClient`). While the list is pending it
+shows the spinner, because a link to a client arrives before the client list does; only once
+the list has answered is a missing client really gone, and then it throws `NotFoundError`
+(`lib/notFound.ts`). The webhook editor does the same for its id. `RouteError` turns the
+error into the not-found card.
+
+`NotFoundError` is only for a subject that is gone for good once it is missing: the router
+keeps the error element until the next navigation. A **cluster** is derived from what the
+hosts report and comes back with the next reading, so `ClusterDetail` shows its own
+`NotFoundCard` and the cluster again when it is back.
 
 ---
 
@@ -291,7 +352,7 @@ It lives in the workspace rather than in a modal, because the two branches end i
 
 ### ClientOverview (`features/clients`)
 
-The detail view for a single client, shown when navigating to `/client/:clientId`. An
+The detail view for a single client, shown when navigating to `/clients/:clientId`. An
 `EntityHeader` names the client and keeps keepalived's state on screen as details —
 running, unreadable or stopped with its version and PID, instances, MASTER, FAULT
 (`summarizeKeepalived`). A FAULT count above zero is also a badge in the title row, and a
@@ -308,7 +369,7 @@ last one reported rather than the present state — the server keeps it for exac
 
 *A client's page: keepalived's state in the header, the last reading's instances and sync groups below.*
 
-### KeepalivedDashboard (`features/keepalived`)
+### DashboardOverview (`features/dashboard`)
 
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters (with the instance
 count), MASTER (with the FAULT count) and errors / warnings (unseen activity rows at `warning`
@@ -373,7 +434,7 @@ deleted are left out.
 
 One cluster at `/clusters/<vrid>`, or `/clusters/<site>/<vrid>` for clients with a site,
 opened from a cluster row, a cluster card's title or an instance row on a client's page.
-`clusterPath` in `lib/vrrp.ts` builds the address. A VRID is unique per broadcast domain
+`clusterPath` in `lib/paths.ts` builds the address. A VRID is unique per broadcast domain
 only: two segments of one site may use the same one, and only then does the path carry
 `?net=` (`clusterNetworkKey`) to tell them apart. A bare path that fits several clusters
 shows a list to pick from. A cluster without a VRID has no page.
@@ -430,7 +491,7 @@ state in the tooltip and the rest of the row dimmed — as in the cluster list. 
 state is left out on such a row. `VrrpStateBadge` gives every state one colour, everywhere:
 MASTER `success`, BACKUP `info`, FAULT `error`, INIT and STOP `warning`, the rest `neutral`.
 
-`Escape` on a detail page is handled by `hooks/useEscapeToLeave`. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
+`Escape` on a detail page is handled by `hooks/useEscapeToLeave` and leads where `useBackPath` says. It does nothing while the focus is in a field, so Escape in a list's search box clears nothing and leaves nothing.
 
 ### ActivityView (`features/activity`)
 
@@ -507,9 +568,9 @@ of a failure. A row, or its Edit action, opens the editor; Delete asks first.
 
 **The editor is a page, not a dialog**, at `/webhooks/new` and `/webhooks/:webhookId`. It
 leaves the way the `ClientEditor` does: the close button in the card's header, Escape, or
-Cancel, each asking first when there are unsaved edits, and going back to
-`location.state.from` or else to the list; Save goes back after storing. The webhook is read
-from `GET /api/v1/webhooks`; an id that is not there gets a `NotFoundCard`. The preview is
+Cancel, each asking first when there are unsaved edits, and going back to the list
+(`useBackPath`); Save goes back after storing. The webhook is read from
+`GET /api/v1/webhooks`; an id that is not there throws `NotFoundError`. The preview is
 rendered with `renderTemplate` from `@kasm/shared` — the code the server sends with — against
 the sample event for the draft's kinds (`sampleWebhookRecord`, the one "Send Test" sends; its
 kind is named above the preview), so the preview and the delivery cannot disagree. "Send Test" posts the
