@@ -99,6 +99,19 @@ jobs:
             - name: Build all workspaces
               run: npm run build
 
+            # Reads shared from its source (the `development` export condition), so it
+            # does not depend on the build above -- it runs after it only because a
+            # build that fails is the cheaper thing to be told first.
+            - name: Test
+              run: npm test
+
+            # The build above leaves shared's tests out (tsconfig.build.json), so they
+            # do not end up in dist -- and Vitest strips types without checking them.
+            # This is what checks them. The frontend's are covered by its typecheck
+            # below, whose tsconfig includes all of src.
+            - name: Typecheck shared tests
+              run: npm run typecheck -w shared
+
             # The workspace script, not a second spelling of it: `typecheck` checks
             # against the installed UI library, `typecheck:local-ui` against a sibling
             # checkout that does not exist on the runner. CI must stay on the first.
