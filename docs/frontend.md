@@ -26,13 +26,16 @@ src/
 │   │   ├── AuthContext.ts                # Auth context object and useAuth hook
 │   │   └── AuthProvider.tsx              # Authentication state
 │   ├── clients/                          # Client management
-│   │   ├── confirmations.ts              # Delete-client and discard texts
+│   │   ├── confirmations.ts              # Delete-client text
+│   │   ├── lib/
+│   │   │   ├── clientForm.ts             # The client editor's draft, its request and its rules (pure)
+│   │   │   └── addClientForm.ts          # Whether the add-client flow holds anything to lose (pure)
 │   │   └── components/
 │   │       ├── ManagedClients.tsx        # Container for client list & actions
 │   │       ├── ClientList.tsx            # Paginated client data table
 │   │       ├── ClientOverview.tsx        # Detail view for a single client: header + keepalived
-│   │       ├── ClientIdentityCard.tsx    # The client's own fields, edited and saved in place
-│   │       ├── ClientEditor.tsx          # Form for editing a client
+│   │       ├── ClientIdentityCard.tsx    # The client's own fields; shows the form the editor holds
+│   │       ├── ClientEditor.tsx          # The page that edits a client: holds the form and the guard
 │   │       ├── ClientLabel.tsx           # Dot and name of a client, for the rows that name one
 │   │       └── add-client/               # One wizard for both connection modes
 │   │           ├── AddClientWizard.tsx   # Mode choice, then the inbound or outbound branch
@@ -64,19 +67,20 @@ src/
 │   │       └── groupActivity.ts          # Folds the flat list into rows by correlationId
 │   ├── webhooks/                         # Webhooks: list and editor, each a page
 │   │   ├── confirmations.ts              # Delete-webhook text
-│   │   ├── lib/webhookForm.ts            # Draft <-> API shape, preview, placeholder list
+│   │   ├── lib/webhookForm.ts            # Draft <-> API shape, its rules, preview, placeholder list
 │   │   └── components/
 │   │       ├── WebhookOverview.tsx       # The page at /webhooks: loads, deletes, opens the editor
 │   │       ├── WebhookList.tsx           # DataMultiView of the targets and their last delivery
 │   │       └── WebhookEditor.tsx         # /webhooks/new and /webhooks/:id, with live preview and "Send Test"
 │   ├── users/                            # User management
 │   │   ├── confirmations.ts              # Delete-user and last-user texts
+│   │   ├── lib/userForm.ts               # The user dialog's draft, its request and its rules (pure)
 │   │   └── components/
 │   │       ├── UserOverview.tsx
 │   │       ├── UserList.tsx
 │   │       └── UserDialog.tsx
 │   ├── settings/                         # The settings page's sections
-│   │   ├── sections.ts                   # The two tabs and the keys each one saves
+│   │   ├── sections.ts                   # The two tabs, the keys each one saves, and what the server would refuse
 │   │   ├── lib/runResult.ts              # describeRunResult: a scheduler run's result in words
 │   │   └── components/
 │   │       ├── SettingsSections.tsx      # One component per section
@@ -89,13 +93,16 @@ src/
 │           ├── TokenList.tsx
 │           └── TokenModal.tsx
 ├── components/
+│   ├── confirmations.ts                  # The question asked when an editor with unsaved changes is left
 │   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
 │   └── QueryError.tsx                    # A page whose data could not be read, with the server's reason
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
 │   ├── useBackPath.ts                    # Where closing a page leads: its parent in the route tree
-│   └── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
+│   ├── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
+│   ├── useEntityForm.ts                  # An editor's draft, its baseline and its save, checked against a schema
+│   └── useUnsavedChangesGuard.ts         # One question for every way out of a changed editor
 ├── lib/
 │   ├── api.ts                            # The API client: checks every response against its schema
 │   ├── apiFetch.ts                       # Below it: the session cookie and the central 401 handling
@@ -106,7 +113,8 @@ src/
 │   ├── paths.ts                          # Every path pattern and path builder, once
 │   ├── backPath.ts                       # parentPath: the nearest route above that is another place
 │   ├── pageTitle.ts                      # The document title, from the handles of the open route
-│   └── notFound.ts                       # NotFoundError, thrown by a route whose subject is gone
+│   ├── notFound.ts                       # NotFoundError, thrown by a route whose subject is gone
+│   └── entityForm.ts                     # The rules a form is checked by: field errors, sameness of drafts (pure)
 ├── pages/                                # Route entry points
 │   ├── Login.tsx                         # Authentication page (Local & OIDC)
 │   └── Settings.tsx                      # System settings page
@@ -297,7 +305,7 @@ The container component for the client management view. Coordinates between the 
 
 - **Functionality**:
     - Displays the list of registered clients (`ClientList`).
-    - Opens the client editor (`ClientEditor`) for renaming a client, setting its site (part of the VRRP cluster key: hosts of one cluster need the same site), for inbound clients editing or switching off the address its connections must come from, and for outbound clients the address the server dials. `Escape` leaves the editor and discards, as the Cancel button beside it does; while anything has been changed the footer says so, which is the safety net for both. The field is validated with `Ipv4OrCidrSchema` from `@kasm/shared`, the same rule the server applies; server errors are shown in the form. An allowed address that would not let `inboundLastIp` — the address of the agent's last successful connect — back in is called out beneath the field, using the same `isIpAllowed` the server decides with. It does not block saving: the value is well-formed and the agent may have moved on purpose, so this is a consequence worth seeing, not a reason to refuse.
+    - Opens the client editor (`ClientEditor`) for renaming a client, setting its site (part of the VRRP cluster key: hosts of one cluster need the same site), for inbound clients editing or switching off the address its connections must come from, and for outbound clients the address the server dials. Leaving with unsaved changes asks first, whichever way out is taken (see [Forms](#forms-hooksuseentityform-hooksuseunsavedchangesguard)). The draft is checked against `UpdateClientSchema` from `@kasm/shared`, the schema the server parses the request with, so an address it would refuse is reported at its field; an address that was not touched is not sent and so stays savable. Server errors are shown in the form. An allowed address that would not let `inboundLastIp` — the address of the agent's last successful connect — back in is called out beneath the field, using the same `isIpAllowed` the server decides with. It does not block saving: the value is well-formed and the agent may have moved on purpose, so this is a consequence worth seeing, not a reason to refuse.
     - Opens the `AddClientWizard` — one flow for both connection modes, replacing the former "Add Outbound Client" dialog and "Generate New Token" button.
     - The row menu's **Reload** asks the agent to read keepalived now, or — for an offline outbound client — dials it again.
     - A **keepalived** column sums up the host's last reading: `2 instances · 1 MASTER`, with FAULTs called out, or "Not running" / "Unreadable".
@@ -315,6 +323,26 @@ It is the library's `StatusDot` and takes a `tone`, not a client's status: the c
 
 `AppLayout` wraps the dashboard in `StatusDotProvider` with `live` bound to the WebSocket's `isLost`: a pulse says "this is happening now", and once the socket has been gone for five seconds no dot pulses. The same flag shows the `ConnectionBanner`.
 
+### Forms (`hooks/useEntityForm`, `hooks/useUnsavedChangesGuard`)
+
+Every editor keeps the same three things: a draft, what it was when it was opened or last saved, and how the save went. `useEntityForm` holds them; each editor used to build them by hand.
+
+- **Checked before it is sent.** The draft is turned into the request (`toInput`) and parsed with **the schema the backend parses that request with** -- `WebhookInputSchema`, `UpdateClientSchema`, `CreateUserSchema`. An issue is shown at its field (`fieldOf` maps a request key to a draft field); what belongs to no field is `formError`. `rules` adds what only the form knows, such as "a ticked restriction needs an address".
+- **Errors appear with the first change.** A form that was just opened has a disabled Save because there is nothing to save, not because a field is wrong.
+- **The rules are pure.** `lib/entityForm.ts` and the `lib/*Form.ts` module of a feature (`clientForm`, `userForm`, `webhookForm`, `addClientForm`) hold them apart from React, where the tests reach them.
+
+`useUnsavedChangesGuard(isDirty, editor)` is the one place unsaved work is asked about. Every way out of a page goes through the router's blocker -- the close button, Cancel, Escape, an entry in the sidebar, the browser's back button -- so they all ask the same question (`describeDiscardChanges` in `components/confirmations.ts`). The editors used to ask only for their own close button and Escape; a click in the sidebar dropped the edits without a word. A reload or a closed tab is not a navigation the router sees, and gets the browser's own prompt (`beforeunload`). The blocker is why the routes run on a data router.
+
+It returns `close` (leave for the parent in the route tree, asked about while dirty) and `leave` (the same without the question, for the navigation that follows a save).
+
+| Surface | Form | Guard |
+| :-- | :-- | :-- |
+| `ClientEditor` + `ClientIdentityCard` | `useEntityForm` held by the editor, `clientForm.ts` | yes |
+| `WebhookEditor` | `useEntityForm`, `webhookForm.ts` | yes |
+| `UserDialog` | `useEntityForm`, `userForm.ts` | no: a modal, not a route |
+| `AddClientWizard` | `useAddClientForm`: two branches with a schema each, held above the steps | yes, once anything was entered |
+| `Settings` | its own draft per section, checked by `sectionError` | yes, while any section is unsaved |
+
 ### Dialogs
 
 `Modal` from `@stefgo/react-ui-components` is what a dialog is built from. The three hand-built overlays that preceded it (`fixed inset-0 bg-black/80 …`) had no focus trap, no Escape, no scroll lock and no focus return.
@@ -322,7 +350,7 @@ It is the library's `StatusDot` and takes a `tone`, not a client's status: the c
 - `UserDialog` turns `closeOnOverlayClick` off: it holds unsaved input, and a stray click beside it should not discard the work.
 - `TokenModal` turns `closeOnEscape` off as well and hides the close button. The token is in the clear exactly once, so dismissing the dialog is not a way out but the loss of what the flow was for; the button below it is the only way on. The token stands in the library's `CopyField`: over plain HTTP, where the browser has no clipboard, the button selects the token and says so instead of failing silently.
 
-Editors that live in the workspace rather than in a dialog bring their own `Escape` on a `window` listener — see `AddClientWizard` and `ClientEditor`.
+Editors that live in the workspace rather than in a dialog leave through `useUnsavedChangesGuard`, which also handles their `Escape` — see [Forms](#forms-hooksuseentityform-hooksuseunsavedchangesguard).
 
 ### Confirmations
 
@@ -332,7 +360,7 @@ Every question before an action, and every notice after a failed one, goes throu
 - An action whose outcome is worth waiting for — a delete — goes in `onConfirm`. The dialog stays open and busy until it settles; a rejection keeps it open with the error inside it, next to the button that retries. That is why a delete is passed as `mutateAsync`, which rejects, rather than reporting the failure itself.
 - `alert(describeFailure(title, error))` from `utils.ts` reports a failure of an action that was not asked about first, such as the cleanups in Settings.
 
-**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
+**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. The one question every editor shares — "Discard your changes?" — lives in `components/confirmations.ts`, with one consequence line per editor. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
 
 ### AddClientWizard (`features/clients/components/add-client`)
 
@@ -347,6 +375,7 @@ It lives in the workspace rather than in a modal, because the two branches end i
 - **Inbound branch**: display name and allowed address for the client the token will create. Both optional — without them the agent's hostname names the client and the address it registers from becomes its allowed address. Ends in a `TokenModal`, which shows the token once.
 - **Outbound branch**: hostname, target address and the agent's setup PIN (or its `KASM_REGISTRATION_SECRET`); finishing dials the agent straight away, and a refusal is shown on the step with the agent's own reason.
 - The wizard renders only the current step, so the form state lives above it in `useAddClientForm` — a step holding its inputs in its own `useState` would lose them on Back.
+- Cancel, Escape and every other way out ask first once anything has been entered (`hasAddClientInput` in `lib/addClientForm.ts`). After the token was issued or the client was added, the flow leaves without a question.
 - Both fields that the server validates are checked in the form with the same functions the endpoints use (`Ipv4OrCidrSchema`, `normaliseTargetAddress` from `@kasm/shared`).
 - `Escape` leaves the wizard. The listener sits on `window`, one level further out than menus and dialogs that listen on `document` and stop the event there, so an open select closes itself without taking the wizard with it. It is off while the token is on screen: that dialog is acknowledged by button, because the token is shown exactly once.
 
@@ -549,7 +578,7 @@ badge counts single unseen events, not groups.
 
 ### UserOverview (`features/users`)
 
-Manages user accounts. Supports creating, editing, and deleting users via a `UserDialog` form. Deleting asks first; the dialog states that a session the account already holds stays valid until it expires, because the API checks only the JWT. For the last remaining user a second dialog explains why it cannot be deleted instead of sending the request. `UserList` is a `DataMultiView` like every other list: search by username, a list view for narrow screens, pagination.
+Manages user accounts. Supports creating, editing, and deleting users via a `UserDialog` form, checked against `CreateUserSchema`; that a local account needs a password is said at the password field. Deleting asks first; the dialog states that a session the account already holds stays valid until it expires, because the API checks only the JWT. For the last remaining user a second dialog explains why it cannot be deleted instead of sending the request. `UserList` is a `DataMultiView` like every other list: search by username, a list view for narrow screens, pagination.
 
 ### TokenOverview (`features/tokens`)
 
@@ -567,9 +596,11 @@ of a failure. A row, or its Edit action, opens the editor; Delete asks first.
 *The webhook list; neither of these two has been sent yet.*
 
 **The editor is a page, not a dialog**, at `/webhooks/new` and `/webhooks/:webhookId`. It
-leaves the way the `ClientEditor` does: the close button in the card's header, Escape, or
-Cancel, each asking first when there are unsaved edits, and going back to the list
-(`useBackPath`); Save goes back after storing. The webhook is read from
+leaves the way the `ClientEditor` does: every way out asks first when there are unsaved
+edits and leads back to the list (`useUnsavedChangesGuard`); Save goes back after storing.
+The draft is checked against `WebhookInputSchema`: each field says what it lacks, a header
+line that is not `Name: value` is reported at the headers, and Save and "Send Test" stay off
+until the draft is one the server takes. The webhook is read from
 `GET /api/v1/webhooks`; an id that is not there throws `NotFoundError`. The preview is
 rendered with `renderTemplate` from `@kasm/shared` — the code the server sends with — against
 the sample event for the draft's kinds (`sampleWebhookRecord`, the one "Send Test" sends; its
@@ -580,7 +611,7 @@ unsaved draft to `/api/v1/webhooks/test`. See [Webhooks](webhooks.md) for the te
 
 System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel` with a `SideTab` per section, the sections are built from its `SectionHeader` and `NumberField`, and the open tab is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
 
-**Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
+**Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot, and leaving the page asks first for as long as any section has some; switching tabs is not leaving. A value the server would refuse is named beside Save before anything is sent (`sectionError`, against `CleanupSettingsSchema`). The manual maintenance runs act on the saved values, not on unsaved edits.
 
 **Every tab follows one layout:** its settings, then one `SchedulerBox` headed "Scheduler". It shows Status (`Running…` or `Idle`), Last Run (with "manual" when a user started it), Next Run (or "Disabled") and Result, and, below a divider, the `ManualRun` row with its Run Now button. The box draws no field borders: its values are to read, not to edit. It reads `useSchedulerStatus`; the result is worded by `describeRunResult` (`features/settings/lib/runResult.ts`), in red for a failed or interrupted run. The settings page uses no monospaced type.
 

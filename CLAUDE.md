@@ -104,6 +104,11 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   read off it. A new page is a route there, with its lazy import in `lazyPages.ts`.
 - A route whose subject is gone for good throws `NotFoundError` (`lib/notFound.ts`); a
   cluster, which comes back with the next reading, says "not found" itself.
+- An editor keeps its draft in `useEntityForm`, checked against the request schema from
+  `shared`; its rules are pure and live in the feature's `lib/<name>Form.ts`, with a test.
+  Leaving a page with unsaved changes is asked about in one place, `useUnsavedChangesGuard`
+  (the router's blocker); an editor navigates away with its `close` or `leave`, never with
+  `navigate` of its own.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,
