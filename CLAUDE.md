@@ -55,11 +55,13 @@ npm run screenshots      # docs/assets/screenshots from a running server (see do
 
 # Frontend only (server/frontend)
 npm run lint                 # ESLint
-npm run typecheck            # tsc against the installed UI library
+npm run typecheck            # tsc against the installed UI library, then over vite.config.ts
 npm run typecheck:local-ui   # tsc against a sibling checkout of the UI library
 ```
 
-The Vite build does not type-check, so `typecheck` is the frontend's only type gate.
+The Vite build does not type-check, so `typecheck` is the frontend's only type gate. Its
+second run covers `vite.config.ts` through `tsconfig.node.json`, the files Node runs rather
+than the browser.
 
 `build` names its workspaces one by one instead of using `--workspaces`, because
 `shared` has to be built first and the others need its output. `--workspaces` would
@@ -186,7 +188,7 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
 - The version string is derived in one order everywhere: build argument, then the root
   `package.json` (with `+<hash>` when the commit carries no release tag), then git. The
   order lives in `scripts/generate-version.sh` and, mirrored, in
-  `server/frontend/vite.config.js`. Only the client agent ships a `dist/VERSION` file.
+  `server/frontend/vite.config.ts`. Only the client agent ships a `dist/VERSION` file.
 
 ## Testing
 

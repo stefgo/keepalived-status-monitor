@@ -164,7 +164,7 @@ Production images use multi-stage Docker builds:
 
 ### Version Injection
 
-The version string is derived in the same order everywhere — by `scripts/generate-version.sh` for the agent's `dist/VERSION` file, and by `getVersion()` in `server/frontend/vite.config.js` for the dashboard:
+The version string is derived in the same order everywhere — by `scripts/generate-version.sh` for the agent's `dist/VERSION` file, and by `getVersion()` in `server/frontend/vite.config.ts` for the dashboard:
 
 1. `APP_VERSION` / `VITE_APP_VERSION`. CI passes the released version (`1.2.0`, without the `v` of the tag) or `<branch>-<short-sha>` for a branch build.
 2. The version in the root `package.json`, which semantic-release maintains. On a commit that carries a release tag it is used as it is; otherwise the commit is appended (`1.2.0+abc1234[-dirty]`), so a build between releases never looks like the release.
@@ -250,7 +250,9 @@ at the root, with one project per workspace that has tests: `shared` and `fronte
   `shared/dist`, which needs a build first and is stale the moment `shared/src` changes.
 - **`shared` builds without its tests** (`tsconfig.build.json`), so they do not end up in
   `dist`. Vitest strips types without checking them, so `npm run typecheck -w shared` is what
-  checks those files; the frontend's are covered by its own `typecheck`.
+  checks those files; the frontend's are covered by its own `typecheck`. That script runs
+  `tsc` twice: over `src`, and over `vite.config.ts` through `tsconfig.node.json`, so the
+  build configuration is checked too.
 - **A special case that so far only a comment guarded gets a test named after it** — a host
   whose agent is offline, an address written without its prefix, an incident whose opening
   arrives after its update.

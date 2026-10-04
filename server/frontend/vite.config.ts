@@ -7,9 +7,12 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Node puts the system's error code on the error; the type of a caught one does not say so. */
+const isEpipe = (err: Error): boolean => (err as NodeJS.ErrnoException).code === "EPIPE";
+
 // --- Ignore EPIPE globally (safe for dev) ---
 process.on("uncaughtException", (err) => {
-    if (err.code === "EPIPE") return;
+    if (isEpipe(err)) return;
     console.error(err);
 });
 
@@ -17,13 +20,13 @@ process.on("uncaughtException", (err) => {
 // Same precedence as scripts/generate-version.sh, so the version the UI shows and the
 // one an agent reports cannot disagree: build argument, then the version
 // semantic-release maintains in the root package.json, then git.
-const getVersion = () => {
+const getVersion = (): string => {
     if (process.env.VITE_APP_VERSION) {
         return process.env.VITE_APP_VERSION;
     }
     try {
         const rootPackageJson = path.resolve(__dirname, "../../package.json");
-        const { version } = JSON.parse(readFileSync(rootPackageJson, "utf8"));
+        const { version } = JSON.parse(readFileSync(rootPackageJson, "utf8")) as { version?: string };
         if (version) {
             try {
                 execSync("git describe --tags --exact-match", { stdio: "pipe" });
@@ -90,7 +93,7 @@ export default defineConfig(() => ({
                 ws: true,
                 configure: (proxy) => {
                     proxy.on("error", (err) => {
-                        if (err.code === "EPIPE") return;
+                        if (isEpipe(err)) return;
                         console.log("proxy ws error", err);
                     });
                 },
