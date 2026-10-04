@@ -57,9 +57,9 @@ const Validity = ({ token: t }: { token: Token }) => {
 };
 
 const StatusBadge = ({ token: t }: { token: Token }) => {
-    if (t.usedAt) return <Badge variant="neutral" size="sm">Used</Badge>;
-    if (isExpired(t)) return <Badge variant="error" size="sm">Expired</Badge>;
-    return <Badge variant="success" size="sm">Active</Badge>;
+    if (t.usedAt) return <Badge variant="neutral">Used</Badge>;
+    if (isExpired(t)) return <Badge variant="error">Expired</Badge>;
+    return <Badge variant="success">Active</Badge>;
 };
 
 /**

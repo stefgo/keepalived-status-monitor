@@ -33,13 +33,13 @@ const AuthBadges = ({ methods: methodsStr }: { methods?: string }) => {
     return (
         <div className="flex gap-1">
             {methods.includes("local") && (
-                <Badge variant="neutral" size="sm" className="inline-flex items-center gap-1">
-                    <Key size={10} /> Local
+                <Badge variant="neutral" className="inline-flex items-center gap-1">
+                    <Key size={12} /> Local
                 </Badge>
             )}
             {methods.includes("oidc") && (
-                <Badge variant="info" size="sm" className="inline-flex items-center gap-1">
-                    <Globe size={10} /> OIDC
+                <Badge variant="info" className="inline-flex items-center gap-1">
+                    <Globe size={12} /> OIDC
                 </Badge>
             )}
         </div>

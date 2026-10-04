@@ -5,7 +5,7 @@ import { Client, CLIENT_STATUS } from "@kasm/shared";
 import { clientName, EMPTY_VALUE, formatDate } from "../../../utils";
 import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 import { StatusDot } from "./StatusDot";
-import { DataTableDef } from "@stefgo/react-ui-components";
+import { Badge, DataTableDef } from "@stefgo/react-ui-components";
 import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
 import { DataMultiView } from "@stefgo/react-ui-components";
 
@@ -89,14 +89,16 @@ export const ClientList = ({
         });
 
         cols.push({
-            tableHeader: null,
+            tableHeader: "Status",
             tableCellClassName: "align-top text-sm text-text-primary",
             tableItemRender: (client) =>
                 client.status !== CLIENT_STATUS.ONLINE ? (
                     <div className="whitespace-nowrap opacity-70">
                         Last Seen: {formatDate(client.lastSeen)}
                     </div>
-                ) : null,
+                ) : (
+                    <Badge variant="success">Online</Badge>
+                ),
         });
 
         if (renderRowActions) {
@@ -168,9 +170,7 @@ export const ClientList = ({
                         {formatDate(client.lastSeen)}
                     </span>
                 ) : (
-                    <span className="text-success text-sm">
-                        Online
-                    </span>
+                    <Badge variant="success">Online</Badge>
                 ),
             listLabel: "Status",
         });

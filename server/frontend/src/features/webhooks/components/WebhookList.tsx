@@ -29,7 +29,7 @@ const Name = ({ webhook, withState = false }: { webhook: Webhook; withState?: bo
     <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">{webhook.name}</span>
         {withState && !webhook.enabled && (
-            <Badge variant="neutral" size="sm">
+            <Badge variant="neutral">
                 Disabled
             </Badge>
         )}
@@ -56,7 +56,7 @@ const Filter = ({ webhook }: { webhook: Webhook }) => (
 const LastDelivery = ({ webhook }: { webhook: Webhook }) => {
     if (!webhook.lastAttemptAt) {
         return (
-            <Badge variant="neutral" size="sm">
+            <Badge variant="neutral">
                 Never sent
             </Badge>
         );
