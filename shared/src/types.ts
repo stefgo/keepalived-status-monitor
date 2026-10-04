@@ -31,11 +31,15 @@ import {
     ActivityEventSchema,
     ActivityRecordSchema,
     ActivitySubjectSchema,
-    DashboardMessageSchema,
-    SchedulerStatusUpdateSchema,
     WebhookInputSchema,
     WebhookSchema,
 } from "./schemas.js";
+import {
+    SchedulerStatusUpdateSchema,
+    SchedulerStatusesSchema,
+    UserSchema,
+    WebhookTestResultSchema,
+} from "./responses.js";
 
 export type RegistrationPayload = z.infer<typeof RegistrationPayloadSchema>;
 export type RegistrationResponse = z.infer<typeof RegistrationResponseSchema>;
@@ -217,16 +221,8 @@ export type ActivityRecord = z.infer<typeof ActivityRecordSchema>;
 export type WebhookInput = z.input<typeof WebhookInputSchema>;
 export type Webhook = z.infer<typeof WebhookSchema>;
 
-/** `POST /api/v1/webhooks/:id/test`: what was sent, and what came back. */
-export interface WebhookTestResult {
-    ok: boolean;
-    status: number | null;
-    error: string | null;
-    /** The rendered body, as it went out. */
-    body: unknown;
-    /** The start of the target's answer, for seeing why it refused. */
-    response: string | null;
-}
+/** `POST /api/v1/webhooks/test`: what was sent, and what came back. */
+export type WebhookTestResult = z.infer<typeof WebhookTestResultSchema>;
 
 // ── Schedulers ───────────────────────────────────────────────────────────────
 
@@ -280,7 +276,13 @@ const schedulerStatusUpdateMatchesSchema: [
 ] = [(update) => update, (parsed) => parsed];
 void schedulerStatusUpdateMatchesSchema;
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
+const schedulerStatusesMatchSchema: [
+    (statuses: SchedulerStatuses) => z.infer<typeof SchedulerStatusesSchema>,
+    (parsed: z.infer<typeof SchedulerStatusesSchema>) => SchedulerStatuses,
+] = [(statuses) => statuses, (parsed) => parsed];
+void schedulerStatusesMatchSchema;
 
-/** One message of the server-to-dashboard stream, as `DashboardMessageSchema` parses it. */
-export type DashboardMessage = z.infer<typeof DashboardMessageSchema>;
+// ── Users ────────────────────────────────────────────────────────────────────
+
+/** One row of `GET /api/v1/users`. */
+export type User = z.infer<typeof UserSchema>;

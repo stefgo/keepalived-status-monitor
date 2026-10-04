@@ -5,12 +5,8 @@ import {
     CLIENT_STATUS,
     CONNECTION_MODE,
     DEFAULT_AGENT_PORT,
-    SCHEDULER_IDS,
-    SCHEDULER_RUN_STATUSES,
-    SCHEDULER_TRIGGERS,
     VRRP_STATES,
     WEBHOOK_METHODS,
-    WS_EVENTS,
 } from "./constants.js";
 import { normaliseTargetAddress } from "./targetAddress.js";
 import { placeholderError, webhookTemplateError } from "./webhookTemplate.js";
@@ -258,7 +254,8 @@ export const TokenSchema = z.object({
     tokenHash: z.string(),
     createdAt: z.string(),
     expiresAt: z.string(),
-    usedAt: z.string().optional(),
+    /** Null until an agent has registered with it. */
+    usedAt: z.string().nullish(),
     /**
      * What the operator fixed when issuing the token, for the client it creates. Absent
      * means the agent's hostname and the address it registers from decide, as before.
@@ -780,67 +777,3 @@ export const WebhookSchema = WebhookInputSchema.extend({
     createdAt: z.string(),
     updatedAt: z.string().nullable(),
 });
-
-// ── Schedulers ───────────────────────────────────────────────────────────────
-
-/**
- * `SCHEDULER_STATUS_UPDATE` as the dashboard parses it. The types in types.ts are written
- * by hand, generic over the scheduler; this schema is checked against them there. Every
- * scheduler reports `{ removed }` as its result, so one shape covers all of them.
- */
-export const SchedulerStatusUpdateSchema = z.object({
-    scheduler: z.enum(SCHEDULER_IDS),
-    status: z.object({
-        isRunning: z.boolean(),
-        nextRun: z.string().nullable(),
-        lastRun: z
-            .object({
-                trigger: z.enum(SCHEDULER_TRIGGERS),
-                status: z.enum(SCHEDULER_RUN_STATUSES),
-                startedAt: z.string(),
-                finishedAt: z.string().nullable(),
-                result: z.object({ removed: z.number() }).nullable(),
-                error: z.string().nullable(),
-            })
-            .nullable(),
-    }),
-});
-
-// ── Dashboard ────────────────────────────────────────────────────────────────
-
-/**
- * What the server pushes to a dashboard session. The agent side of the protocol is parsed
- * on arrival; this is the same guarantee for the browser side, so a payload that does not
- * match is dropped instead of reaching a store.
- *
- * A union over `type` rather than three separate parses: the dashboard sees one stream, and
- * a message of an unknown type has to fail here, not somewhere downstream. The server is
- * trusted, so this is a guard against version drift between the two halves, not against an
- * attacker.
- */
-export const DashboardMessageSchema = z.discriminatedUnion("type", [
-    z.object({
-        type: z.literal(WS_EVENTS.CLIENTS_UPDATE),
-        payload: z.array(ClientSchema),
-    }),
-    z.object({
-        type: z.literal(WS_EVENTS.KEEPALIVED_STATE_UPDATE),
-        payload: KeepalivedStateSchema,
-    }),
-    z.object({
-        type: z.literal(WS_EVENTS.ACTIVITY_UPDATE),
-        payload: z.array(ActivityRecordSchema),
-    }),
-    z.object({
-        type: z.literal(WS_EVENTS.ACTIVITY_APPENDED),
-        payload: z.array(ActivityRecordSchema),
-    }),
-    z.object({
-        type: z.literal(WS_EVENTS.ACTIVITY_SEEN),
-        payload: z.object({ ids: z.array(z.string()) }),
-    }),
-    z.object({
-        type: z.literal(WS_EVENTS.SCHEDULER_STATUS_UPDATE),
-        payload: SchedulerStatusUpdateSchema,
-    }),
-]);

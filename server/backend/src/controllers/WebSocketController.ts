@@ -66,27 +66,25 @@ export class WebSocketController {
         ProxyService.addDashboardClient(socket, userId);
 
         // Send initial state
-        const clients = ProxyService.getClientsWithStatus();
-        socket.send(
-            JSON.stringify({ type: WS_EVENTS.CLIENTS_UPDATE, payload: clients }),
-        );
+        ProxyService.sendToDashboard(socket, {
+            type: WS_EVENTS.CLIENTS_UPDATE,
+            payload: ProxyService.getClientsWithStatus(),
+        });
 
         // The last keepalived reading of every known client, offline ones included: what a
         // host last reported is still worth showing, marked as such by its status.
         for (const state of KeepalivedStateService.getAll()) {
-            socket.send(
-                JSON.stringify({
-                    type: WS_EVENTS.KEEPALIVED_STATE_UPDATE,
-                    payload: state,
-                }),
-            );
+            ProxyService.sendToDashboard(socket, {
+                type: WS_EVENTS.KEEPALIVED_STATE_UPDATE,
+                payload: state,
+            });
         }
 
         // Send the initial activity list
-        socket.send(JSON.stringify({
+        ProxyService.sendToDashboard(socket, {
             type: WS_EVENTS.ACTIVITY_UPDATE,
             payload: ActivityService.list(userId),
-        }));
+        });
 
         socket.on("close", () => {
             ProxyService.removeDashboardClient(socket);
