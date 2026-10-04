@@ -92,6 +92,11 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - A dashboard message changes a cache entry through a pure function in `lib/cacheUpdates.ts`.
   The messages are one union in `shared/src/dashboardMessages.ts`; the backend sends through
   it, and the socket handler's `switch` ends in `assertNever`.
+- A lost socket is said: `isLost` in `WebSocketContext` turns true `LOST_AFTER_MS` (5 s) after
+  the socket is gone and drives the library's `ConnectionBanner` and `StatusDotProvider`.
+  After a reconnect everything the server does not push on connect (`isPushedOnConnect` in
+  `lib/queryKeys.ts`) is invalidated. A new cache area the server pushes on connect has to
+  be added there.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,

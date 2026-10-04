@@ -220,6 +220,8 @@ The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maint
 
 On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading and the activity list by itself, so the first screen fills without a REST call.
 
+**A lost connection is said.** The dashboard does not poll, so without the socket the page shows a snapshot. Five seconds after the socket is gone (`isLost` in `WebSocketContext`, `LOST_AFTER_MS` in the provider) the layout shows the library's `ConnectionBanner` through the `banner` prop of `Dashboard` and wraps the page in `StatusDotProvider live={false}`, which stops every status dot from pulsing. The delay keeps a server restart from flashing the banner. The reconnect itself stays at a fixed 3 seconds. After a reconnect, everything the server does not send again by itself (`isPushedOnConnect` in `lib/queryKeys.ts`) is invalidated: what is on screen is read again, the rest when it is next shown.
+
 ---
 
 ## ðŸ§© Feature Details
@@ -250,7 +252,7 @@ The dot that says whether the server currently holds a connection to a client â€
 
 It is the library's `StatusDot` and takes a `tone`, not a client's status: the caller maps its own word onto a role (`success` for a connected client, `neutral` otherwise), the appearance belongs to the component. Without a `label` the dot is `aria-hidden`, since every place that shows it also names the state in text.
 
-`AppLayout` wraps the dashboard in `StatusDotProvider` with `live` bound to the WebSocket's `isConnected`: a pulse says "this is happening now", and while the socket is gone no dot pulses.
+`AppLayout` wraps the dashboard in `StatusDotProvider` with `live` bound to the WebSocket's `isLost`: a pulse says "this is happening now", and once the socket has been gone for five seconds no dot pulses. The same flag shows the `ConnectionBanner`.
 
 ### Dialogs
 
