@@ -17,6 +17,8 @@ import {
     StatusDot,
     MenuItem,
 } from "@stefgo/react-ui-components";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
+import { ENTITY_HEADER } from "../../../components/entityHeader";
 import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepalivedPanel";
 import { summarizeKeepalived } from "../../keepalived/lib/vrrp";
 import { paths } from "../../../lib/paths";
@@ -81,7 +83,8 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         <div className="space-y-6">
             <EntityHeader
                 leading={<StatusDot tone={isOnline ? "success" : "neutral"} size="md" />}
-                title={`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}
+                title={<HeaderBreadcrumb>{`${client.site ? `${client.site} / ` : ""}${clientName(client)}`}</HeaderBreadcrumb>}
+                classNames={ENTITY_HEADER}
                 meta={
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>

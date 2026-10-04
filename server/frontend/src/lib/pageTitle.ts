@@ -22,6 +22,16 @@ export const pageTitle = (parts: readonly (string | null | undefined)[]): string
     [...parts.filter((part) => !!part), APP_NAME].join(" · ");
 
 /**
+ * What a route is called by itself: the name of its subject, or else its own title.
+ * `nameOf` resolves a subject from what is cached; while it cannot, the title stands in.
+ * Shared with the breadcrumb (`lib/breadcrumb.ts`), so the two never name a page differently.
+ */
+export const ownName = (
+    handle: TitleHandle,
+    nameOf: (subject: TitleSubject) => string | undefined,
+): string | undefined => (handle.subject && nameOf(handle.subject)) || handle.title;
+
+/**
  * The title of the open route, read off the handles of its matches, outermost first --
  * the area, then what lies below it. Each route adds at most two parts: the area's label,
  * and its subject's name or else its own title.
@@ -35,7 +45,7 @@ export function routeTitle(
 ): string {
     const parts = handles.flatMap((handle) => {
         if (!handle) return [];
-        return [handle.nav?.label, (handle.subject && nameOf(handle.subject)) || handle.title];
+        return [handle.nav?.label, ownName(handle, nameOf)];
     });
     return pageTitle(parts.reverse());
 }

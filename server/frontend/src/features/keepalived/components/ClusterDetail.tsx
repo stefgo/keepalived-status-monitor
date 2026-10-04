@@ -19,6 +19,8 @@ import { useActivity } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
 import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
+import { ENTITY_HEADER } from "../../../components/entityHeader";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
 import { ROUTES, activitySearch, clusterPath, paths } from "../../../lib/paths";
@@ -258,7 +260,8 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         <div className="space-y-6">
             <EntityHeader
                 leading={<Network size={20} className="text-text-muted" />}
-                title={clusterLabel(cluster)}
+                title={<HeaderBreadcrumb>{clusterLabel(cluster)}</HeaderBreadcrumb>}
+                classNames={ENTITY_HEADER}
                 meta={<ClusterHealthBadge health={cluster.health} />}
                 alert={
                     (offline.length > 0 || silent.length > 0 || mismatched.length > 0) && (

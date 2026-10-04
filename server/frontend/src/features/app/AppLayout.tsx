@@ -11,9 +11,11 @@ import {
 } from "@stefgo/react-ui-components";
 
 import { useAuth } from "../auth/AuthContext";
+import { BreadcrumbContext } from "./context/BreadcrumbContext";
 import { useWebSocket } from "./context/WebSocketContext";
 import { navEntries, type RouteHandle } from "./routes";
 import { APP_NAME, routeTitle, type TitleSubject } from "../../lib/pageTitle";
+import { breadcrumb } from "../../lib/breadcrumb";
 import { clientName } from "../../utils";
 
 // Hooks, queries & stores
@@ -62,10 +64,11 @@ export function AppLayout() {
     // Counted by the function the dashboard's card uses, so the two cannot disagree.
     const clientsBadge = useMemo(() => formatOnlineCount(clientCount(clients)), [clients]);
 
-    // The browser tab names the area and what is open in it. Here rather than in each
-    // page: the route tree says what a page is. A client is called by the name its list
-    // holds; a cluster is named by the address itself.
-    const title = useMemo(() => {
+    // The browser tab names the area and what is open in it, and the breadcrumb in the
+    // page's header spells the same out as links. Here rather than in each page: the route
+    // tree says what a page is. A client is called by the name its list holds; a cluster is
+    // named by the address itself.
+    const { title, crumbs } = useMemo(() => {
         const { clientId, site, vrid } = matches[matches.length - 1]?.params ?? {};
         const nameOf = (subject: TitleSubject) => {
             switch (subject) {
@@ -78,10 +81,14 @@ export function AppLayout() {
                     return vrid && /^\d+$/.test(vrid) ? `${site ? `${site} / ` : ""}VRID ${vrid}` : undefined;
             }
         };
-        return routeTitle(
-            matches.map((match) => match.handle as RouteHandle | undefined),
-            nameOf,
-        );
+        const handles = matches.map((match) => match.handle as RouteHandle | undefined);
+        return {
+            title: routeTitle(handles, nameOf),
+            crumbs: breadcrumb(
+                matches.map(({ pathname }, i) => ({ pathname, handle: handles[i] })),
+                nameOf,
+            ),
+        };
     }, [matches, clients]);
 
     // Taken back when the shell goes: the login page behind a logout is not the page
@@ -160,9 +167,11 @@ export function AppLayout() {
                 currentPath={pathname}
                 banner={<ConnectionBanner connected={!isLost} />}
             >
-                <Suspense fallback={<LoadingIndicator />}>
-                    <Outlet />
-                </Suspense>
+                <BreadcrumbContext.Provider value={crumbs}>
+                    <Suspense fallback={<LoadingIndicator />}>
+                        <Outlet />
+                    </Suspense>
+                </BreadcrumbContext.Provider>
             </Dashboard>
         </StatusDotProvider>
     );

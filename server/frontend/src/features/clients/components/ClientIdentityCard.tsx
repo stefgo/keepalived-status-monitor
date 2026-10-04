@@ -8,6 +8,7 @@ import {
 } from "@kasm/shared";
 import { Save } from "lucide-react";
 import { Badge, Button, Card, Checkbox, DescriptionList, Input, StatusDot, FieldLabel } from "@stefgo/react-ui-components";
+import { HeaderBreadcrumb } from "../../app/HeaderBreadcrumb";
 import { clientName } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import type { EntityForm } from "../../../hooks/useEntityForm";
@@ -73,10 +74,8 @@ export const ClientIdentityCard = ({ client, form, onSubmit, action }: ClientIde
             title={
                 <div className="flex items-center gap-4">
                     <StatusDot tone={client.status === CLIENT_STATUS.ONLINE ? "success" : "neutral"} size="md" />
-                    <div>
-                        <div className="text-xl font-bold">
-                            {clientName(client)}
-                        </div>
+                    <div className="min-w-0">
+                        <HeaderBreadcrumb>{clientName(client)}</HeaderBreadcrumb>
                         {/* Only while offline: for a connected client the pulsing dot
                             already says the agent is here, and a timestamp beside it just
                             invites the question whether it is stale. */}
