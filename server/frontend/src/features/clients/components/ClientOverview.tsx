@@ -1,7 +1,8 @@
 import { MoreVertical, Edit, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
-import { clientName, describeFailure, formatDate } from "../../../utils";
+import { clientName, describeFailure } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { refreshKeepalived, useKeepalivedState } from "../../../queries/keepalived";
@@ -71,7 +72,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         { label: "keepalived", value: keepalived, visibility: "always" },
         {
             label: "Last Reading",
-            value: reading ? formatDate(reading.collectedAt, { seconds: true }) : "–",
+            value: reading ? <RelativeTime date={reading.collectedAt} seconds /> : "–",
             visibility: "always",
         },
     ] : [];

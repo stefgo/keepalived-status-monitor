@@ -35,7 +35,8 @@ import { ActivityGroupSteps } from "./ActivityGroupSteps";
 import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
-import { clientName, formatDate } from "../../../utils";
+import { clientName } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
@@ -244,7 +245,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             tableCellClassName: "w-px whitespace-nowrap text-sm text-text-muted",
             sortable: true,
             sortValue: (g) => new Date(g.head.occurredAt).getTime(),
-            tableItemRender: (g) => formatDate(g.head.occurredAt, { seconds: true }),
+            tableItemRender: (g) => <RelativeTime date={g.head.occurredAt} seconds />,
         },
         {
             tableHeader: "Actions",

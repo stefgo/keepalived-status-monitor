@@ -13,7 +13,8 @@ import { useClients } from "../../../queries/clients";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { clientName, formatDate } from "../../../utils";
+import { clientName } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterPath, paths } from "../../../lib/paths";
 import { clusterLabel, clusterVipLabel, memberStale } from "../lib/vrrp";
@@ -232,7 +233,7 @@ export const ClusterOverview = () => {
             tableHeaderClassName: "whitespace-nowrap",
             tableCellClassName: (row) => cn("text-sm whitespace-nowrap", dim(row)),
             tableItemRender: (row) =>
-                row.kind === "member" ? formatDate(row.member.instance.lastTransition, { seconds: true }) : null,
+                row.kind === "member" ? <RelativeTime date={row.member.instance.lastTransition} seconds /> : null,
         },
     ];
 

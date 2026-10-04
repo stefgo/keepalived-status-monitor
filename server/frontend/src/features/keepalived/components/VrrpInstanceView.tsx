@@ -8,7 +8,7 @@ import {
     type DataListDef,
     type DataTableDef,
 } from "@stefgo/react-ui-components";
-import { formatDate } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { formatInterval, vrrpStateLabel } from "../lib/vrrp";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
@@ -80,7 +80,7 @@ const State = ({ row }: { row: VrrpInstanceRow }) =>
 export const Vips = ({ instance }: { instance: VrrpInstance }) =>
     instance.vips.length > 0 ? <>{instance.vips.map((vip) => <div key={vip}>{vip}</div>)}</> : <>–</>;
 
-const lastTransition = (instance: VrrpInstance) => formatDate(instance.lastTransition, { seconds: true });
+const lastTransition = (instance: VrrpInstance) => <RelativeTime date={instance.lastTransition} seconds />;
 
 /** The dimming of a stale row, applied per cell rather than to the row -- see `stateBadge`. */
 const dim = (row: VrrpInstanceRow) => (row.stale ? "opacity-60" : "");

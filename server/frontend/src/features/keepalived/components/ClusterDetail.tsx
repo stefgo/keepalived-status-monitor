@@ -12,7 +12,8 @@ import {
     LoadingIndicator,
 } from "@stefgo/react-ui-components";
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
-import { clientName, formatDate } from "../../../utils";
+import { clientName } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivity } from "../../../queries/activity";
@@ -188,7 +189,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         },
         {
             label: "Last reading",
-            value: formatDate(newest(members.map((m) => readings[m.clientId]?.collectedAt)), { seconds: true }),
+            value: <RelativeTime date={newest(members.map((m) => readings[m.clientId]?.collectedAt))} seconds />,
             visibility: "always",
         },
     ];
@@ -392,9 +393,11 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                                         </div>
                                         {detail && <div className="text-xs text-text-muted">{detail}</div>}
                                     </div>
-                                    <span className="whitespace-nowrap text-xs text-text-muted">
-                                        {formatDate(event.occurredAt, { seconds: true })}
-                                    </span>
+                                    <RelativeTime
+                                        date={event.occurredAt}
+                                        seconds
+                                        className="whitespace-nowrap text-xs text-text-muted"
+                                    />
                                 </li>
                             );
                         })}

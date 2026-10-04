@@ -4,6 +4,7 @@ import {
     clientName,
     describeFailure,
     formatDate,
+    formatRelative,
     formatTime,
     getErrorMessage,
     plural,
@@ -40,6 +41,45 @@ describe("formatDate", () => {
         expect(formatDate(undefined)).toBe(EMPTY_VALUE);
         expect(formatDate("")).toBe(EMPTY_VALUE);
         expect(formatDate("yesterday")).toBe(EMPTY_VALUE);
+    });
+});
+
+describe("formatRelative", () => {
+    const now = Date.parse("2026-10-04T12:00:00Z");
+    const ago = (ms: number) => formatRelative(now - ms, now, "en-US");
+    const min = 60_000;
+    const h = 60 * min;
+    const d = 24 * h;
+
+    it("calls the last minute now", () => {
+        expect(ago(0)).toBe("just now");
+        expect(ago(59_000)).toBe("just now");
+    });
+
+    it("counts minutes, hours and days, each rounded down", () => {
+        expect(ago(min)).toBe("1 min ago");
+        expect(ago(59 * min)).toBe("59 min ago");
+        expect(ago(h)).toBe("1 h ago");
+        expect(ago(23 * h + 59 * min)).toBe("23 h ago");
+        expect(ago(d)).toBe("1 d ago");
+        expect(ago(30 * d)).toBe("30 d ago");
+    });
+
+    it("writes the date once the distance says nothing any more", () => {
+        expect(ago(31 * d)).toBe(formatDate(now - 31 * d, { locale: "en-US" }));
+    });
+
+    it("does not turn a clock that runs a little ahead into a date", () => {
+        expect(ago(-30_000)).toBe("just now");
+    });
+
+    it("writes a date that lies ahead as the date", () => {
+        expect(ago(-h)).toBe(formatDate(now + h, { locale: "en-US" }));
+    });
+
+    it("reads SQLite's format and has nothing to say without a date", () => {
+        expect(formatRelative("2026-10-04 10:00:00", now)).toBe("2 h ago");
+        expect(formatRelative(null, now)).toBe(EMPTY_VALUE);
     });
 });
 

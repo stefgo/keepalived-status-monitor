@@ -10,7 +10,8 @@ import {
 import type { VrrpCluster, VrrpClusterMember } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { clientName, formatDate } from "../../../utils";
+import { clientName } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterPath, paths } from "../../../lib/paths";
 import { clusterLabel } from "../lib/vrrp";
@@ -38,7 +39,7 @@ const HostLink = ({ row }: { row: MasterRow }) => (
     </Link>
 );
 
-const lastTransition = (row: MasterRow) => formatDate(row.member.instance.lastTransition, { seconds: true });
+const lastTransition = (row: MasterRow) => <RelativeTime date={row.member.instance.lastTransition} seconds />;
 
 /**
  * Every instance in MASTER on an online host -- the ones the MASTER card counts. A row leads

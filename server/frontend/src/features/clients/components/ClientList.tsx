@@ -2,7 +2,8 @@ import { Monitor } from "lucide-react";
 import { ReactNode, useMemo } from "react";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { Client, CLIENT_STATUS } from "@kasm/shared";
-import { clientName, EMPTY_VALUE, formatDate } from "../../../utils";
+import { clientName, EMPTY_VALUE } from "../../../utils";
+import { RelativeTime } from "../../../components/RelativeTime";
 import { Badge, DataTableDef, StatusDot, PAGE_SIZE, listPagination } from "@stefgo/react-ui-components";
 import { DataListDef, DataListColumnDef } from "@stefgo/react-ui-components";
 import { DataMultiView } from "@stefgo/react-ui-components";
@@ -93,7 +94,7 @@ export const ClientList = ({
             tableItemRender: (client) =>
                 client.status !== CLIENT_STATUS.ONLINE ? (
                     <div className="whitespace-nowrap opacity-70">
-                        Last Seen: {formatDate(client.lastSeen)}
+                        {client.lastSeen ? <>Last seen <RelativeTime date={client.lastSeen} /></> : "Never connected"}
                     </div>
                 ) : (
                     <Badge variant="success">Online</Badge>
@@ -166,7 +167,7 @@ export const ClientList = ({
             listItemRender: (client) =>
                 client.status !== CLIENT_STATUS.ONLINE ? (
                     <span className="text-sm text-text-muted">
-                        {formatDate(client.lastSeen)}
+                        {client.lastSeen ? <>Last seen <RelativeTime date={client.lastSeen} /></> : "Never connected"}
                     </span>
                 ) : (
                     <Badge variant="success">Online</Badge>
