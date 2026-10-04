@@ -80,8 +80,7 @@ src/
 │           ├── TokenList.tsx
 │           └── TokenModal.tsx
 ├── components/
-│   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
-│   └── listDefaults.ts                   # Page size (20 own page, 10 inside a tab) and pagination
+│   └── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
@@ -222,7 +221,7 @@ It is the library's `StatusDot` and takes a `tone`, not a client's status: the c
 `Modal` from `@stefgo/react-ui-components` is what a dialog is built from. The three hand-built overlays that preceded it (`fixed inset-0 bg-black/80 …`) had no focus trap, no Escape, no scroll lock and no focus return.
 
 - `UserDialog` turns `closeOnOverlayClick` off: it holds unsaved input, and a stray click beside it should not discard the work.
-- `TokenModal` turns `closeOnEscape` off as well and hides the close button. The token is in the clear exactly once, so dismissing the dialog is not a way out but the loss of what the flow was for; the button below it is the only way on.
+- `TokenModal` turns `closeOnEscape` off as well and hides the close button. The token is in the clear exactly once, so dismissing the dialog is not a way out but the loss of what the flow was for; the button below it is the only way on. The token stands in the library's `CopyField`: over plain HTTP, where the browser has no clipboard, the button selects the token and says so instead of failing silently.
 
 Editors that live in the workspace rather than in a dialog bring their own `Escape` on a `window` listener — see `AddClientWizard` and `ClientEditor`.
 
@@ -576,6 +575,6 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `EntityHeader`         | Header of the client page: title, badges, actions, and details that open on request. Whether they are open is kept in `localStorage` (`STORAGE_KEYS.clientDetails`). |
 | `FOCUS_RING` / `FOCUS_RING_INSET` / `FOCUS_RING_NONE` | The focus ring for the few surfaces the app still draws itself: an inline chip, a tab, a menu entry. Every library component brings its own. |
 
-**The data views own sorting and paging.** A view receives the complete set in `data` and takes the page *after* sorting, which is what makes a column sort cover every row instead of the ten on screen. The page state lives in the view, configured through `pagination(PAGE_SIZE.…)` from `components/listDefaults.ts` — 20 rows for a list that is a page of its own, 10 for one inside a tab; `usePagination` is only for holding it outside, and the app does not need it. Sorting, search and view mode follow the same shape: `sort={{ defaultValue: [...] }}`, `search={{ value, onChange }}`, `viewMode={{ persist: { key, scope: "local" } }}` — the persistence vocabulary that replaced the bare `storageKey` in library 4.0; `scope: "local"` is what `storageKey` did, so a chosen view mode survived the move.
+**The data views own sorting and paging.** A view receives the complete set in `data` and takes the page *after* sorting, which is what makes a column sort cover every row instead of the ten on screen. The page state lives in the view, configured through the library's `listPagination(PAGE_SIZE.…)` — 20 rows for a list that is a page of its own, 10 for one inside a tab; `usePagination` is only for holding it outside, and the app does not need it. Sorting, search and view mode follow the same shape: `sort={{ defaultValue: [...] }}`, `search={{ value, onChange }}`, `viewMode={{ persist: { key, scope: "local" } }}` — the persistence vocabulary that replaced the bare `storageKey` in library 4.0; `scope: "local"` is what `storageKey` did, so a chosen view mode survived the move.
 
 **The tabs are the library's.** The settings page drives its section list and the panels beside it from one `useTabs({ tabs, value, onChange, orientation: "vertical" })`: it supplies the roles, the tab-to-panel wiring, the roving tabindex and the arrow keys. `TabPanel` keeps a panel that has been opened once mounted (`visited`), so unsaved edits survive a switch away and back. The active tab itself is a URL parameter, so a reload and a shared link land on the same tab.

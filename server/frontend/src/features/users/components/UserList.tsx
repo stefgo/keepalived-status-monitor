@@ -8,10 +8,11 @@ import {
     DataListDef,
     DataMultiView,
     DataTableDef,
+    PAGE_SIZE,
+    listPagination,
 } from "@stefgo/react-ui-components";
 import { formatDate } from "../../../utils";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 export interface UserData {
@@ -182,7 +183,7 @@ export const UserList = ({
             searchPlaceholder="Search users…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
             emptyMessage="No users found."
-            pagination={pagination(PAGE_SIZE.page)}
+            pagination={listPagination(PAGE_SIZE.page)}
         />
     );
 };

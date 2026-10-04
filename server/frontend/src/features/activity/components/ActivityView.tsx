@@ -22,6 +22,8 @@ import {
     useActionMenu,
     useConfirm,
     MenuItem,
+    PAGE_SIZE,
+    listPagination,
 } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord, activityDetail, activityMessage } from "@kasm/shared";
 import { unseenTone, useActivityStore } from "../../../stores/useActivityStore";
@@ -32,7 +34,6 @@ import { ActivityLevelIcon } from "./ActivityLevelIcon";
 import { ActivityGroup, groupActivity } from "../lib/groupActivity";
 import { describeDeleteAllActivity } from "../confirmations";
 import { clientName, formatDate } from "../../../utils";
-import { PAGE_SIZE, pagination } from "../../../components/listDefaults";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
@@ -356,7 +357,7 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             sort={{ defaultValue: [{ colIndex: 2, direction: "desc" }] }}
             emptyMessage="Nothing has happened yet."
             noResultsMessage="No events match these filters."
-            pagination={pagination(PAGE_SIZE.page)}
+            pagination={listPagination(PAGE_SIZE.page)}
             searchable
             searchPlaceholder="Search activity…"
             search={{ value: searchQuery, onChange: setSearchQuery }}
