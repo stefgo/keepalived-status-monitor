@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Webhook } from "@kasm/shared";
 import { useConfirm } from "@stefgo/react-ui-components";
-import { apiFetch } from "../../../lib/apiFetch";
+import { useQueryClient } from "@tanstack/react-query";
 import { describeDeleteWebhook } from "../confirmations";
+import { useDeleteWebhook, useSaveWebhook, useWebhooks, webhookListOptions } from "../../../queries/webhooks";
 import { WebhookList } from "./WebhookList";
 
 /** The page at `/webhooks`. Adding and editing happen on pages of their own. */
@@ -11,35 +11,11 @@ export const WebhookOverview = () => {
     const navigate = useNavigate();
     const { pathname, search } = useLocation();
     const { confirm } = useConfirm();
-    const [webhooks, setWebhooks] = useState<Webhook[]>([]);
-
-    /** Bumped to load the list again after a change; the effect below is the only loader. */
-    const [reloadCount, setReloadCount] = useState(0);
+    const queryClient = useQueryClient();
     /** Only the first load shows as loading; a reload keeps the rows on screen. */
-    const [isLoading, setIsLoading] = useState(true);
-
-    // A response that arrives after the next reload has started is dropped, so an older
-    // list cannot overwrite a newer one.
-    useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res = await apiFetch("/api/v1/webhooks");
-                if (res.ok) {
-                    const list = (await res.json()) as Webhook[];
-                    if (!cancelled) setWebhooks(list);
-                }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                if (!cancelled) setIsLoading(false);
-            }
-        };
-        load();
-        return () => {
-            cancelled = true;
-        };
-    }, [reloadCount]);
+    const { webhooks, isLoading } = useWebhooks();
+    const saveWebhook = useSaveWebhook();
+    const deleteWebhook = useDeleteWebhook();
 
     // The editor goes back to where it was opened from, search included.
     const open = (to: string) => navigate(to, { state: { from: pathname + search } });
@@ -47,35 +23,16 @@ export const WebhookOverview = () => {
     const requestDelete = (webhook: Webhook) =>
         confirm({
             ...describeDeleteWebhook(webhook.name),
-            onConfirm: async () => {
-                const res = await apiFetch(`/api/v1/webhooks/${webhook.id}`, { method: "DELETE" });
-                if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    throw new Error(data.error || "Failed to delete the webhook");
-                }
-                setReloadCount((n) => n + 1);
-            },
+            onConfirm: () => deleteWebhook.mutateAsync(webhook.id),
         });
 
     // The switch moves at once; the reload afterwards shows what the server holds, which puts
     // it back if the change was refused. PUT takes the whole webhook, so the row is sent as is.
-    const toggleEnabled = async (webhook: Webhook, enabled: boolean) => {
-        setWebhooks((list) => list.map((w) => (w.id === webhook.id ? { ...w, enabled } : w)));
-        try {
-            const res = await apiFetch(`/api/v1/webhooks/${webhook.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...webhook, enabled }),
-            });
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                console.error(data.error || `The server answered ${res.status}`);
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setReloadCount((n) => n + 1);
-        }
+    const toggleEnabled = (webhook: Webhook, enabled: boolean) => {
+        queryClient.setQueryData(webhookListOptions.queryKey, (list) =>
+            list?.map((w) => (w.id === webhook.id ? { ...w, enabled } : w)),
+        );
+        saveWebhook.mutate({ id: webhook.id, input: { ...webhook, enabled } }, { onError: (e) => console.error(e) });
     };
 
     return (

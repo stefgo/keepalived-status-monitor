@@ -18,8 +18,8 @@ export const webhookListOptions = queryOptions({
 
 /** `isPending` until the list has arrived once; an empty list before that says nothing. */
 export function useWebhooks() {
-    const { data = NO_WEBHOOKS, isPending, error } = useQuery(webhookListOptions);
-    return { webhooks: data, isPending, error };
+    const { data = NO_WEBHOOKS, isPending, isLoading, error } = useQuery(webhookListOptions);
+    return { webhooks: data, isPending, isLoading, error };
 }
 
 /** Creates a webhook, or changes the one `id` names. PUT takes the whole webhook. */
