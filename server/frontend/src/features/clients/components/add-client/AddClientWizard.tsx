@@ -132,6 +132,8 @@ export const AddClientWizard = ({
                 <TokenModal
                     token={createdToken.token}
                     expiresAt={createdToken.expiresAt}
+                    displayName={form.displayName.trim() || undefined}
+                    allowedIp={form.restrictIp ? form.allowedIp.trim() || undefined : undefined}
                     onClose={() => leave()}
                 />
             )}
