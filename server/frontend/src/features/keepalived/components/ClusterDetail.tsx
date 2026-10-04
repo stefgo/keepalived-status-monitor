@@ -12,7 +12,6 @@ import {
     LoadingIndicator,
 } from "@stefgo/react-ui-components";
 import { activityDetail, activityMessage, mismatchedVips, type VrrpCluster } from "@kasm/shared";
-import { clientName } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
@@ -77,7 +76,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     useEscapeToLeave(useBackPath({ keepSearch: false }));
 
     const clusters = useVrrpClusters();
-    const { clients, isPending: clientsLoading, error: clientsError } = useClients();
+    const { isPending: clientsLoading, error: clientsError } = useClients();
     const { states: readings, isPending: readingsLoading, error: readingsError } = useKeepalivedStates();
     const { events } = useActivity();
 
@@ -144,10 +143,8 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         );
     }
 
-    const hostName = (clientId: string) => {
-        const c = clients.find((c) => c.id === clientId);
-        return c ? clientName(c) : clientId;
-    };
+    // For what names a host by its id alone -- an event, a member picked out by a check.
+    const hostName = (clientId: string) => members.find((m) => m.clientId === clientId)?.hostName ?? clientId;
     const hostLink = (clientId: string) => (
         <Link to={paths.client(clientId)} className={cn("rounded-sm hover:text-primary", FOCUS_RING)}>
             {hostName(clientId)}
@@ -232,7 +229,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
                             to={paths.client(m.clientId)}
                             className={cn("rounded-sm text-text-primary hover:text-primary", FOCUS_RING)}
                         >
-                            {hostName(m.clientId)}
+                            {m.hostName}
                         </Link>
                         <VrrpStateBadge state={m.instance.state} />
                     </div>

@@ -11,6 +11,7 @@ import {
     groupCounters,
     hasProblemCounts,
     memberKey,
+    nameMembers,
     memberStale,
     silenceLabel,
     statLabel,
@@ -141,6 +142,25 @@ describe("clusterNetworkKey", () => {
 
     it("keeps a bar inside the site from cutting at the wrong place", () => {
         expect(clusterNetworkKey(cluster({ site: "a|b" }))).toBe("10.0.0.0/24");
+    });
+});
+
+describe("nameMembers", () => {
+    const names = new Map([["a", "lb-01"]]);
+    const named = nameMembers([cluster()], (clientId) => names.get(clientId));
+
+    it("gives every member the name of its host", () => {
+        expect(named[0].members[0].hostName).toBe("lb-01");
+    });
+
+    it("falls back to the id of a client it has no name for", () => {
+        expect(named[0].members[1].hostName).toBe("b");
+    });
+
+    it("leaves the cluster and its members as they were otherwise", () => {
+        const [before] = [cluster()];
+        expect(named[0]).toMatchObject({ key: before.key, vips: before.vips, health: before.health });
+        expect(named[0].members.map((m) => m.clientId)).toEqual(["a", "b"]);
     });
 });
 

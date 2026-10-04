@@ -51,7 +51,7 @@ export function instanceCount(
 }
 
 /** The clusters the dashboard shows a card for: every one whose health is known and not ok. */
-export const needsAttention = (clusters: readonly VrrpCluster[]): VrrpCluster[] =>
+export const needsAttention = <C extends VrrpCluster>(clusters: readonly C[]): C[] =>
     clusters.filter((cluster) => cluster.health !== "ok" && cluster.health !== "unknown");
 
 /**

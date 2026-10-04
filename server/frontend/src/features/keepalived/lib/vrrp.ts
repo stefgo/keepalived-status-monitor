@@ -103,17 +103,45 @@ export function clusterNetworkKey(cluster: VrrpCluster): string {
     return cluster.key.slice(`${cluster.site ?? ""}|${cluster.vrid ?? "?"}|`.length);
 }
 
+/** A cluster member with the name its host goes by, see `nameMembers`. */
+export interface NamedClusterMember extends VrrpClusterMember {
+    hostName: string;
+}
+
+/** A cluster as the dashboard holds it: every member knows what its host is called. */
+export interface NamedVrrpCluster extends VrrpCluster {
+    members: NamedClusterMember[];
+}
+
+/**
+ * The clusters with each member's host named -- once, so that a table, its search and a
+ * sentence about the same host cannot call it three different things. `nameOf` has no name
+ * for a client that is gone; its id stands in, which is still what the host's page is under.
+ */
+export function nameMembers(
+    clusters: VrrpCluster[],
+    nameOf: (clientId: string) => string | undefined,
+): NamedVrrpCluster[] {
+    return clusters.map((cluster) => ({
+        ...cluster,
+        members: cluster.members.map((member) => ({
+            ...member,
+            hostName: nameOf(member.clientId) ?? member.clientId,
+        })),
+    }));
+}
+
 /** The clusters behind one site and VRID: one as a rule, several on separate segments of a site. */
-export function clustersAt(clusters: VrrpCluster[], site: string | null, vrid: number): VrrpCluster[] {
+export function clustersAt<C extends VrrpCluster>(clusters: C[], site: string | null, vrid: number): C[] {
     return clusters.filter((cluster) => cluster.site === site && cluster.vrid === vrid);
 }
 
 /** The cluster one host's instance takes part in. */
-export function clusterOf(
-    clusters: VrrpCluster[],
+export function clusterOf<C extends VrrpCluster>(
+    clusters: C[],
     clientId: string,
     instanceName: string,
-): VrrpCluster | undefined {
+): C | undefined {
     return clusters.find((cluster) =>
         cluster.members.some((member) => member.clientId === clientId && member.instance.name === instanceName),
     );

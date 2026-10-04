@@ -9,16 +9,15 @@ import {
     StatusDot,
     listGroups,
 } from "@stefgo/react-ui-components";
-import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
+import type { VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { clientName } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterPath, paths } from "../../../lib/paths";
-import { clusterLabel, clusterVipLabel, memberStale } from "../lib/vrrp";
+import { clusterLabel, clusterVipLabel, memberStale, type NamedClusterMember, type NamedVrrpCluster } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
 import { Priority } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
@@ -26,11 +25,11 @@ import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
 /**
  * One row of the tree: a virtual router on the first level, the hosts that take part in it
- * on the second. The host's name is resolved once here, so search and render agree on it.
+ * on the second.
  */
 type ClusterRow =
     | { kind: "cluster"; key: string; cluster: VrrpCluster; children: ClusterRow[] }
-    | { kind: "member"; key: string; member: VrrpClusterMember; hostName: string };
+    | { kind: "member"; key: string; member: NamedClusterMember };
 
 /** Sort ranks: what needs a look first. */
 const HEALTH_RANK: Record<VrrpClusterHealth, number> = {
@@ -61,7 +60,7 @@ const dim = (row: ClusterRow) => (row.kind === "member" && memberStale(row.membe
 const effectivePriority = (member: VrrpClusterMember) =>
     member.instance.effectivePriority ?? member.instance.priority ?? 0;
 
-function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
+function toRows(clusters: NamedVrrpCluster[]): ClusterRow[] {
     return clusters.map((cluster) => ({
         kind: "cluster",
         key: cluster.key,
@@ -69,15 +68,11 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
         // The node that should be MASTER on top.
         children: [...cluster.members]
             .sort((a, b) => effectivePriority(b) - effectivePriority(a))
-            .map((member) => {
-                const client = clients.find((c) => c.id === member.clientId);
-                return {
-                    kind: "member",
-                    key: `${cluster.key}/${member.clientId}:${member.instance.name}`,
-                    member,
-                    hostName: client ? clientName(client) : member.clientId,
-                };
-            }),
+            .map((member) => ({
+                kind: "member",
+                key: `${cluster.key}/${member.clientId}:${member.instance.name}`,
+                member,
+            })),
     }));
 }
 
@@ -85,7 +80,7 @@ function toRows(clusters: VrrpCluster[], clients: Client[]): ClusterRow[] {
 function matches(row: ClusterRow, query: string): boolean {
     if (row.kind === "member") {
         return (
-            row.hostName.toLowerCase().includes(query) ||
+            row.member.hostName.toLowerCase().includes(query) ||
             row.member.instance.name.toLowerCase().includes(query)
         );
     }
@@ -106,7 +101,7 @@ const HostLink = ({ row }: { row: Extract<ClusterRow, { kind: "member" }> }) => 
         className="flex items-center gap-2 hover:text-primary"
     >
         <StatusDot tone={row.member.online ? "success" : "neutral"} />
-        {row.hostName}
+        {row.member.hostName}
     </Link>
 );
 
@@ -142,13 +137,13 @@ const ClusterLink = ({
 export const ClusterOverview = () => {
     const navigate = useNavigate();
     const clusters = useVrrpClusters();
-    const { clients, error: clientsError } = useClients();
+    const { error: clientsError } = useClients();
     const { error: statesError } = useKeepalivedStates();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
     // What the reader opened or closed by hand; every other cluster follows the default below.
     const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
 
-    const rows = useMemo(() => toRows(clusters, clients), [clusters, clients]);
+    const rows = useMemo(() => toRows(clusters), [clusters]);
     const searching = searchQuery.trim() !== "";
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -192,7 +187,7 @@ export const ClusterOverview = () => {
             sortValue: (row) =>
                 row.kind === "cluster"
                     ? `${row.cluster.site ?? ""}|${String(row.cluster.vrid ?? 0).padStart(3, "0")}`
-                    : row.hostName,
+                    : row.member.hostName,
             table: { cellClassName: (row) => cn("text-sm", dim(row)) },
             list: { label: null },
             render: (row, view) => {

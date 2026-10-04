@@ -8,24 +8,21 @@ import {
     StatusDot,
     listGroups,
 } from "@stefgo/react-ui-components";
-import type { VrrpCluster, VrrpClusterMember } from "@kasm/shared";
-import { useClients } from "../../../queries/clients";
+import type { VrrpCluster } from "@kasm/shared";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
-import { clientName } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
 import { clusterPath, paths } from "../../../lib/paths";
-import { clusterLabel } from "../lib/vrrp";
+import { clusterLabel, type NamedClusterMember } from "../lib/vrrp";
 import { Vips } from "./VrrpInstanceView";
 import { VrrpStateBadge } from "./VrrpStateBadge";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
-/** One MASTER instance, with the cluster it answers for. The host's name is resolved once. */
+/** One MASTER instance, with the cluster it answers for. */
 interface MasterRow {
     key: string;
-    member: VrrpClusterMember;
+    member: NamedClusterMember;
     cluster: VrrpCluster;
-    hostName: string;
 }
 
 const HostLink = ({ row }: { row: MasterRow }) => (
@@ -36,7 +33,7 @@ const HostLink = ({ row }: { row: MasterRow }) => (
         className="flex items-center gap-2 hover:text-primary"
     >
         <StatusDot tone={row.member.online ? "success" : "neutral"} />
-        {row.hostName}
+        {row.member.hostName}
     </Link>
 );
 
@@ -47,7 +44,6 @@ const HostLink = ({ row }: { row: MasterRow }) => (
 export const MasterList = () => {
     const navigate = useNavigate();
     const clusters = useVrrpClusters();
-    const { clients } = useClients();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
 
     const rows = useMemo(
@@ -55,17 +51,15 @@ export const MasterList = () => {
             clusters.flatMap((cluster) =>
                 cluster.members
                     .filter((member) => member.online && member.instance.state === "MASTER")
-                    .map((member): MasterRow => {
-                        const client = clients.find((c) => c.id === member.clientId);
-                        return {
+                    .map(
+                        (member): MasterRow => ({
                             key: `${cluster.key}/${member.clientId}:${member.instance.name}`,
                             member,
                             cluster,
-                            hostName: client ? clientName(client) : member.clientId,
-                        };
-                    }),
+                        }),
+                    ),
             ),
-        [clusters, clients],
+        [clusters],
     );
 
     const filteredRows = useMemo(() => {
@@ -73,7 +67,7 @@ export const MasterList = () => {
         if (!query) return rows;
         return rows.filter(
             (row) =>
-                row.hostName.toLowerCase().includes(query) ||
+                row.member.hostName.toLowerCase().includes(query) ||
                 String(row.cluster.vrid ?? "").includes(query) ||
                 !!row.cluster.site?.toLowerCase().includes(query) ||
                 row.member.instance.vips.some((vip) => vip.toLowerCase().includes(query)),
@@ -84,7 +78,7 @@ export const MasterList = () => {
         {
             header: "Host",
             sortable: true,
-            sortValue: (row) => row.hostName,
+            sortValue: (row) => row.member.hostName,
             table: { cellClassName: "text-sm" },
             list: { label: null },
             // The list has no VRID and no State column: both stand beside the host.
