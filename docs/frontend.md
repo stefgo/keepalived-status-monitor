@@ -11,9 +11,10 @@ src/
 ├── features/
 │   ├── app/                              # Application shell
 │   │   ├── App.tsx                       # Main router, navGroups and pages configuration
-│   │   └── context/
-│   │       ├── WebSocketContext.ts       # WebSocket context object and useWebSocket hook
-│   │       └── WebSocketProvider.tsx     # WebSocket connection for real-time updates
+│   │   ├── context/
+│   │   │   ├── WebSocketContext.ts       # WebSocket context object and useWebSocket hook
+│   │   │   └── WebSocketProvider.tsx     # WebSocket connection; writes each message into the query cache
+│   │   └── lib/dashboardMessages.ts      # Parses a socket message against the contract; assertNever
 │   ├── auth/
 │   │   ├── AuthContext.ts                # Auth context object and useAuth hook
 │   │   └── AuthProvider.tsx              # Authentication state
@@ -32,7 +33,7 @@ src/
 │   │           └── steps/                # StepConnectionMode, StepInboundDetails, StepOutboundDetails
 │   ├── keepalived/                       # VRRP: dashboard, clusters, a host's instances
 │   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
-│   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the stores, recomputed live
+│   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the cache, recomputed live
 │   │   └── components/
 │   │       ├── KeepalivedDashboard.tsx   # Landing page: numbers, clusters in trouble
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
@@ -78,23 +79,31 @@ src/
 │           ├── TokenList.tsx
 │           └── TokenModal.tsx
 ├── components/
-│   └── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
+│   ├── NotFoundCard.tsx                  # A page whose subject does not exist, with the way back
+│   └── QueryError.tsx                    # A page whose data could not be read, with the server's reason
 ├── hooks/
 │   ├── useSearchQueryParam.ts            # Search box and active tab, held in the URL
 │   ├── useNow.ts                         # One shared clock for durations that keep counting
 │   └── useEscapeToLeave.ts               # Escape on a detail page leads back, unless a field has focus
 ├── lib/
-│   ├── apiFetch.ts                       # fetch for authenticated endpoints, central 401 handling
+│   ├── api.ts                            # The API client: checks every response against its schema
+│   ├── apiFetch.ts                       # Below it: the session cookie and the central 401 handling
+│   ├── queryClient.ts                    # The one query cache; readUnlessPushed
+│   ├── queryKeys.ts                      # Every key the cache is addressed by
+│   ├── cacheUpdates.ts                   # How a message or an answer changes a cache entry (pure)
 │   └── storageKeys.ts                    # Every key in the browser's storage, once: kasm.<area>.<what>
 ├── pages/                                # Route entry points
 │   ├── Login.tsx                         # Authentication page (Local & OIDC)
 │   └── Settings.tsx                      # System settings page
-├── stores/                               # Global state management (Zustand)
-│   ├── useClientStore.ts                 # Registered clients and online/offline status
-│   ├── useKeepalivedStore.ts             # The last keepalived reading per client
-│   ├── useActivityStore.ts               # The activity list and the per-user seen state
-│   ├── useSchedulerStore.ts              # Status of the schedulers the server runs
-│   └── useUIStore.ts                     # UI state (sidebar collapse, persisted)
+├── queries/                              # What the server holds, read through the query cache
+│   ├── clients.ts                        # Registered clients and online/offline status
+│   ├── keepalived.ts                     # The last keepalived reading per client
+│   ├── activity.ts                       # The activity list and the per-user seen state
+│   ├── scheduler.ts                      # Status of the schedulers the server runs
+│   ├── settings.ts                       # The settings page's requests (not cached)
+│   ├── users.ts, tokens.ts, webhooks.ts  # Their lists and the changes to them
+├── stores/
+│   └── useUIStore.ts                     # UI state (sidebar collapse, persisted) -- the only store
 ├── Main.tsx                              # Entry point: mounts the app
 └── utils.ts                              # General utility functions
 ```
@@ -131,7 +140,7 @@ A path no entry claims reaches the catch-all route and renders a **404 card** th
 
 **The pages are loaded on demand** (`React.lazy` with a `Suspense` fallback), so a chunk arrives with the route that needs it. The previous shape passed every page as an element to the Dashboard, which built the tree of every page on every render of the shell even though one was on screen.
 
-Each route takes what it needs from the stores itself: `ClientsRoute` and `ClientDetailRoute` read `useClientStore`, the keepalived pages read `useKeepalivedStore` and `useClientStore`. A client id that is not in the store yet renders the list rather than redirecting, because a link to a client arrives before the client list does.
+Each route takes what it needs from the query cache itself: `ClientsRoute` reads `useClients`, the keepalived pages read `useKeepalivedStates` and `useClients`. The routes under `/client/:clientId` resolve their client through `RouteClient`: while the list is pending it shows the spinner, because a link to a client arrives before the client list does, and only once the list has answered is a missing client really gone. That case gets the not-found card, and the URL stays where it was. The routes used to show the client list instead, under an address that named a client.
 
 ---
 
@@ -147,7 +156,7 @@ Each context is split the same way: the context object and its hook live in a JS
     1. **Local**: POST to `/api/login` → the server sets the cookies → `login()`.
     2. **OIDC**: Redirect to `/api/auth/login` → provider callback with code → the backend exchanges the code, sets the cookies and redirects to `/`. Nothing is passed in the URL.
 - **Stale flag**: The flag can outlive the session (a restarted server with a new `jwtSecret`, an expired token). The first request, `/api/v1/me`, then answers `401` and `apiFetch` logs out.
-- **API calls**: Every request to an authenticated endpoint goes through `apiFetch` (`src/lib/apiFetch.ts`). It sends the request with `credentials: "same-origin"`, so the session cookie goes along, and reacts to `401` in one place: it calls the `logout` the `AuthProvider` registered with `setUnauthorizedHandler` and throws `SessionExpiredError`, so the router lands on `/login`. Stores and components therefore take no token parameter. `Login.tsx` keeps plain `fetch` on purpose — `/api/login` and `/api/auth/config` are unauthenticated, and a wrong password must produce an error message, not a logout.
+- **API calls**: Every request to an authenticated endpoint goes through `apiFetch` (`src/lib/apiFetch.ts`). It sends the request with `credentials: "same-origin"`, so the session cookie goes along, and reacts to `401` in one place: it calls the `logout` the `AuthProvider` registered with `setUnauthorizedHandler` and throws `SessionExpiredError`, so the router lands on `/login`. Queries and components therefore take no token parameter. `Login.tsx` and the logout use `publicApi` on purpose — `/api/login`, `/api/auth/logout` and `/api/auth/config` are unauthenticated, and a wrong password must produce an error message, not a logout. Logging out clears the query cache: what it holds was read for the user who is leaving.
 - **Expiry**: Besides the `401` handling, the `AuthProvider` logs out at the `expiresAt` that `/api/v1/me` reports, because a dashboard fed only by the WebSocket may not send a request for a long time.
 - **Login UI**: The `Login.tsx` page uses the pre-built `LoginPage` component from `@stefgo/react-ui-components`, configured with app title, auth type, and handler callbacks.
 
@@ -155,30 +164,59 @@ Each context is split the same way: the context object and its hook live in a JS
 
 ## 🗂️ State Management
 
-### Modular State Management
+Two kinds of state, kept apart.
 
-We use **Zustand** split into specialized stores to maintain a clean, reactive state.
-
-- **`useClientStore`**: Holds the master list of registered clients and their real-time online/offline status. Provides `fetchClients`, `deleteClient`, `updateClient`, and `setClients` (used by WebSocket updates).
-- **`useKeepalivedStore`**: The last reading per client (`states: Record<clientId, KeepalivedState>`). `setState` takes one from `KEEPALIVED_STATE_UPDATE`, `fetchStates` loads all of them once after login (the WebSocket pushes them too), and `refresh(clientId)` asks one agent to read now — the result arrives over the socket like any other reading. Clusters are not stored: `useVrrpClusters` derives them.
-- **`useActivityStore`**: The activity list (`ActivityRecord[]`) as the server reads it for the session's user, so `seen` needs no user id on this side. Fed by `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` (`applySeen`) and by `fetchEvents` on connect; `unseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes; `markManySeen` and `clearAll` update optimistically and then call the API.
-- **`useSchedulerStore`**: `schedulers`, the status of each scheduler the server runs (`notification-cleanup`, `token-cleanup`). Filled by `setSchedulers` from `GET /api/v1/settings/scheduler-status` and kept current by `applyUpdate` from `SCHEDULER_STATUS_UPDATE`, one scheduler at a time.
-- **`useUIStore`**: Manages global UI state — currently sidebar collapse state. Uses Zustand's `persist` middleware to save state to `localStorage` (`STORAGE_KEYS.ui`).
+**What the server holds** lives in one **TanStack Query** cache (`lib/queryClient.ts`), read through the modules in `queries/`. **What only this browser knows** lives in **Zustand**: `useUIStore`, the sidebar's collapse state, saved to `localStorage` by the `persist` middleware (`STORAGE_KEYS.ui`). It is the only store.
 
 **Storage keys.** That key, the theme's and those of every list's view settings are named in `lib/storageKeys.ts` and nowhere else, as `kasm.<area>.<what>`; a test holds them unique and in that form. The keys were renamed when they moved there, and the old values are not carried over: after the update a browser shows the default theme, an open sidebar and every list in its default view once, until the reader chooses again.
 
+### The API client (`lib/api.ts`)
+
+Every request goes through `api.get`, `api.post`, `api.put`, `api.patch` or `api.delete`, and nothing else reads a response body.
+
+- **Every call names the schema its answer has to match** (`shared/src/responses.ts`) and gets back what that schema parsed. An answer that does not match throws; the issues go to the console, because they name fields.
+- **A refusal throws an `ApiError`** with the server's own `error` text and the HTTP status. A caller passes a `fallback` for a body that carries none.
+- **`publicApi`** is the same client for `/api/login`, `/api/auth/logout` and `/api/auth/config`, where a `401` is a wrong password and not an expired session.
+
+`apiFetch` stays below it and is called by nothing else.
+
+### Queries (`queries/`)
+
+| Module | Holds | Kept current by |
+| :-- | :-- | :-- |
+| `clients.ts` | The registered clients and their status. Update and delete are optimistic and roll back when the server refuses. | `CLIENTS_UPDATE` |
+| `keepalived.ts` | One entry: the last reading of every client, by client id. Clusters are not held: `useVrrpClusters` derives them. `refreshKeepalived(clientId)` asks one agent to read now; the result arrives over the socket. | `KEEPALIVED_STATE_UPDATE` |
+| `activity.ts` | The activity list as the server reads it for the session's user, so `seen` needs no user id on this side. Marking seen and deleting all are optimistic. `useUnseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes. | `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` |
+| `scheduler.ts` | The status of the schedulers the server runs (`notification-cleanup`, `token-cleanup`). | `SCHEDULER_STATUS_UPDATE` |
+| `webhooks.ts`, `users.ts`, `tokens.ts` | Their lists. Nothing broadcasts a change, so they go stale by age (30 s; the tokens at once) and are read again after a change made here. | — |
+| `settings.ts` | No entry: the requests of the settings page. | — |
+
+The entries a message keeps current never go stale by age (`staleTime: Infinity`). The settings form is deliberately not a cache entry: one that is read again behind the form would overwrite what is typed and not yet saved.
+
+**How an entry changes is a pure function** in `lib/cacheUpdates.ts`, tested without a socket or a component: `applyKeepalivedState`, `mergeKeepalivedStates`, `appendActivity`, `markActivitySeen`, `unmarkActivitySeen` and `applySchedulerUpdate`.
+
+**A push and a request race on every page load**, and the rules say which one stays. The stores used to let whichever arrived later win, so an answer read before a change could cover the push that reported it.
+
+- **A keepalived reading** carries the server's `receivedAt`. Per client the later reading stays, whether the socket or the request delivered it.
+- **A list the socket delivers whole** (clients, activity) has no such stamp. `readUnlessPushed` (`lib/queryClient.ts`) keeps what the socket wrote while the request was under way: that is at least as new as what the request read.
+- **A message that carries a part** (`ACTIVITY_APPENDED`, `ACTIVITY_SEEN`, `SCHEDULER_STATUS_UPDATE`) changes an entry that is there and makes none: the part alone would pass for the whole.
+
+**A page says when its data could not be read.** `components/QueryError.tsx` shows what failed and the server's reason, instead of the list: an empty list says there is nothing, which is another statement. The hooks hand out an `error` only while there is no data, so a reload that fails behind a list on screen leaves the list there.
+
 ### Real-time Updates (WebSocket)
 
-The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake. Incoming messages are dispatched to the stores:
+The `WebSocketProvider` (`src/features/app/context/WebSocketProvider.tsx`) maintains a persistent WebSocket connection to the backend (`ws://.../ws/dashboard`), authenticated by the session cookie the browser sends with the handshake.
 
-| Event                  | Handler                                          |
+**The messages are a contract in `@kasm/shared`.** `DashboardMessageSchema` (`shared/src/dashboardMessages.ts`) lists every message the server sends a dashboard as one discriminated union; the backend's senders take that type, and the provider parses each message against the schema (`features/app/lib/dashboardMessages.ts`). What does not match is dropped and reported once per type. The dispatch is a `switch` that ends in `assertNever`, so a message type without a case fails `typecheck`.
+
+| Event                  | What it does to the cache                        |
 | :--------------------- | :----------------------------------------------- |
-| `CLIENTS_UPDATE`       | `useClientStore.setClients`                      |
-| `KEEPALIVED_STATE_UPDATE` | `useKeepalivedStore.setState(state)`          |
-| `ACTIVITY_UPDATE`      | `useActivityStore` — replaces the activity list  |
-| `ACTIVITY_APPENDED`    | `useActivityStore.appendEvents` — merges new events by id, newest first |
-| `ACTIVITY_SEEN`        | `useActivityStore.applySeen` — marks the ids seen, also from another tab |
-| `SCHEDULER_STATUS_UPDATE` | `useSchedulerStore.applyUpdate`               |
+| `CLIENTS_UPDATE`       | Replaces the client list; may also be what fills it first |
+| `KEEPALIVED_STATE_UPDATE` | `applyKeepalivedState` — one client's reading, unless the cached one is newer |
+| `ACTIVITY_UPDATE`      | Replaces the activity list                       |
+| `ACTIVITY_APPENDED`    | `appendActivity` — merges new events by id, newest first |
+| `ACTIVITY_SEEN`        | `markActivitySeen` — marks the ids seen, also from another tab |
+| `SCHEDULER_STATUS_UPDATE` | `applySchedulerUpdate` — one scheduler, where the status has been read |
 
 On connect the server sends `CLIENTS_UPDATE`, every stored keepalived reading and the activity list by itself, so the first screen fills without a REST call.
 
@@ -228,7 +266,7 @@ Editors that live in the workspace rather than in a dialog bring their own `Esca
 Every question before an action, and every notice after a failed one, goes through `useConfirm()` from the library. `ConfirmProvider` sits next to `ToastProvider` in `App.tsx` and renders the one dialog that answers; no component keeps a pending request, a busy flag or a `ConfirmDialog` of its own, and no component calls `window.alert` or `window.confirm`.
 
 - `confirm(options)` resolves `true` or `false`. An action that is quick to hand off — a pull, a discard — runs after the `await`.
-- An action whose outcome is worth waiting for — a delete — goes in `onConfirm`. The dialog stays open and busy until it settles; a rejection keeps it open with the error inside it, next to the button that retries. That is why the store's delete actions throw rather than reporting the failure themselves.
+- An action whose outcome is worth waiting for — a delete — goes in `onConfirm`. The dialog stays open and busy until it settles; a rejection keeps it open with the error inside it, next to the button that retries. That is why a delete is passed as `mutateAsync`, which rejects, rather than reporting the failure itself.
 - `alert(describeFailure(title, error))` from `utils.ts` reports a failure of an action that was not asked about first, such as the cleanups in Settings.
 
 **The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
@@ -323,8 +361,8 @@ troubled clusters with this card; the cluster page uses it as its list of hosts,
 plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
-`@kasm/shared` over the readings in `useKeepalivedStore` and the online clients in
-`useClientStore`. That is the function the server's `/api/v1/keepalived/clusters` runs, so the
+`@kasm/shared` over the readings from `useKeepalivedStates` and the online clients from
+`useClients`. That is the function the server's `/api/v1/keepalived/clusters` runs, so the
 page and the endpoint cannot disagree, and a client going offline changes a cluster's health
 on the next render without anything being sent. Readings of clients that have since been
 deleted are left out.
@@ -437,7 +475,7 @@ filter and the search leave, across all pages, and nothing the reader has not be
 **Entries are not deleted one by one.** A row can be marked seen; the history goes as a whole
 ("Delete all") or through retention. The sidebar badge does not
 count them either. An event that names a host but carries no `clientName` (recorded before
-the server stored it) gets the name from `useClientStore` by `clientId`.
+the server stored it) gets the name from the client list (`useClients`) by `clientId`.
 
 Everything else is found through the search box, as on the other lists (`useSearchQueryParam`,
 so the query survives a reload). It matches the sentence a row shows, its detail line, the
@@ -481,7 +519,7 @@ System settings page, one section per tab: Client Tokens and Activity History. T
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot. The manual maintenance runs act on the saved values, not on unsaved edits.
 
-**Every tab follows one layout:** its settings, then one `SchedulerBox` headed "Scheduler". It shows Status (`Running…` or `Idle`), Last Run (with "manual" when a user started it), Next Run (or "Disabled") and Result, and, below a divider, the `ManualRun` row with its Run Now button. The box draws no field borders: its values are to read, not to edit. It reads `useSchedulerStore`; the result is worded by `describeRunResult` (`features/settings/lib/runResult.ts`), in red for a failed or interrupted run. The settings page uses no monospaced type.
+**Every tab follows one layout:** its settings, then one `SchedulerBox` headed "Scheduler". It shows Status (`Running…` or `Idle`), Last Run (with "manual" when a user started it), Next Run (or "Disabled") and Result, and, below a divider, the `ManualRun` row with its Run Now button. The box draws no field borders: its values are to read, not to edit. It reads `useSchedulerStatus`; the result is worded by `describeRunResult` (`features/settings/lib/runResult.ts`), in red for a failed or interrupted run. The settings page uses no monospaced type.
 
 | Setting                                      | Description                                                                   |
 | :------------------------------------------- | :---------------------------------------------------------------------------- |

@@ -330,7 +330,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 | Field         | Type           | Description                                              |
 | :------------ | :------------- | :------------------------------------------------------- |
 | `id`          | string         | Client UUID.                                             |
-| `hostname`    | string         | Hostname of the client machine.                          |
+| `hostname`    | string         | Hostname of the client machine. Always a string: a row without one is sent as `""`. |
 | `displayName` | string \| null | Optional human-readable name.                            |
 | `site`        | string \| null | Network segment or location the operator put the client in. Part of the [cluster key](#list-clusters); `null` for none. |
 | `status`      | string         | `"online"` or `"offline"`.                               |
@@ -1257,6 +1257,20 @@ The `kasm_session` cookie, which the browser sends with the handshake by itself.
 - On connect: The server immediately sends a `CLIENTS_UPDATE` with the full client list, then one `KEEPALIVED_STATE_UPDATE` per client that has a stored reading, then an `ACTIVITY_UPDATE` with the activity list. A dashboard therefore needs no REST call to fill its first screen.
 - A ping/pong heartbeat runs every 30 seconds to detect dead connections.
 - All broadcasts from `ProxyService` (e.g., agent connects/disconnects) are forwarded to all active dashboard sessions.
+
+#### The messages are a contract
+
+Every message below is a member of `DashboardMessageSchema` in
+[`shared/src/dashboardMessages.ts`](https://github.com/stefgo/keepalived-status-monitor/blob/main/shared/src/dashboardMessages.ts),
+one discriminated union over `type`. The server's senders (`sendToDashboard`,
+`broadcastToDashboard`, `sendToUser`) take that type, so a message that is not listed does not
+compile. The dashboard parses each message against the schema and drops what does not match,
+reporting it once per type.
+
+The answers of the REST endpoints a browser calls are described the same way, in
+[`shared/src/responses.ts`](https://github.com/stefgo/keepalived-status-monitor/blob/main/shared/src/responses.ts).
+They describe what is sent, not what is accepted: a response schema carries none of the input
+rules, and a nullable column arrives as `null`, not as a missing key.
 
 #### Events (Server -> Client)
 

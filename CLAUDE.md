@@ -14,7 +14,7 @@ Consists of:
 | Layer | Technology |
 |---|---|
 | Backend | Node.js 22+, Fastify 5, SQLite (better-sqlite3), Pino |
-| Frontend | React 19, Vite 7, Zustand, Tailwind CSS 3, React Router 7 |
+| Frontend | React 19, Vite 7, TanStack Query 5, Zustand, Tailwind CSS 3, React Router 7 |
 | Client | Node.js, Fastify 5, ws — reads keepalived via signals and `/proc/<pid>/root` |
 | Shared | TypeScript, Zod 4 |
 | Auth | JWT + optional OIDC |
@@ -83,7 +83,15 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 
 ### Frontend (server/frontend/src)
 - Feature-based structure under `features/` (keepalived, clients, activity, users, auth, tokens, settings, app)
-- Zustand stores in `stores/` (useClientStore, useKeepalivedStore, useActivityStore, useSchedulerStore, useUIStore)
+- What the server holds lives in one TanStack Query cache (`lib/queryClient.ts`), read through
+  the modules in `queries/` and addressed by `lib/queryKeys.ts`. Zustand holds only
+  `useUIStore`, what this browser alone knows.
+- Every request goes through `lib/api.ts`, which parses the answer against a schema from
+  `shared/src/responses.ts` and throws the server's reason on a refusal. `apiFetch` stays
+  below it; no component calls `fetch`.
+- A dashboard message changes a cache entry through a pure function in `lib/cacheUpdates.ts`.
+  The messages are one union in `shared/src/dashboardMessages.ts`; the backend sends through
+  it, and the socket handler's `switch` ends in `assertNever`.
 - VRRP clusters are derived, never stored: `buildVrrpClusters` in `shared` is used by the
   backend endpoint and by the dashboard (`useVrrpClusters`) alike
 - React Contexts: WebSocketContext, AuthContext. The theme is the library's `ThemeProvider`,
