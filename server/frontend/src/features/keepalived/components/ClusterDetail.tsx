@@ -16,6 +16,7 @@ import { clientName, formatDate } from "../../../utils";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
 import { useActivity } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
+import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { NotFoundCard } from "../../../components/NotFoundCard";
 import { ActivityLevelIcon } from "../../activity/components/ActivityLevelIcon";
@@ -76,8 +77,8 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     useEscapeToLeave(back);
 
     const clusters = useVrrpClusters();
-    const { clients, isPending: clientsLoading } = useClients();
-    const { states: readings } = useKeepalivedStates();
+    const { clients, isPending: clientsLoading, error: clientsError } = useClients();
+    const { states: readings, isPending: readingsLoading, error: readingsError } = useKeepalivedStates();
     const { events } = useActivity();
 
     const candidates = clustersAt(clusters, site, vrid);
@@ -132,7 +133,10 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
 
     if (!cluster) {
         if (candidates.length > 1) return <ClusterChoice label={label} candidates={candidates} clusters={clusters} />;
-        if (clientsLoading) return <LoadingIndicator />;
+        // Without the list or the readings nothing says whether the cluster exists.
+        const loadError = clientsError ?? readingsError;
+        if (loadError) return <QueryError title="Could not load the cluster" error={loadError} />;
+        if (clientsLoading || readingsLoading) return <LoadingIndicator />;
         return (
             <NotFoundCard title="Cluster not found" backTo="/clusters" backLabel="Back to clusters">
                 No host reports a VRRP instance for {label}.

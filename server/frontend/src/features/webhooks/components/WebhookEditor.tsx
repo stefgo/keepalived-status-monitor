@@ -18,6 +18,7 @@ import {
 import { testWebhook, useSaveWebhook, useWebhooks } from "../../../queries/webhooks";
 import { getErrorMessage } from "../../../utils";
 import { NotFoundCard } from "../../../components/NotFoundCard";
+import { QueryError } from "../../../components/QueryError";
 import { describeDiscardWebhookChanges } from "../confirmations";
 import { EMPTY_DRAFT, PLACEHOLDERS, draftFrom, inputFrom, previewBody, type WebhookDraft } from "../lib/webhookForm";
 
@@ -28,10 +29,12 @@ import { EMPTY_DRAFT, PLACEHOLDERS, draftFrom, inputFrom, previewBody, type Webh
  */
 export const WebhookEditorRoute = () => {
     const { webhookId } = useParams();
-    const { webhooks, isPending } = useWebhooks();
+    const { webhooks, isPending, error } = useWebhooks();
     const webhook = webhooks.find((w) => w.id === webhookId);
 
     if (!webhookId) return <WebhookEditor webhook={null} />;
+    // Not "not found": without the list nothing says whether the webhook exists.
+    if (!webhook && error) return <QueryError title="Could not load the webhook" error={error} />;
     if (!webhook && isPending) return <LoadingIndicator label="Loading webhook…" />;
     if (!webhook) {
         return (

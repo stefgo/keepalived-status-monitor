@@ -14,6 +14,7 @@ import {
 } from "@stefgo/react-ui-components";
 import { useSearchQueryParam } from "../hooks/useSearchQueryParam";
 import { describeFailure } from "../utils";
+import { QueryError } from "../components/QueryError";
 import { schedulerStatusOptions } from "../queries/scheduler";
 import { loadSettings, saveSettings } from "../queries/settings";
 import {
@@ -50,6 +51,8 @@ export default function Settings() {
     const [draft, setDraft] = useState<SettingsValues>(DEFAULT_SETTINGS);
     const [savingSection, setSavingSection] = useState<SectionId | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    /** Why the settings could not be read. Set, the form is not shown at all. */
+    const [loadError, setLoadError] = useState<unknown>(null);
 
     const [tab, setTab] = useSearchQueryParam("tab");
     const tabs = useTabs({
@@ -76,7 +79,7 @@ export default function Settings() {
                     setDraft(loaded);
                 }
             } catch (e) {
-                console.error("Failed to fetch settings:", e);
+                if (!cancelled) setLoadError(e);
             } finally {
                 if (!cancelled) setIsLoading(false);
             }
@@ -108,6 +111,12 @@ export default function Settings() {
 
     if (isLoading) {
         return <LoadingIndicator label="Loading settings…" />;
+    }
+
+    // Without what the server holds, the fields would show the defaults as if they were
+    // saved -- and a save would write them over the real values.
+    if (loadError) {
+        return <QueryError title="Could not load the settings" error={loadError} />;
     }
 
     const renderSection = (id: SectionId) => {

@@ -29,6 +29,7 @@ import { ACTIVITY_LEVELS, ActivityLevel, ActivityRecord, activityDetail, activit
 import { unseenTone } from "../../../lib/cacheUpdates";
 import { useActivity, useClearActivity, useMarkActivitySeen } from "../../../queries/activity";
 import { useClients } from "../../../queries/clients";
+import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { ActivityGroupSteps } from "./ActivityGroupSteps";
 import { ActivityLevelIcon } from "./ActivityLevelIcon";
@@ -113,7 +114,7 @@ interface ActivityViewProps {
  * that; the search box covers everything a reader would look for by name.
  */
 export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
-    const { events } = useActivity();
+    const { events, error } = useActivity();
     const markSeen = useMarkActivitySeen();
     const clearActivity = useClearActivity();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -342,6 +343,8 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             )}
         </div>
     );
+
+    if (error) return <QueryError title="Could not load the activity" error={error} />;
 
     return (
         <DataMultiView<ActivityGroup>

@@ -2,6 +2,7 @@ import { Token } from "@kasm/shared";
 import { TokenList } from "./TokenList";
 import { useConfirm } from "@stefgo/react-ui-components";
 import { describeDeleteToken } from "../confirmations";
+import { QueryError } from "../../../components/QueryError";
 import { useDeleteToken, useTokens } from "../../../queries/tokens";
 
 const NO_TOKENS: Token[] = [];
@@ -11,7 +12,8 @@ export const TokenOverview = () => {
      * Only the first load shows as loading: the list used to say "No tokens yet." until the
      * answer arrived. A reload after a delete keeps the rows on screen instead of flashing.
      */
-    const { data: tokens = NO_TOKENS, isLoading } = useTokens();
+    const { data, isPending, error } = useTokens();
+    const tokens = data ?? NO_TOKENS;
     const deleteToken = useDeleteToken();
     const { confirm } = useConfirm();
 
@@ -25,9 +27,11 @@ export const TokenOverview = () => {
         });
     };
 
+    if (error && data === undefined) return <QueryError title="Could not load the tokens" error={error} />;
+
     return (
         <div className="space-y-6">
-            <TokenList tokens={tokens} isLoading={isLoading} deleteToken={requestDeleteToken} />
+            <TokenList tokens={tokens} isLoading={isPending} deleteToken={requestDeleteToken} />
         </div>
     );
 };

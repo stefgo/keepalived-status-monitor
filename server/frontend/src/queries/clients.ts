@@ -28,12 +28,14 @@ export const clientListOptions = queryOptions({
 
 /**
  * The registered clients. `isPending` is true until the list has arrived once -- by fetch
- * or by broadcast, and also after a failed fetch. An empty list before that says nothing
- * about whether a client exists.
+ * or by broadcast. An empty list before that says nothing about whether a client exists.
+ *
+ * `error` is why there is no list. A reload that fails while a list is on screen leaves it
+ * there, and the socket goes on keeping it current.
  */
 export function useClients() {
-    const { data = NO_CLIENTS, isPending, error, refetch } = useQuery(clientListOptions);
-    return { clients: data, isPending, error, refetch };
+    const { data, isPending, error, refetch } = useQuery(clientListOptions);
+    return { clients: data ?? NO_CLIENTS, isPending, error: data === undefined ? error : null, refetch };
 }
 
 /** One client out of the list, kept current by the socket. `undefined` while unknown. */

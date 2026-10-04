@@ -25,10 +25,13 @@ export const activityListOptions = queryOptions({
     staleTime: Infinity,
 });
 
-/** The events, newest first. `isPending` until the list has arrived once. */
+/**
+ * The events, newest first. `isPending` until the list has arrived once; `error` is why
+ * there is no list.
+ */
 export function useActivity() {
-    const { data = NO_EVENTS, isPending, error } = useQuery(activityListOptions);
-    return { events: data, isPending, error };
+    const { data, isPending, error } = useQuery(activityListOptions);
+    return { events: data ?? NO_EVENTS, isPending, error: data === undefined ? error : null };
 }
 
 /** What the sidebar badge shows. A string, so the shell re-renders only when it changes. */

@@ -10,6 +10,8 @@ import {
 } from "@stefgo/react-ui-components";
 import type { Client, VrrpCluster, VrrpClusterHealth, VrrpClusterMember, VrrpState } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
+import { useKeepalivedStates } from "../../../queries/keepalived";
+import { QueryError } from "../../../components/QueryError";
 import { useSearchQueryParam } from "../../../hooks/useSearchQueryParam";
 import { clientName, formatDate } from "../../../utils";
 import { useVrrpClusters } from "../hooks/useVrrpClusters";
@@ -140,7 +142,8 @@ export const ClusterOverview = () => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const clusters = useVrrpClusters();
-    const { clients } = useClients();
+    const { clients, error: clientsError } = useClients();
+    const { error: statesError } = useKeepalivedStates();
     const [searchQuery, setSearchQuery] = useSearchQueryParam();
     // What the reader opened or closed by hand; every other cluster follows the default below.
     const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(new Map());
@@ -281,6 +284,9 @@ export const ClusterOverview = () => {
             ],
         },
     ];
+
+    const loadError = clientsError ?? statesError;
+    if (loadError) return <QueryError title="Could not load the clusters" error={loadError} />;
 
     return (
         <DataMultiView<ClusterRow>

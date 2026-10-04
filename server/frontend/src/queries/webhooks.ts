@@ -16,10 +16,13 @@ export const webhookListOptions = queryOptions({
     queryFn: () => api.get("/api/v1/webhooks", WebhookListSchema, { fallback: "Failed to fetch webhooks" }),
 });
 
-/** `isPending` until the list has arrived once; an empty list before that says nothing. */
+/**
+ * `isPending` until the list has arrived once; an empty list before that says nothing.
+ * `error` is why there is no list.
+ */
 export function useWebhooks() {
-    const { data = NO_WEBHOOKS, isPending, isLoading, error } = useQuery(webhookListOptions);
-    return { webhooks: data, isPending, isLoading, error };
+    const { data, isPending, error } = useQuery(webhookListOptions);
+    return { webhooks: data ?? NO_WEBHOOKS, isPending, error: data === undefined ? error : null };
 }
 
 /** Creates a webhook, or changes the one `id` names. PUT takes the whole webhook. */

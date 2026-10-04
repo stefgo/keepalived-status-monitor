@@ -4,6 +4,7 @@ import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
 import { StatCard } from "@stefgo/react-ui-components";
 import { ACTIVITY_LEVELS, CLIENT_STATUS } from "@kasm/shared";
 import { useClients } from "../../../queries/clients";
+import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
 import { useActivity } from "../../../queries/activity";
 import { ActivityView } from "../../activity/components/ActivityView";
@@ -33,8 +34,8 @@ const toPanel = (value: string | null): Panel | null =>
  */
 export const KeepalivedDashboard = () => {
     const navigate = useNavigate();
-    const { clients } = useClients();
-    const { states } = useKeepalivedStates();
+    const { clients, error: clientsError } = useClients();
+    const { states, error: statesError } = useKeepalivedStates();
     const clusters = useVrrpClusters();
     const { events } = useActivity();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -81,6 +82,10 @@ export const KeepalivedDashboard = () => {
             (group) => group.unseen && ACTIVITY_LEVELS.indexOf(group.level) >= warning,
         ).length;
     }, [events]);
+
+    // Four zeroes would say the fleet is empty, which is another statement altogether.
+    const loadError = clientsError ?? statesError;
+    if (loadError) return <QueryError title="Could not load the fleet" error={loadError} />;
 
     return (
         <div className="space-y-6">

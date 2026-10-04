@@ -3,12 +3,14 @@ import { UserDialog } from "./UserDialog";
 import { UserList, UserData } from "./UserList";
 import { useConfirm } from "@stefgo/react-ui-components";
 import { describeDeleteUser, describeLastUser } from "../confirmations";
+import { QueryError } from "../../../components/QueryError";
 import { useDeleteUser, useSaveUser, useUsers } from "../../../queries/users";
 
 const NO_USERS: UserData[] = [];
 
 export const UserOverview = () => {
-    const { data: users = NO_USERS, isLoading } = useUsers();
+    const { data, isPending, error } = useUsers();
+    const users = data ?? NO_USERS;
     const saveUser = useSaveUser();
     const deleteUser = useDeleteUser();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -49,11 +51,14 @@ export const UserOverview = () => {
     const handleSaveUser = (data: { username: string; password?: string; auth_methods?: string }) =>
         saveUser.mutateAsync({ id: editingUser?.id, data });
 
+    // Instead of the list: an empty one would say there are no users.
+    if (error && data === undefined) return <QueryError title="Could not load the users" error={error} />;
+
     return (
         <div className="space-y-6">
             <UserList
                 users={users}
-                isLoading={isLoading}
+                isLoading={isPending}
                 onCreateUser={handleCreateUser}
                 onEditUser={handleEditUser}
                 onDeleteUser={requestDeleteUser}

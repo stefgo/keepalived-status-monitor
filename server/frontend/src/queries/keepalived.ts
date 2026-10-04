@@ -25,10 +25,13 @@ export const keepalivedStatesOptions = queryOptions({
     staleTime: Infinity,
 });
 
-/** `isPending` until the readings have arrived once; an empty set before that says nothing. */
+/**
+ * `isPending` until the readings have arrived once; an empty set before that says nothing.
+ * `error` is why there are none -- not a reload that failed behind readings on screen.
+ */
 export function useKeepalivedStates() {
-    const { data = NO_STATES, isPending, error } = useQuery(keepalivedStatesOptions);
-    return { states: data, isPending, error };
+    const { data, isPending, error } = useQuery(keepalivedStatesOptions);
+    return { states: data ?? NO_STATES, isPending, error: data === undefined ? error : null };
 }
 
 /** One client's last reading; `undefined` while there is none. */

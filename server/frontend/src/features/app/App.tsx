@@ -24,7 +24,7 @@ import {
     ThemeProvider,
     useTheme,
 } from "@stefgo/react-ui-components";
-import { CLIENT_STATUS } from "@kasm/shared";
+import { CLIENT_STATUS, type Client } from "@kasm/shared";
 
 import Login from "../../pages/Login";
 import { useAuth } from "../auth/AuthContext";
@@ -38,6 +38,8 @@ import { tokenListOptions } from "../../queries/tokens";
 import { useUIStore } from "../../stores/useUIStore";
 import { useUnseenTone } from "../../queries/activity";
 import { NotFoundCard } from "../../components/NotFoundCard";
+import { QueryError } from "../../components/QueryError";
+import { useKeepalivedStates } from "../../queries/keepalived";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf, clusterPath } from "../keepalived/lib/vrrp";
 import { STORAGE_KEYS } from "../../lib/storageKeys";
@@ -110,11 +112,14 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 function ClientsRoute() {
     const navigate = useNavigate();
     const { pathname } = useLocation();
-    const { clients, refetch } = useClients();
+    const { clients, error, refetch } = useClients();
     const deleteClient = useDeleteClient();
 
     // Every editor route knows where back is because the surface that opened it says so.
     const open = (to: string) => navigate(to, { state: { from: pathname } });
+
+    // Instead of the list: an empty one would say no client is registered.
+    if (error) return <QueryError title="Could not load the clients" error={error} />;
 
     return (
         <ManagedClients
@@ -146,22 +151,32 @@ function AddClientRoute() {
 }
 
 /**
- * The client behind `:clientId`, or `undefined` while the list has not arrived.
+ * Resolves the client behind `:clientId` for the routes below.
  *
- * Both client routes below share the miss, and both answer it the same way: by showing the
- * list rather than redirecting to it. A link to a client arrives before the client list
- * does, and a redirect would turn that race into a bounced URL.
+ * The client comes from the cached list. While that is pending this shows the spinner: a
+ * reloaded or shared URL renders before the first fetch returns, and an empty list then
+ * says nothing about whether the client exists. Only after that is a missing client
+ * really gone -- a stale bookmark or a deleted client gets the not-found card, and the URL
+ * stays where it was. The routes used to show the client list in both cases, under an
+ * address that named a client.
  */
-function useRouteClient() {
+function RouteClient({ children }: { children: (client: Client) => ReactNode }) {
     const { clientId } = useParams();
-    return useClient(clientId);
+    const { isPending, error } = useClients();
+    const client = useClient(clientId);
+
+    if (client) return children(client);
+    if (error) return <QueryError title="Could not load the client" error={error} />;
+    if (isPending) return <LoadingIndicator label="Loading client…" />;
+    return (
+        <NotFoundCard title="Client not found" backTo="/clients" backLabel="Back to clients">
+            There is no client with this id. It may have been deleted.
+        </NotFoundCard>
+    );
 }
 
 function ClientDetailRoute() {
-    const client = useRouteClient();
-    if (!client) return <ClientsRoute />;
-
-    return <ClientOverview client={client} />;
+    return <RouteClient>{(client) => <ClientOverview client={client} />}</RouteClient>;
 }
 
 /**
@@ -170,15 +185,20 @@ function ClientDetailRoute() {
  * waits on them rather than giving up on the first render.
  */
 function ClientInstanceRoute() {
-    const client = useRouteClient();
+    return <RouteClient>{(client) => <ClientInstanceRedirect client={client} />}</RouteClient>;
+}
+
+function ClientInstanceRedirect({ client }: { client: Client }) {
     // Decoded by the router already.
     const { instanceName = "" } = useParams();
     const clusters = useVrrpClusters();
-    if (!client) return <ClientsRoute />;
+    const { isPending, error } = useKeepalivedStates();
 
     const cluster = clusterOf(clusters, client.id, instanceName);
     const path = cluster && clusterPath(cluster, clusters);
     if (!path) {
+        if (error) return <QueryError title="Could not load the keepalived readings" error={error} />;
+        if (isPending) return <LoadingIndicator />;
         return (
             <NotFoundCard title="Instance not found" backTo={`/client/${client.id}`} backLabel="Back to the host">
                 No cluster has the VRRP instance <code className="font-mono text-sm">{instanceName}</code> of this
@@ -200,11 +220,16 @@ function ClusterRoute() {
 }
 
 function ClientEditRoute() {
-    const client = useRouteClient();
-    const updateClient = useUpdateClient();
-    if (!client) return <ClientsRoute />;
+    // Optimistic: the list shows the change at once and takes it back if the server refuses.
+    const { mutateAsync: updateClient } = useUpdateClient();
 
-    return <ClientEditor client={client} onSave={(clientId, data) => updateClient.mutateAsync({ clientId, data })} />;
+    return (
+        <RouteClient>
+            {(client) => (
+                <ClientEditor client={client} onSave={(clientId, data) => updateClient({ clientId, data })} />
+            )}
+        </RouteClient>
+    );
 }
 
 function NotFound() {

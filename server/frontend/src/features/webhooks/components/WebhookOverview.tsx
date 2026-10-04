@@ -3,6 +3,7 @@ import type { Webhook } from "@kasm/shared";
 import { useConfirm } from "@stefgo/react-ui-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { describeDeleteWebhook } from "../confirmations";
+import { QueryError } from "../../../components/QueryError";
 import { useDeleteWebhook, useSaveWebhook, useWebhooks, webhookListOptions } from "../../../queries/webhooks";
 import { WebhookList } from "./WebhookList";
 
@@ -13,7 +14,7 @@ export const WebhookOverview = () => {
     const { confirm } = useConfirm();
     const queryClient = useQueryClient();
     /** Only the first load shows as loading; a reload keeps the rows on screen. */
-    const { webhooks, isLoading } = useWebhooks();
+    const { webhooks, isPending, error } = useWebhooks();
     const saveWebhook = useSaveWebhook();
     const deleteWebhook = useDeleteWebhook();
 
@@ -35,11 +36,13 @@ export const WebhookOverview = () => {
         saveWebhook.mutate({ id: webhook.id, input: { ...webhook, enabled } }, { onError: (e) => console.error(e) });
     };
 
+    if (error) return <QueryError title="Could not load the webhooks" error={error} />;
+
     return (
         <div className="space-y-6">
             <WebhookList
                 webhooks={webhooks}
-                isLoading={isLoading}
+                isLoading={isPending}
                 onAdd={() => open("/webhooks/new")}
                 onEdit={(webhook) => open(`/webhooks/${webhook.id}`)}
                 onDelete={requestDelete}
