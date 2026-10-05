@@ -124,10 +124,19 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
     const overrides = picks.cluster === cluster?.key ? picks.overrides : undefined;
     const defaults = useMemo(() => defaultCompareSelection(members), [members]);
     const isCompared = (key: string) => overrides?.get(key) ?? defaults.has(key);
-    const pick = (keys: string[], on: boolean) =>
+    const comparedKeys = new Set(members.map(memberKey).filter(isCompared));
+    // Written down for every host whose box changed, and for no other: one the reader never
+    // touched keeps following the default.
+    const pick = (next: ReadonlySet<string>) =>
         setPicks({
             cluster: cluster?.key,
-            overrides: new Map([...(overrides ?? []), ...keys.map((key): [string, boolean] => [key, on])]),
+            overrides: new Map([
+                ...(overrides ?? []),
+                ...members
+                    .map(memberKey)
+                    .filter((key) => next.has(key) !== isCompared(key))
+                    .map((key): [string, boolean] => [key, next.has(key)]),
+            ]),
         });
     // Where errors were counted, the counters open on their groups alone; the cluster whose
     // key is stored here shows all of them. Another cluster starts narrowed again.
@@ -340,11 +349,7 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
             <ClusterCard
                 cluster={cluster}
                 title="Hosts"
-                compare={{
-                    selected: isCompared,
-                    onToggle: (key, on) => pick([key], on),
-                    onToggleAll: (on) => pick(members.map(memberKey), on),
-                }}
+                compare={{ value: comparedKeys, onChange: pick }}
             />
 
             <Card

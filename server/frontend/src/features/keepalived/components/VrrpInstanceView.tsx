@@ -8,6 +8,7 @@ import {
     EmptyState,
     type DataColumnDef,
     type DataColumnView,
+    type DataMultiViewProps,
     listGroups,
 } from "@stefgo/react-ui-components";
 import { RelativeTime } from "../../../components/RelativeTime";
@@ -32,8 +33,6 @@ export interface VrrpInstanceRow {
     stateBadge?: ReactNode;
     /** Where the row leads -- the instance's cluster, or its host. Links inside the row keep their own target. */
     href?: string;
-    /** Rendered in the leading column, where the view has one (see `leadingHeader`). */
-    leading?: ReactNode;
 }
 
 interface VrrpInstanceViewProps {
@@ -44,11 +43,8 @@ interface VrrpInstanceViewProps {
     title?: ReactNode;
     /** Shown in place of the rows when there are none. */
     emptyMessage?: ReactNode;
-    /**
-     * Adds a column in front of all others, headed by this, that shows each row's `leading`.
-     * In the list it opens the row's first line.
-     */
-    leadingHeader?: ReactNode;
+    /** A checkbox in front of every row, and one for all of them in the table's header. */
+    selection?: DataMultiViewProps<VrrpInstanceRow>["selection"];
 }
 
 const effectivePriority = (instance: VrrpInstance) => instance.effectivePriority ?? instance.priority ?? 0;
@@ -103,25 +99,13 @@ export const VrrpInstanceView = ({
     showVrid = true,
     title,
     emptyMessage = <EmptyState icon={Network} title="No VRRP instances" />,
-    leadingHeader,
+    selection,
 }: VrrpInstanceViewProps) => {
     const navigate = useNavigate();
-    const hasLeading = leadingHeader !== undefined;
 
     // Interface, advertisement interval and the virtual addresses are in the list only: an
     // address list needs a line of its own per row, and the table is wide enough without them.
     const columns: DataColumnDef<VrrpInstanceRow>[] = [
-        ...(hasLeading
-            ? [
-                  {
-                      header: leadingHeader,
-                      table: { headerClassName: "w-px", cellClassName: dim },
-                      // In the list it opens the row's first line instead.
-                      list: false,
-                      render: (row) => row.leading,
-                  } satisfies DataColumnDef<VrrpInstanceRow>,
-              ]
-            : []),
         ...(showHost
             ? [
                   {
@@ -138,11 +122,10 @@ export const VrrpInstanceView = ({
             sortValue: (row) => row.instance.name,
             table: { cellClassName: (row) => cn("text-sm", dim(row)) },
             list: { label: null },
-            // The list's first line names the row: what leads it, its host, the instance, its state.
+            // The list's first line names the row: its host, the instance, its state.
             render: (row, view) =>
                 view === "list" ? (
                     <div className="flex flex-wrap items-center gap-2 py-1">
-                        {hasLeading && <span className={dim(row)}>{row.leading}</span>}
                         {row.host && <span className={cn("font-medium text-text-primary", dim(row))}>{row.host}</span>}
                         <span className={cn(row.host ? "text-text-secondary" : "font-medium text-text-primary", dim(row))}>
                             {row.instance.name}
@@ -241,6 +224,7 @@ export const VrrpInstanceView = ({
             // Only where a row leads somewhere, or every row would look clickable.
             onRowClick={rows.some((row) => row.href) ? (row) => row.href && navigate(row.href) : undefined}
             emptyMessage={emptyMessage}
+            selection={selection}
         />
     );
 };

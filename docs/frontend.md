@@ -553,8 +553,9 @@ shows a list to pick from. A cluster without a VRID has no page.
   advertisement intervals, sync groups and virtual addresses. Offline hosts and members
   whose address list falls short are named in the header's alert.
 - The cluster's `ClusterCard` as the list of hosts; a row opens the host. Its `compare` prop
-  adds a leading checkbox column (`leadingHeader` / `leading` of `VrrpInstanceView`) that picks
-  the hosts the counters are compared for.
+  turns on the library's `selection` (handed through `VrrpInstanceView`), which picks the
+  hosts the counters are compared for: a checkbox in front of every row, and one for all of
+  them in the table's header. The list view has no header and so no "all".
 - **Counters side by side**, one column per compared host, ordered by effective priority, the
   counter column sticky while the rest scrolls. At first only the hosts that counted packet or
   authentication errors are compared (`defaultCompareSelection`); where none did, all of
