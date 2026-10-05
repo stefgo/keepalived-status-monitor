@@ -119,10 +119,21 @@ as a whole — a new master, a split brain, and incidents that open, change and 
 
     ---
 
-    Docker Compose for the server and for each agent, the configuration files, and the
-    permissions the agent needs.
+    Docker Compose for the server and for each agent, and the configuration files.
 
-    [:octicons-arrow-right-24: Installation & Setup](install.md)
+    [:octicons-arrow-right-24: Quick Start](quickstart.md) ·
+    [:octicons-arrow-right-24: Configuration](configuration.md)
+
+-   :material-shield-check: **Run it**
+
+    ---
+
+    The permissions the agent needs and what protects an installation, how to upgrade and
+    back it up, and what each release changes for one that already runs.
+
+    [:octicons-arrow-right-24: Security](security.md) ·
+    [:octicons-arrow-right-24: Operations](operations.md) ·
+    [:octicons-arrow-right-24: Upgrade Notes](upgrade-notes.md)
 
 -   :material-sitemap: **Understand it**
 
@@ -180,4 +191,4 @@ docker run -d --name kasm-server -p 3010:3010 \
 Then open <http://localhost:3010> and log in with `admin` / `admin` — and change that
 password right away. **Add Client** in the dashboard walks you through connecting the first
 host. The full Compose files for server and agent are in
-[Installation & Setup](install.md).
+[Quick Start](quickstart.md).

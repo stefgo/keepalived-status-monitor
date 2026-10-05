@@ -49,7 +49,7 @@ npm run build            # Build all workspaces
 npm run clean            # Clean build artifacts
 npm run lint             # ESLint over shared, client and server/backend
 npm run lint:frontend    # ESLint over server/frontend (its own config)
-npm test                 # Vitest over shared and the frontend, once
+npm test                 # Vitest over shared, the frontend, client and backend, once
 npm run test:watch       # Vitest, re-running what a change touches
 npm run screenshots      # docs/assets/screenshots from a running server (see docs/development.md)
 
@@ -228,21 +228,25 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
 
 ## Testing
 
-Vitest, configured in `vitest.config.mts` at the root with one project per workspace that
-has tests: `shared` and `frontend`. Both run in plain Node, so what is tested is logic —
-nothing renders a component or starts the backend. `client` and `server/backend` have no
-tests yet.
+Vitest, configured in `vitest.config.mts` at the root with one project per workspace:
+`shared`, `frontend`, `client` and `backend`. All run in plain Node, so what is tested is
+logic — nothing renders a component or starts the backend.
 
 - A test lives next to its module (`vrrpCluster.ts`, `vrrpCluster.test.ts`).
-- The frontend project sets the `development` condition, so its tests read `shared/src` and
-  need no build first.
-- `shared` builds with `tsconfig.build.json`, which keeps the tests out of `dist`;
-  `npm run typecheck -w shared` is what type-checks them.
+- Every project but `shared` sets the `development` condition, so its tests read
+  `shared/src` and need no build first.
+- `shared`, `client` and `server/backend` build with `tsconfig.build.json`, which keeps the
+  tests out of `dist`; `npm run typecheck -w <workspace>` is what type-checks them.
+- Logic inside a class with side effects is moved into a pure module first and tested there.
+- A backend module that imports `core/Database.js` or `config/AppConfig.js` reads the real
+  `server.db` and `config.yaml` the moment it is imported. Its test replaces both with
+  `vi.mock`; `src/testing/memoryDatabase.ts` gives an in-memory database on the current
+  schema. **No test may open the files of a running installation.**
 
-CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm test`, `npm run typecheck -w shared`,
-`npm run typecheck -w server/frontend`, `npm run lint -w server/frontend` and `npm run lint`
-on every branch and pull request; `build.yml` calls the same workflow and only builds images
-once it passes. Run the six locally before pushing.
+CI (`.github/workflows/ci.yml`) runs `npm run build`, `npm test`, `npm run typecheck` for
+`shared`, `client`, `server/backend` and `server/frontend`, `npm run lint -w server/frontend`
+and `npm run lint` on every branch and pull request; `build.yml` calls the same workflow and
+only builds images once it passes. Run the eight locally before pushing.
 
 ## Docs
 
@@ -254,7 +258,12 @@ See `docs/` for detailed documentation:
 - `docs/frontend.md` — Frontend structure
 - `docs/client.md` — Client agent architecture
 - `docs/development.md` — Development guidelines, the documentation site itself
-- `docs/install.md` — Build and setup
+- `docs/quickstart.md` — Server and first agent with Docker Compose
+- `docs/configuration.md` — Both `config.yaml` files, faster failover detection, env vars
+- `docs/security.md` — Reverse proxy, TLS, address checks, stored secrets, agent permissions
+- `docs/operations.md` — Images and tags, upgrading, backup, health, logs
+- `docs/upgrade-notes.md` — What a release changes for a running installation, newest
+  first; **a change an operator has to act on gets an entry here**
 - `docs/webhooks.md` — Webhooks: filters, body templates, examples
 
 ### The docs are rendered twice

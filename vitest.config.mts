@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 // One config for every workspace that has tests, so `npm test` at the root is the
-// whole suite. Both projects run in plain Node: what is tested is logic, and a DOM
+// whole suite. Every project runs in plain Node: what is tested is logic, and a DOM
 // would only be needed once a component is.
 export default defineConfig({
     test: {
@@ -27,6 +27,24 @@ export default defineConfig({
                     name: "frontend",
                     environment: "node",
                     include: ["server/frontend/src/**/*.test.ts"],
+                },
+            },
+            {
+                // The same condition as the frontend, for the same reason: client and
+                // backend import @kasm/shared, and a test must not depend on its build.
+                resolve: { conditions: ["development"] },
+                test: {
+                    name: "client",
+                    environment: "node",
+                    include: ["client/src/**/*.test.ts"],
+                },
+            },
+            {
+                resolve: { conditions: ["development"] },
+                test: {
+                    name: "backend",
+                    environment: "node",
+                    include: ["server/backend/src/**/*.test.ts"],
                 },
             },
         ],

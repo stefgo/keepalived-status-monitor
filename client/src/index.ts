@@ -5,6 +5,9 @@ import { WS_EVENTS } from "@kasm/shared";
 import { ActivityService } from "./services/ActivityService.js";
 import { KeepalivedService } from "./services/KeepalivedService.js";
 import { NotifyFifoWatcher } from "./services/NotifyFifoWatcher.js";
+import { ensureDataDir } from "./core/DataStore.js";
+
+ensureDataDir();
 
 // Which routes it serves -- and whether it starts at all -- follows from config.yaml; see
 // getWebRoutes(). Awaited so the process handlers below are only in place once startup is

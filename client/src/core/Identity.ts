@@ -1,6 +1,6 @@
 import { logger } from "@kasm/shared/node";
 import { AgentIdentitySchema } from "@kasm/shared";
-import { DATA_DIR, readJsonFile, writeJsonFile } from "./DataStore.js";
+import { DATA_DIR, quarantineFile, readJsonFile, writeJsonFile } from "./DataStore.js";
 import { CONFIG_PATH, rawValue, removeKey, save } from "./ConfigFile.js";
 
 /**
@@ -17,20 +17,26 @@ const IDENTITY_FILE = "identity.json";
  *
  * It is not configuration: the agent never picks it, the operator never writes it, and an id
  * chosen by the caller is what would let a registration take over an existing client. Keeping
- * it here buys two things the config file cannot give it -- the write is atomic (temp file
- * plus rename, see DataStore.ts), and it goes to a directory that is meant to be written,
+ * it here buys two things the config file cannot give it -- the write is atomic and synced
+ * (see DataStore.ts), and it goes to a directory that is meant to be written,
  * rather than to a single-file bind mount the operator also edits by hand.
  */
 let identity: AgentIdentity | null = null;
 
+/**
+ * A file that is there but is not an identity is set aside rather than discarded: it is the
+ * only copy of the registration, and the next registration would write over it. What went
+ * wrong with it is then still there to be looked at, or to be repaired and put back.
+ */
 function readFromDisk(): AgentIdentity | null {
-    const stored = readJsonFile(IDENTITY_FILE);
+    const stored = readJsonFile(IDENTITY_FILE, { quarantine: true });
     if (stored === null) return null;
     const parsed = AgentIdentitySchema.safeParse(stored);
     if (!parsed.success) {
-        logger.warn(
-            { file: IDENTITY_FILE },
-            "Discarding the stored identity: not a client id and auth token. Register this agent again.",
+        const movedTo = quarantineFile(IDENTITY_FILE);
+        logger.error(
+            { file: IDENTITY_FILE, movedTo },
+            "The stored identity is not a client id and auth token and was set aside. Register this agent again.",
         );
         return null;
     }
