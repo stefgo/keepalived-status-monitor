@@ -300,6 +300,9 @@ persisting a new client, resolving the caller's promise), which a table entry ca
 - **Uncaught exceptions** are logged at `fatal` level, the schedulers are stopped, and the process exits with code 1 after 250 ms (time for the pino transport to flush). The container supervisor restarts it (`restart: unless-stopped` in `compose.yaml`).
 - Both handlers are registered only after startup completed, so they never hide a failed start.
 - `SIGINT` / `SIGTERM` stop the schedulers and close the server gracefully (exit code 0).
+  A connection that does not finish closing is given `SHUTDOWN_TIMEOUT_MS` (5 s); then the
+  process exits anyway, before Docker's 10 s grace period would kill it. A second signal
+  changes nothing.
 
 ---
 
