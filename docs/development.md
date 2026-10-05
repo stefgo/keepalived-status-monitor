@@ -189,7 +189,7 @@ Type checking, linting and the [tests](#tests) of the pure logic are the quality
 
 | Workflow | Trigger | What it does |
 | :------- | :------ | :----------- |
-| **Check Code** (`ci.yml`) | Push to any branch except `main`, every pull request, and `workflow_call` | Job `verify`: checks that the registry cleanup names every image `build.yml` publishes, then `npm ci`, `npm run build` (type-checks `shared`, `client` and `server/backend`, builds the frontend), `npm test` (Vitest over `shared` and the frontend; reads `shared` from source, so it does not depend on the build before it), `npm run typecheck -w shared` (the build leaves the tests of `shared` out of `dist`, and Vitest does not check types), `npm run typecheck -w server/frontend` (the Vite build does not type-check), `npm run lint -w server/frontend`, `npm run lint` (the root ESLint config, covering `shared`, `client` and `server/backend`). |
+| **Check Code** (`ci.yml`) | Push to any branch except `main`, every pull request, and `workflow_call` | Job `verify`: checks that the registry cleanup names every image `build.yml` publishes, then `npm ci`, `npm run build` (type-checks `shared`, `client` and `server/backend`, builds the frontend), `npm test` (Vitest over every workspace; reads `shared` from source, so it does not depend on the build before it), `npm run typecheck` for `shared`, `client` and `server/backend` (their build leaves the tests out of `dist`, and Vitest does not check types), `npm run typecheck -w server/frontend` (the Vite build does not type-check), `npm run lint -w server/frontend`, `npm run lint` (the root ESLint config, covering `shared`, `client` and `server/backend`). |
 | **Build Images** (`build.yml`) | Push to `main` or `dev` (except documentation-only commits), `v*.*.*` tags, manual dispatch — which is how a release reaches it | See the job graph below. |
 | **Create Release** (`release.yml`) | Manual, `main` only | See [Release](#release). |
 | **Prune Registry** (`cleanup-packages.yml`) | Nightly, manual | See [Registry Cleanup](#registry-cleanup). |
@@ -222,6 +222,8 @@ To reproduce the gate locally, run the same commands without `VITE_USE_LOCAL_UI`
 npm run build
 npm test
 npm run typecheck -w shared
+npm run typecheck -w client
+npm run typecheck -w server/backend
 npm run typecheck -w server/frontend
 npm run lint -w server/frontend
 npm run lint
@@ -238,21 +240,28 @@ npm run test:watch   # re-runs what a change touches
 
 [Vitest](https://vitest.dev), configured in
 [`vitest.config.mts`](https://github.com/stefgo/keepalived-status-monitor/blob/main/vitest.config.mts)
-at the root, with one project per workspace that has tests: `shared` and `frontend`.
-`client` and `server/backend` have none yet.
+at the root, with one project per workspace: `shared`, `frontend`, `client` and `backend`.
 
 - **A test lives next to its module** — `vrrpCluster.ts` and `vrrpCluster.test.ts`.
-- **Logic only.** Both projects run in the `node` environment. There is no DOM, so logic
+- **Logic only.** Every project runs in the `node` environment. There is no DOM, so logic
   that sits inside a hook or a component is first moved into a module of its own and tested
-  there.
-- **The frontend tests read `shared` from source.** `@kasm/shared` exports `src` under the
-  `development` condition, which the `frontend` project sets; without it they would read
+  there. The same holds for a class with side effects in `client` or `server/backend`: what
+  it decides goes into a pure module, and the test is written against that.
+- **The tests read `shared` from source.** `@kasm/shared` exports `src` under the
+  `development` condition, which every other project sets; without it they would read
   `shared/dist`, which needs a build first and is stale the moment `shared/src` changes.
-- **`shared` builds without its tests** (`tsconfig.build.json`), so they do not end up in
-  `dist`. Vitest strips types without checking them, so `npm run typecheck -w shared` is what
-  checks those files; the frontend's are covered by its own `typecheck`. That script runs
-  `tsc` twice: over `src`, and over `vite.config.ts` through `tsconfig.node.json`, so the
-  build configuration is checked too.
+- **`shared`, `client` and `server/backend` build without their tests**
+  (`tsconfig.build.json`), so they end up neither in `dist` nor in an image. Vitest strips
+  types without checking them, so `npm run typecheck -w <workspace>` is what checks those
+  files; the frontend's are covered by its own `typecheck`. That script runs `tsc` twice:
+  over `src`, and over `vite.config.ts` through `tsconfig.node.json`, so the build
+  configuration is checked too.
+- **A backend test never opens the installation's files.** `core/Database.ts` opens
+  `server/data/server.db` and `config/AppConfig.ts` reads -- and may write -- `config.yaml`
+  as soon as they are imported. A test of a module that imports either replaces it with
+  `vi.mock`. `server/backend/src/testing/memoryDatabase.ts` returns an in-memory database
+  that the real migrations brought to the current schema; the directory is left out of the
+  build.
 - **A special case that so far only a comment guarded gets a test named after it** — a host
   whose agent is offline, an address written without its prefix, an incident whose opening
   arrives after its update.

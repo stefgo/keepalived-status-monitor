@@ -112,6 +112,14 @@ jobs:
             - name: Typecheck shared tests
               run: npm run typecheck -w shared
 
+            # The same for client and backend: their build leaves the tests and
+            # src/testing out as well, so this is the only place tsc reads them.
+            - name: Typecheck client tests
+              run: npm run typecheck -w client
+
+            - name: Typecheck backend tests
+              run: npm run typecheck -w server/backend
+
             # The workspace script, not a second spelling of it: `typecheck` checks
             # against the installed UI library, `typecheck:local-ui` against a sibling
             # checkout that does not exist on the runner. CI must stay on the first.

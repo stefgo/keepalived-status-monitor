@@ -8,7 +8,8 @@
         "prebuild": "rimraf dist",
         "start": "tsx src/index.ts",
         "dev": "tsx watch --conditions development src/index.ts",
-        "build": "tsc && cp -r src/web/public dist/web/ && bash ../scripts/generate-version.sh dist/VERSION"
+        "build": "tsc -p tsconfig.build.json && cp -r src/web/public dist/web/ && bash ../scripts/generate-version.sh dist/VERSION",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@kasm/shared": "*",
