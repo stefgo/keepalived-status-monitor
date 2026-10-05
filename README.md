@@ -65,7 +65,11 @@ The project is a monorepo with four components:
 The full documentation is published at
 **[stefgo.github.io/keepalived-status-monitor](https://stefgo.github.io/keepalived-status-monitor/)**; its sources live in the [`docs/`](./docs) directory:
 
-- [Installation & Setup](https://stefgo.github.io/keepalived-status-monitor/install/) — Build, configure, and run the project locally or via Docker.
+- [Quick Start](https://stefgo.github.io/keepalived-status-monitor/quickstart/) — From nothing to a first monitored host with Docker Compose.
+- [Configuration](https://stefgo.github.io/keepalived-status-monitor/configuration/) — Both `config.yaml` files, faster failover detection and the environment variables.
+- [Security](https://stefgo.github.io/keepalived-status-monitor/security/) — Reverse proxy, TLS, address checks and what the agent may do on its host.
+- [Operations](https://stefgo.github.io/keepalived-status-monitor/operations/) — Images and tags, upgrading, backup, health and logs.
+- [Upgrade Notes](https://stefgo.github.io/keepalived-status-monitor/upgrade-notes/) — What a release changes and what to do about it.
 - [API Documentation](https://stefgo.github.io/keepalived-status-monitor/api/) — Full specification of the REST and WebSocket APIs.
 - [Backend Architecture](https://stefgo.github.io/keepalived-status-monitor/backend/) — Services, repositories, database schema, and authentication flows.
 - [Frontend Architecture](https://stefgo.github.io/keepalived-status-monitor/frontend/) — React feature structure, stores, and routing.
@@ -95,7 +99,7 @@ services:
             - NODE_ENV=production
 ```
 
-`latest` is the last release. See [Container Images](https://stefgo.github.io/keepalived-status-monitor/install/#container-images) for `main`, `dev` and version tags.
+`latest` is the last release. See [Images and tags](https://stefgo.github.io/keepalived-status-monitor/operations/#images-and-tags) for `main`, `dev` and version tags.
 
 1. Copy `server/config.example.yaml` to `server-config.yaml` and configure your settings (like OIDC).
 2. Run `docker compose up -d`
@@ -106,7 +110,7 @@ services:
 The agent runs on each keepalived host. It needs to see keepalived's process, so it shares the
 host's PID namespace, and it reads keepalived's state files through `/proc/<pid>/root`.
 That makes it root on the host in all but name — see
-[Agent Permissions](https://stefgo.github.io/keepalived-status-monitor/install/#agent-permissions):
+[Agent Permissions](https://stefgo.github.io/keepalived-status-monitor/security/#agent-permissions):
 
 ```yaml
 services:

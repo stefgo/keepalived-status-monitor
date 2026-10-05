@@ -84,7 +84,7 @@ await server.register(cors, { origin: false });
 // blanket limit would also count the dashboard's own polling and the agent handshakes,
 // where a larger fleet legitimately produces bursts. Routes opt in via `config.rateLimit`.
 // Clients are told apart by request.ip, which honours X-Forwarded-For only from a proxy
-// listed in security.trusted_proxies -- see trustProxy above and docs/install.md.
+// listed in security.trusted_proxies -- see trustProxy above and docs/security.md.
 await server.register(rateLimit, { global: false });
 
 /**

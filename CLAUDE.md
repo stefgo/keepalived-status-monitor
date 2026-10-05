@@ -258,7 +258,12 @@ See `docs/` for detailed documentation:
 - `docs/frontend.md` — Frontend structure
 - `docs/client.md` — Client agent architecture
 - `docs/development.md` — Development guidelines, the documentation site itself
-- `docs/install.md` — Build and setup
+- `docs/quickstart.md` — Server and first agent with Docker Compose
+- `docs/configuration.md` — Both `config.yaml` files, faster failover detection, env vars
+- `docs/security.md` — Reverse proxy, TLS, address checks, stored secrets, agent permissions
+- `docs/operations.md` — Images and tags, upgrading, backup, health, logs
+- `docs/upgrade-notes.md` — What a release changes for a running installation, newest
+  first; **a change an operator has to act on gets an entry here**
 - `docs/webhooks.md` — Webhooks: filters, body templates, examples
 
 ### The docs are rendered twice

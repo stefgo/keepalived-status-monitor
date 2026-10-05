@@ -18,7 +18,7 @@ connection — so agent-side code and logs name the **mode**, not the local dire
 
 ## 💻 Platform Support
 
-`ghcr.io/stefgo/kasm-client` is one multi-arch image for **x86_64 (`linux/amd64`)** and **ARM64 (`linux/arm64`)**, e.g. a Raspberry Pi; `docker pull` picks the matching variant. See [Container Images](install.md#container-images) for the tags.
+`ghcr.io/stefgo/kasm-client` is one multi-arch image for **x86_64 (`linux/amd64`)** and **ARM64 (`linux/arm64`)**, e.g. a Raspberry Pi; `docker pull` picks the matching variant. See [Images and tags](operations.md#images-and-tags) for the tags.
 
 ## 📂 Project Structure
 
@@ -147,7 +147,7 @@ With TLS on, the client's target address on the server has to say so: `wss://hos
 
 A reverse proxy terminating TLS in front of the agent works just as well; leave `tls` unset, point the proxy at the plain port and write the client's target address as `wss://`. Note that `allowedNetworks` then sees the proxy's address, not the server's, because this Fastify runs without `trustProxy` (see [Security Notes](#-security-notes)).
 
-Self-signed certificates are the normal case here. The server verifies the agent's certificate unless `security.allow_self_signed_agent_certificates` is set in its own `config.yaml` — see [install.md](install.md).
+Self-signed certificates are the normal case here. The server verifies the agent's certificate unless `security.allow_self_signed_agent_certificates` is set in its own `config.yaml` — see [TLS to an Outbound Agent](security.md#tls-to-an-outbound-agent).
 
 #### Which routes are served
 
@@ -243,7 +243,7 @@ block; any combination works, as long as one is on.
 | :------ | :------------- | :----------------------- | :----------------- |
 | Timer | `pollInterval` > 0 (default `5`) | up to `pollInterval` | nothing |
 | Notify FIFO | `notifyFifo` (`KASM_NOTIFY_FIFO`) | the time a dump takes | `vrrp_notify_fifo` in keepalived.conf |
-| Notify endpoint | `notifyToken` (`KASM_NOTIFY_TOKEN`) | the time a dump takes | a notify script and a token file — see [Installation](install.md#faster-failover-detection) |
+| Notify endpoint | `notifyToken` (`KASM_NOTIFY_TOKEN`) | the time a dump takes | a notify script and a token file — see [Faster Failover Detection](configuration.md#faster-failover-detection) |
 
 The latency matters beyond the host's own list: the server's cluster events
 (`vrrp.master_changed` and the like, see [API](api.md#-activity)) are made once the readings
@@ -425,7 +425,7 @@ There is no local database.
 ## 🔐 Security Notes
 
 - The `authToken` is stored in plain text in `identity.json` in the agent's data directory. The agent keeps that directory at mode `0700` and the file at `0600`. The token is masked in the agent's log and never written to `config.yaml`.
-- The agent needs `pid: host`, `KILL` and `SYS_PTRACE` — see [Agent Permissions](install.md#agent-permissions). It gets no Docker socket and no host file system mount, and it sends keepalived nothing but `SIGUSR1`, `SIGUSR2` and, if configured, the JSON signal. It is nonetheless root on the host in all but name, since `SYS_PTRACE` reaches every host process — see [What These Permissions Amount To](install.md#what-these-permissions-amount-to).
+- The agent needs `pid: host`, `KILL` and `SYS_PTRACE` — see [Agent Permissions](security.md#agent-permissions). It gets no Docker socket and no host file system mount, and it sends keepalived nothing but `SIGUSR1`, `SIGUSR2` and, if configured, the JSON signal. It is nonetheless root on the host in all but name, since `SYS_PTRACE` reaches every host process — see [What These Permissions Amount To](security.md#what-these-permissions-amount-to).
 - Registration — through the local web UI or by the server on `/ws/register` — requires the setup PIN from the agent's log (see [Setup PIN](#setup-pin-srccoresetuppints)), or on `/ws/register` alternatively `KASM_REGISTRATION_SECRET`. Set `enableRegisterPage: false` once no re-registration is expected.
 - The server's TLS certificate is verified for registration and for the WebSocket connection. For a server with a self-signed certificate set `allowSelfSignedCertificates: true`; it then applies to both. The reachability check on the status and register pages always tolerates such a certificate — it sends nothing and only answers whether a KASM server responds. The decision is passed per request (`core/ServerHttp.ts`, the WebSocket options) and never through the process-wide `NODE_TLS_REJECT_UNAUTHORIZED`, which the agent used to set on its first request and never reset.
 - Agent connections are validated server-side against `security.allowed_networks` and the client's own allowed address or network, which can be edited or switched off in the client editor.

@@ -36,6 +36,13 @@ URL `http://172.28.0.10:3010`; the setup PINs are in `docker logs kasm-client-a`
 `kasm-client-b`. Each agent keeps its `config.yaml` and data in a volume of its own
 (`KASM_CLIENT_CONFIG`, `KASM_CLIENT_DATA_DIR`), since both run from the same `client/`.
 
+**Without Docker.** The three processes also run straight from a checkout: `npm install`,
+`npm run build -w shared` (every other workspace needs its output), then `npm run dev:server`
+(`http://localhost:3010`), `npm run dev:frontend` for hot reload and `npm run dev:client`
+(`http://localhost:3011`, unless `listenPort` or `KASM_CLIENT_PORT` moves it). Without
+keepalived on the machine the agent reports it as not running, so for something to look at
+use the containers.
+
 **Failover on demand.** Both nodes track `/tmp/kasm-fault`:
 
 ```bash
@@ -374,9 +381,9 @@ docker compose up -d
 | Service      | Port   | Volumes                                            | Description            |
 | :----------- | :----- | :------------------------------------------------- | :--------------------- |
 | `kasm-server` | `3010` | `server-data` (SQLite DB), `./server-config.yaml`  | API + web dashboard.   |
-| `kasm-client` | `3011` (host network) | `client-data`, `./client-config.yaml` | Agent, on each keepalived host — with `pid: host`, `KILL`, `SYS_PTRACE` (see [Agent Permissions](install.md#agent-permissions)). |
+| `kasm-client` | `3011` (host network) | `client-data`, `./client-config.yaml` | Agent, on each keepalived host — with `pid: host`, `KILL`, `SYS_PTRACE` (see [Agent Permissions](security.md#agent-permissions)). |
 
-Both services use `restart: unless-stopped` and declare a `healthcheck` against `GET /api/health` (see [install.md](install.md#health)). Docker does not restart an unhealthy container; the state is for monitoring.
+Both services use `restart: unless-stopped` and declare a `healthcheck` against `GET /api/health` (see [Operations](operations.md#health)). Docker does not restart an unhealthy container; the state is for monitoring.
 
 Which tag moves when:
 
