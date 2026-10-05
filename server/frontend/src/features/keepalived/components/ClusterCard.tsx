@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Checkbox, StatusDot } from "@stefgo/react-ui-components";
+import { StatusDot } from "@stefgo/react-ui-components";
 import { paths } from "../../../lib/paths";
 import { clusterVipLabel, memberKey, memberStale, type NamedVrrpCluster } from "../lib/vrrp";
 import { ClusterHealthBadge } from "./ClusterHealthBadge";
@@ -7,10 +7,9 @@ import { VrrpInstanceView } from "./VrrpInstanceView";
 import { MemberStateBadge } from "./VrrpStateBadge";
 
 export interface ClusterCompare {
-    /** Whether the member with this `memberKey` is compared. */
-    selected: (key: string) => boolean;
-    onToggle: (key: string, on: boolean) => void;
-    onToggleAll: (on: boolean) => void;
+    /** The `memberKey` of every member that is compared. */
+    value: ReadonlySet<string>;
+    onChange: (next: ReadonlySet<string>) => void;
 }
 
 interface ClusterCardProps {
@@ -20,7 +19,7 @@ interface ClusterCardProps {
      * cluster's own page, whose header says all of that already.
      */
     title?: ReactNode;
-    /** Adds a column to pick the hosts whose counters are compared -- for the cluster's own page. */
+    /** Lets the hosts whose counters are compared be picked -- for the cluster's own page. */
     compare?: ClusterCompare;
 }
 
@@ -31,8 +30,7 @@ interface ClusterCardProps {
  */
 export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
     const label = `VRID ${cluster.vrid ?? "?"}: ${clusterVipLabel(cluster)}`;
-
-    const compared = compare ? cluster.members.filter((m) => compare.selected(memberKey(m))).length : 0;
+    const names = new Map(cluster.members.map((member) => [memberKey(member), member.hostName]));
 
     return (
         <VrrpInstanceView
@@ -49,16 +47,13 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                     </span>
                 )
             }
-            leadingHeader={
-                compare && (
-                    <Checkbox
-                        aria-label="Compare all hosts"
-                        title="Compare counters"
-                        checked={compared > 0 && compared === cluster.members.length}
-                        indeterminate={compared > 0 && compared < cluster.members.length}
-                        onChange={(e) => compare.onToggleAll(e.target.checked)}
-                    />
-                )
+            selection={
+                compare && {
+                    value: compare.value,
+                    // The keys are the rows' own, so they are member keys.
+                    onChange: (next) => compare.onChange(new Set([...next].map(String))),
+                    rowLabel: (row) => `Compare ${names.get(row.key) ?? row.key}`,
+                }
             }
             rows={[...cluster.members]
                 .sort((a, b) => (b.instance.effectivePriority ?? 0) - (a.instance.effectivePriority ?? 0))
@@ -75,16 +70,6 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                             <span className="flex items-center gap-2">
                                 <StatusDot tone={member.online ? "success" : "neutral"} />
                                 {name}
-                            </span>
-                        ),
-                        leading: compare && (
-                            // The row opens the host; ticking the box must not.
-                            <span className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                                <Checkbox
-                                    aria-label={`Compare ${name}`}
-                                    checked={compare.selected(key)}
-                                    onChange={(e) => compare.onToggle(key, e.target.checked)}
-                                />
                             </span>
                         ),
                     };
