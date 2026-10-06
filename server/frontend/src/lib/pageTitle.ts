@@ -22,13 +22,6 @@ export const pageTitle = (parts: readonly (string | null | undefined)[]): string
     [...parts.filter((part) => !!part), APP_NAME].join(" · ");
 
 /**
- * The title with the number of things that ask for a look in front of it, `(2) Clients ·
- * KASM`: a tab in the background says so without being opened. Nothing in front of it
- * while there is nothing to look at.
- */
-export const countedTitle = (title: string, count: number): string => (count > 0 ? `(${count}) ${title}` : title);
-
-/**
  * What a route is called by itself: the name of its subject, or else its own title.
  * `nameOf` resolves a subject from what is cached; while it cannot, the title stands in.
  * Shared with the breadcrumb (`lib/breadcrumb.ts`), so the two never name a page differently.

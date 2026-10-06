@@ -76,12 +76,6 @@ export function unseenProblems(events: ActivityRecord[]): UnseenProblems {
     return { errors, warnings };
 }
 
-/** The card's number, for the browser tab: a `select` the shell re-renders on only when it changes. */
-export const unseenProblemCount = (events: ActivityRecord[]): number => {
-    const { errors, warnings } = unseenProblems(events);
-    return errors + warnings;
-};
-
 /**
  * What the "Errors / Warnings" card says below its number: what the number is made of.
  * A part that is zero is left out, and with nothing unseen the card says that instead.

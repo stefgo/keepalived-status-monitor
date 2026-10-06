@@ -189,9 +189,7 @@ top-level route with its pages below it, and four things are read off it:
   route, most specific first -- `Edit · lb01 · Clients · KASM`. A route says `title` (a
   form) or `subject` (a client, called by its name from the cached list; a cluster, called
   `VRID 51` or `dc1 / VRID 51` from the address). Until a subject has a name the area
-  stands alone. The number of unseen errors and warnings stands in front of it,
-  `(2) VRRP Clusters · KASM` (`countedTitle`), so a tab in the background says that
-  something needs a look; it is the number the dashboard's card shows.
+  stands alone.
 - **The breadcrumb** spells the same out as links (`lib/breadcrumb.ts`,
   `features/app/HeaderBreadcrumb.tsx`): `Clients › lb01 › Edit`, as the heading of the
   page's first card. `AppLayout` computes the trail next to the title, from the same

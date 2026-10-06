@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countedTitle, pageTitle, routeTitle, type TitleSubject } from "./pageTitle";
+import { pageTitle, routeTitle, type TitleSubject } from "./pageTitle";
 
 const names = (known: Partial<Record<TitleSubject, string>>) => (subject: TitleSubject) => known[subject];
 
@@ -14,16 +14,6 @@ describe("pageTitle", () => {
 
     it("leaves out a part that is missing", () => {
         expect(pageTitle([undefined, "Clients", null, ""])).toBe("Clients · KASM");
-    });
-});
-
-describe("countedTitle", () => {
-    it("puts the number of things to look at in front of the title", () => {
-        expect(countedTitle("Clients · KASM", 2)).toBe("(2) Clients · KASM");
-    });
-
-    it("leaves the title alone while there is nothing to look at", () => {
-        expect(countedTitle("Clients · KASM", 0)).toBe("Clients · KASM");
     });
 });
 
