@@ -22,7 +22,12 @@
     --primary-hover: #10982d;
     --error-color: #ef4444;
     --warning-color: #eab308;
-    --success-color: #11bc25;
+    --success-color: #10b981;
+    /*
+     * A status that works but wants the operator's attention. PBCM and DIM paint it in their
+     * accent; the accent here is a green that would read as "fine", so it has a name of its own.
+     */
+    --notice-color: #fca311;
 }
 
 /*
@@ -220,8 +225,8 @@ button:disabled {
     color: var(--error-color);
 }
 
-.status-icon.primary {
-    color: var(--primary-color);
+.status-icon.notice {
+    color: var(--notice-color);
 }
 
 .status-content {
