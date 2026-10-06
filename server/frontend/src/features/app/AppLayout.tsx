@@ -1,6 +1,5 @@
 import { Suspense, useEffect, useMemo } from "react";
 import { Outlet, useLocation, useMatches, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
     ConnectionBanner,
     Dashboard,
@@ -15,16 +14,16 @@ import { useAuth } from "../auth/AuthContext";
 import { BreadcrumbContext } from "./context/BreadcrumbContext";
 import { useWebSocket } from "./context/WebSocketContext";
 import { navEntries, type RouteHandle } from "./routes";
-import { APP_NAME, countedTitle, routeTitle, type TitleSubject } from "../../lib/pageTitle";
+import { APP_NAME, routeTitle, type TitleSubject } from "../../lib/pageTitle";
 import { breadcrumb } from "../../lib/breadcrumb";
 import { clientName } from "../../utils";
 
 // Hooks, queries & stores
 import { useSearchHotkey } from "../../hooks/useSearchHotkey";
 import { useUIStore } from "../../stores/useUIStore";
-import { clientCount, formatOnlineCount, unseenProblemCount } from "../dashboard/lib/dashboard";
+import { clientCount, formatOnlineCount } from "../dashboard/lib/dashboard";
 import { useProblemToasts } from "../activity/hooks/useProblemToasts";
-import { activityListOptions, useUnseenTone } from "../../queries/activity";
+import { useUnseenTone } from "../../queries/activity";
 import { useClients } from "../../queries/clients";
 
 type PageNav = NonNullable<DashboardPage["nav"]>;
@@ -97,18 +96,14 @@ export function AppLayout() {
         };
     }, [matches, clients]);
 
-    // The number the dashboard's card shows, in front of the title: a tab in the background
-    // says that something needs a look.
-    const unseenProblems = useQuery({ ...activityListOptions, select: unseenProblemCount }).data ?? 0;
-
     // Taken back when the shell goes: the login page behind a logout is not the page
     // that was open before it.
     useEffect(() => {
-        document.title = countedTitle(title, unseenProblems);
+        document.title = title;
         return () => {
             document.title = APP_NAME;
         };
-    }, [title, unseenProblems]);
+    }, [title]);
 
     // Dashboard Props. The name comes from /api/v1/me; the page used to decode it out of
     // the JWT, which lives in an httpOnly cookie now.
