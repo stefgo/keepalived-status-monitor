@@ -149,13 +149,13 @@
                 function setWarningState(iconEl, textEl, text) {
                     const statusBox = iconEl.closest(".status-box");
                     iconEl.classList.remove("success", "error");
-                    iconEl.classList.add("primary");
+                    iconEl.classList.add("notice");
                     iconEl.innerHTML = ICON_WARNING;
-                    textEl.style.color = "var(--primary-color)";
+                    textEl.style.color = "var(--notice-color)";
                     textEl.textContent = text;
                     if (statusBox) {
                         statusBox.classList.remove("error-state");
-                        statusBox.style.borderColor = "var(--primary-color)";
+                        statusBox.style.borderColor = "var(--notice-color)";
                     }
                 }
 
