@@ -9,7 +9,7 @@ Development is performed inside Docker containers to ensure a consistent, platfo
 ### Prerequisites
 
 - Docker and Docker Compose (or Docker Desktop)
-- A token that can read GitHub Packages, for `@stefgo/react-ui-components`, in `NPM_TOKEN`.
+- A token that can read GitHub Packages, for `@stefgo/react-ui-components` and `@stefgo/js-template-engine`, in `NPM_TOKEN`.
   The commands below take it from the GitHub CLI (`gh auth token`); a `.env` file in the root
   directory (excluded from git) with `NPM_TOKEN=<your-token>` works as well.
 
@@ -219,7 +219,7 @@ verify ──► prepare ──► build (server, client × amd64, arm64) ──
 
 A build that fails the smoke test leaves its digests in the registry untagged; the nightly cleanup removes them. `paths-ignore` (`docs/**`, `mkdocs.yml`, `requirements-docs.txt`, `.github/workflows/docs.yml`, `**.md`) applies to branch pushes only — a tag or a manual run always builds.
 
-`npm ci` authenticates against GitHub Packages for `@stefgo/react-ui-components` with the workflow's `GITHUB_TOKEN` (`packages: read`). That works because the package is public; if it ever becomes private, the step needs a personal access token with `read:packages` instead. The image builds pass the same `GITHUB_TOKEN` as the `npm_token` BuildKit secret. The former `NPM_TOKEN` repository secret, a personal access token with an expiry date, is no longer read.
+`npm ci` authenticates against GitHub Packages for `@stefgo/react-ui-components` and `@stefgo/js-template-engine` with the workflow's `GITHUB_TOKEN` (`packages: read`). That works because the packages are public; if one ever becomes private, the step needs a personal access token with `read:packages` instead. The image builds pass the same `GITHUB_TOKEN` as the `npm_token` BuildKit secret. The former `NPM_TOKEN` repository secret, a personal access token with an expiry date, is no longer read.
 
 **Smoke test.** The `smoke` job is the only place where the images are executed: everything before it proves that the code compiles, not that the result starts. **It is a gate, not a report** — nothing is tagged until it has passed, so `latest` cannot move to an image that never started. It runs on both architectures, each on its native runner, and addresses the images as `<image>@sha256:…` from the artefacts of this run: there is no tag yet, and a digest leaves nothing for Docker to choose. It starts the server and the agent (which, with no keepalived on the runner, reports it as not running and idles) and waits up to 60 s each for `{"status":"ok"}` from `/api/health` — the agent's through `docker exec`, since its route answers loopback only. A second step checks that the same request from the runner does **not** answer. On failure it prints the container logs.
 
