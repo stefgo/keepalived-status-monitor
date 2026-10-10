@@ -1,3 +1,70 @@
+# [1.1.0](https://github.com/stefgo/keepalived-status-monitor/compare/v1.0.0...v1.1.0) (2026-10-10)
+
+
+### Bug Fixes
+
+* **activity:** drop expired events from the activity queue before sending ([6421b79](https://github.com/stefgo/keepalived-status-monitor/commit/6421b79af3a9ae9c1bd19807b0a1456a790760c3))
+* **agent:** Check arbitrary server URLs only during registration ([6c33a68](https://github.com/stefgo/keepalived-status-monitor/commit/6c33a6868498d642e0eb28db2d2f725c804bb992))
+* **auth:** End a user's sessions when the user changes or is deleted ([bf848e0](https://github.com/stefgo/keepalived-status-monitor/commit/bf848e03e7de608ec27526799da704d550b6d73b))
+* **backend:** Bound the server shutdown to five seconds ([a62ef57](https://github.com/stefgo/keepalived-status-monitor/commit/a62ef5721c1d522209f26ed93a0ddfd04dfdaf95))
+* **client:** Colour the status texts like PBCM and DIM do ([2ef9395](https://github.com/stefgo/keepalived-status-monitor/commit/2ef9395be4ac1cb043dcabc91a244214d356c098)), closes [#10b981](https://github.com/stefgo/keepalived-status-monitor/issues/10b981)
+* **client:** Ship the font with the agent's pages ([ed4aee8](https://github.com/stefgo/keepalived-status-monitor/commit/ed4aee887d2282985f4cb659741ffa43d5a68635))
+* **client:** Show the server URL as "Configured Server" on the status page ([8f7770b](https://github.com/stefgo/keepalived-status-monitor/commit/8f7770b59e3a74b52b73768678702f10a01c0538))
+* **client:** Sync data files and set a damaged identity aside ([92adc3f](https://github.com/stefgo/keepalived-status-monitor/commit/92adc3f719bcdf82890da6f24bb5601db23384fc))
+* **dependencies:** update @stefgo/react-ui-components to version 4.8.0 ([db1bc74](https://github.com/stefgo/keepalived-status-monitor/commit/db1bc7481373bdef328e833b87a94a52e8158ab1))
+* **docker:** Run the server process as an unprivileged user ([e5db2c0](https://github.com/stefgo/keepalived-status-monitor/commit/e5db2c0c96e5952ce02ab277a42f03cc4102c80c))
+* **frontend:** Ask before a changed client is left, whichever way out ([8de1d47](https://github.com/stefgo/keepalived-status-monitor/commit/8de1d4732da72082011164f437983285ae5603d4))
+* **frontend:** Ask before a half-entered client is left ([ab932f3](https://github.com/stefgo/keepalived-status-monitor/commit/ab932f3febee5d799e21fc43bdf4a25735bde3c1))
+* **frontend:** Ask before settings that are not saved are left ([d47ed69](https://github.com/stefgo/keepalived-status-monitor/commit/d47ed69d0f2f2bac72826786750bb63740de1373))
+* **frontend:** Call a cluster without a MASTER "No master" ([d5f27d7](https://github.com/stefgo/keepalived-status-monitor/commit/d5f27d7714f6c346ac895a9e2e382c0ba61299b9))
+* **frontend:** Check a user at its fields before the request goes out ([1325034](https://github.com/stefgo/keepalived-status-monitor/commit/132503417973d94777324514618054deefd6112b))
+* **frontend:** Check a webhook at its fields and ask before it is left ([82851d7](https://github.com/stefgo/keepalived-status-monitor/commit/82851d744dac160e94547168a20275ff6f8503ed))
+* **frontend:** List a cluster's hosts as rows of their own ([f072c60](https://github.com/stefgo/keepalived-status-monitor/commit/f072c6065ddea8cca61a350f44c853e7fe7c06b3))
+* **frontend:** Read again after a reconnect what the server does not push ([ca5176d](https://github.com/stefgo/keepalived-status-monitor/commit/ca5176ddc0ca5c74d1a346d2b20ec6eb95a02825))
+* **frontend:** Say on an offline client's page that it is offline ([e089ac7](https://github.com/stefgo/keepalived-status-monitor/commit/e089ac7f555cb48cf7aec1e700c83af0b325db68))
+* **frontend:** Say that a reload or a reconnect was taken ([320122b](https://github.com/stefgo/keepalived-status-monitor/commit/320122b9b9cac7406ba6e0afe2428d882e1647c2))
+* **frontend:** Show a cluster's network in the regular font ([8947415](https://github.com/stefgo/keepalived-status-monitor/commit/894741523d8568018bb67975d99121b8dfc5b8ec))
+* **frontend:** Show why a page could not load its data ([ed4fb95](https://github.com/stefgo/keepalived-status-monitor/commit/ed4fb95b0e8f1654a191052af4dc59597aaadc7b))
+* **frontend:** Tell a search without a hit from an empty list ([f1f40b7](https://github.com/stefgo/keepalived-status-monitor/commit/f1f40b7d5de1576c6d9c27aa971db81e59d0143b))
+* **frontend:** Write dates the way the browser's locale does ([3a075a8](https://github.com/stefgo/keepalived-status-monitor/commit/3a075a80c5a36e18434ee58c7681ac519f98d638))
+* **security:** Store agent tokens protected ([9fed36b](https://github.com/stefgo/keepalived-status-monitor/commit/9fed36b8d148880047e2ba51204266a9ad218ca1))
+* **security:** Trust forwarding headers only from configured proxies ([8953c2b](https://github.com/stefgo/keepalived-status-monitor/commit/8953c2b63bddd0809fa0be33b48c23b6f16e06a3))
+* Ship the font instead of loading it from Google ([2c547a0](https://github.com/stefgo/keepalived-status-monitor/commit/2c547a087027b77ae211d3c76e66f07f7a364c3e))
+* **webhooks:** Keep the template preview as tall as the body template ([db651f8](https://github.com/stefgo/keepalived-status-monitor/commit/db651f8b537b738f479e8543ece862571d50b2b4))
+* **webhooks:** Show the last delivery time in plain text with a status badge ([677dabc](https://github.com/stefgo/keepalived-status-monitor/commit/677dabca18fe97c03a0c2bab0be4f4c1f8e03bb0))
+
+
+### Features
+
+* **activity:** Show the event kind as a badge in the activity log ([be65fbc](https://github.com/stefgo/keepalived-status-monitor/commit/be65fbc9ae4e6b06aa4698038ac25a378392000e))
+* **config:** Warn about unknown keys in config.yaml at startup ([0fbc2b9](https://github.com/stefgo/keepalived-status-monitor/commit/0fbc2b9b0033448bde26990674e552a43e0ea1c7))
+* **frontend:** Compare a healthy cluster's counters and show what moved ([2504f63](https://github.com/stefgo/keepalived-status-monitor/commit/2504f63232cb27afb9d9a73122987736bf1cb30f))
+* **frontend:** Drop the count of unseen problems from the browser tab ([ad9c9a1](https://github.com/stefgo/keepalived-status-monitor/commit/ad9c9a113db091b7802f3e4cbc79bc8851eb8afb))
+* **frontend:** Label the activity filters and link an event's chips ([e474a25](https://github.com/stefgo/keepalived-status-monitor/commit/e474a255aeca00d93a4c2fcde82cee263127b4f6))
+* **frontend:** Let the dashboard's cards say whether anything is wrong ([efc0f95](https://github.com/stefgo/keepalived-status-monitor/commit/efc0f95f4e62dc78bd34242a695433975188b55b))
+* **frontend:** Name the open page in the browser tab ([4ade6ed](https://github.com/stefgo/keepalived-status-monitor/commit/4ade6ed70468a32bf99917a80010cde09f184c7b))
+* **frontend:** Put the client pages below /clients ([6841ff4](https://github.com/stefgo/keepalived-status-monitor/commit/6841ff4c1dacb9c772ed7fe400c5cf8893adce43))
+* **frontend:** Put the cursor into the list's search with a slash ([3e3ac35](https://github.com/stefgo/keepalived-status-monitor/commit/3e3ac35a3300c0a5a89a5bc7869ff710f0069938))
+* **frontend:** Report a new error or warning on whatever page is open ([d3a5dff](https://github.com/stefgo/keepalived-status-monitor/commit/d3a5dff944f2e7a5224655c5d4bdeecb511eb52a))
+* **frontend:** Say how long ago something happened ([220ad49](https://github.com/stefgo/keepalived-status-monitor/commit/220ad49dcf0de991b2a862e4b0c8b6cc6e73f322))
+* **frontend:** Say in the token dialog what to do with the token ([992ef4f](https://github.com/stefgo/keepalived-status-monitor/commit/992ef4feb9434b4d0192091a3f82f04f608d44a3))
+* **frontend:** Say when the connection to the server is lost ([d5ca23b](https://github.com/stefgo/keepalived-status-monitor/commit/d5ca23b49f3ef3540b2e5563fd966c656a80c0c0))
+* **frontend:** Show an empty list with an icon and what fills it ([4632f62](https://github.com/stefgo/keepalived-status-monitor/commit/4632f6212ac71b81b19fdf49bbca0ff4281d8c15))
+* **frontend:** Show the online status as a badge and use one badge size ([d1e1bcf](https://github.com/stefgo/keepalived-status-monitor/commit/d1e1bcfa9a64c9ca3120e45e44db02f3f2b740c9))
+* **frontend:** Show the way back as a breadcrumb in a page's header ([6e17af3](https://github.com/stefgo/keepalived-status-monitor/commit/6e17af340f4d0cd2d30f760b4d3b1e890d5c3434))
+* **webhooks:** Add a truncate filter to the body template ([9c1be3b](https://github.com/stefgo/keepalived-status-monitor/commit/9c1be3b6e5412249ee8102c2e0f43df9517bf932))
+
+
+### BREAKING CHANGES
+
+* **security:** X-Forwarded-* headers are ignored unless the peer is
+listed in security.trusted_proxies or KASM_TRUSTED_PROXIES. Installations
+behind a reverse proxy must list it; otherwise every request appears to
+come from the proxy, new clients are bound to the proxy's address, and
+the session cookies lose their Secure flag behind a TLS-terminating one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 # 1.0.0 (2026-09-28)
 
 
