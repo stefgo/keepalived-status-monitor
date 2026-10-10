@@ -198,7 +198,7 @@ Type checking, linting and the [tests](#tests) of the pure logic are the quality
 | :------- | :------ | :----------- |
 | **Check Code** (`ci.yml`) | Push to any branch except `main`, every pull request, and `workflow_call` | Job `verify`: checks that the registry cleanup names every image `build.yml` publishes, then `npm ci`, `npm run build` (type-checks `shared`, `client` and `server/backend`, builds the frontend), `npm test` (Vitest over every workspace; reads `shared` from source, so it does not depend on the build before it), `npm run typecheck` for `shared`, `client` and `server/backend` (their build leaves the tests out of `dist`, and Vitest does not check types), `npm run typecheck -w server/frontend` (the Vite build does not type-check), `npm run lint -w server/frontend`, `npm run lint` (the root ESLint config, covering `shared`, `client` and `server/backend`). |
 | **Build Images** (`build.yml`) | Push to `main` or `dev` (except documentation-only commits), `v*.*.*` tags, manual dispatch — which is how a release reaches it | See the job graph below. |
-| **Create Release** (`release.yml`) | Manual, `main` only | See [Release](#release). |
+| **Create Release** (`release.yml`) | Manual, `main` (release) or `dev` (beta) | See [Release](#release). |
 | **Prune Registry** (`cleanup-packages.yml`) | Nightly, manual | See [Registry Cleanup](#registry-cleanup). |
 | **Merge Dependency Updates** (`dependabot-auto-merge.yml`) | Pull requests by Dependabot | See [Action Updates](#action-updates). |
 | **Publish Docs** (`docs.yml`) | Push and pull request touching `docs/`, `mkdocs.yml` or `requirements-docs.txt`, manual | See [Documentation Site](#documentation-site). |
@@ -323,32 +323,36 @@ git config core.hooksPath .githooks   # runs automatically via `npm install`
 | `fix`, `perf`, `revert` | patch — 1.2.0 → 1.2.1 |
 | `build`, `chore`, `ci`, `docs`, `refactor`, `style`, `test` | none |
 
-- A breaking change is declared with a `BREAKING CHANGE:` footer. It raises the **minor** position (`releaseRules` in `package.json`) and still gets its own section in the changelog. A major version comes only from the release workflow's `bump: major`.
+- A breaking change is declared with a `BREAKING CHANGE:` footer. It raises the **minor** position (`breaking: minor` in `release.yml`) and still gets its own section in the changelog. A major version comes only from the release workflow's `bump: major`.
 - The `feat!:` spelling is rejected: the Angular preset semantic-release reads commits with has no `!` in its header pattern, so such a commit would be read as typeless and release nothing.
 - A body line that begins with a single word and a colon (`happened: …`) is parsed as the start of the footer. Rephrase it.
-- Release commits (`chore(release): x.y.z`) are exempt from commitlint: their body is the generated release notes, and the release job's `npm ci` activates the hook too.
+- Release commits (`chore(release): x.y.z`) are exempt from commitlint: their body is the release notes.
 - `[skip release]` anywhere in a message removes that commit from the version calculation.
 - `.githooks/pre-push` allows pushing `main` and `dev` only; topic branches stay local.
 - `core.hooksPath` makes git ignore `.git/hooks`. A hook of your own belongs in `.githooks`.
 
 ### Release
 
-`semantic-release` owns the version number; nobody tags by hand. A release is started from *Actions ▸ Create Release ▸ Run workflow* on `main` — [`release.yml`](https://github.com/stefgo/keepalived-status-monitor/blob/main/.github/workflows/release.yml) rejects every other branch in a `guard` job, before the checks run.
+`semantic-release` owns the version number; nobody tags by hand. A release is started from *Actions ▸ Create Release ▸ Run workflow* — on `main` for a release, on `dev` for a beta (`1.3.0-beta.1`, published as a prerelease). [`release.yml`](https://github.com/stefgo/keepalived-status-monitor/blob/main/.github/workflows/release.yml) offers the inputs and names the checks and the build; what a release is and how its notes are put together is the same for all stefgo projects and lives in [release-workflows](https://github.com/stefgo/release-workflows).
 
 ```
-Actions ▸ Create Release ▸ Run workflow   (main)
-  └─► guard ─► ci.yml ─► semantic-release
+Actions ▸ Create Release ▸ Run workflow   (main or dev)
+  └─► preflight ─► ci.yml ─► semantic-release
         ├─ commits CHANGELOG.md + package.json   [skip ci]
         ├─ pushes tag v1.2.0, creates the GitHub release
+        ├─ fast-forwards dev to the release commit   (from main only)
         └─ gh workflow run build.yml --ref v1.2.0
               └─► build.yml → images 1.2.0, 1.2, latest
                     └─ gh run watch --exit-status   (the release job waits)
 ```
 
-- **`dry_run`** (default on) runs `semantic-release --dry-run`: the next version appears in the log, nothing is written.
-- **`bump`** (`auto` | `major`): `major` forces a major version regardless of the commits — also from a state that holds only `docs:` commits, which is what the dry run is there to catch.
+- **`dry_run`** (default on): the next version and the complete notes appear in the run's summary, nothing is written.
+- **`bump`** (`auto` | `patch` | `minor` | `major`): `auto` reads the commit types. Any other value is the step that is taken whatever the commits say — lower than they call for, or from a state that holds only `docs:` commits, which is what the dry run is there to catch. `major` is the only way a major version is created.
+- **Every release is described by hand** in `.release/next.md`: what is new, and what an upgrade needs. The text is placed above the generated list of commits. A release without it is refused by the `preflight` job, before the checks run. A beta keeps the text; the release from `main` empties the file again and drops the entries of its betas from `CHANGELOG.md`. `.release/footer.md` is appended to every release page.
+- **`dev` is merged into `main` with its history** — no squash, no rebase — and `main` is merged back before the next beta. semantic-release finds a version through the tags a branch contains, so the workflow refuses a release whose beta is not part of `main`, and a beta while the last release is not part of `dev`. After a release it fast-forwards `dev` itself when `dev` has nothing `main` lacks.
+- A beta builds the images as `1.3.0-beta.1` and moves neither `1.3` nor `latest`.
 - A run that was asked for and produces no release **fails** instead of going green without a result.
-- The tag is pushed over `GITHUB_TOKEN`, and GitHub starts no workflow for such a push. `release.yml` therefore dispatches `build.yml` on the tag ref and follows it. If that build fails, the last step says that the version exists without images and that re-running *Build Images* on the tag is the fix — not a second release.
+- The tag is pushed over `GITHUB_TOKEN`, and GitHub starts no workflow for such a push. The release workflow therefore dispatches `build.yml` on the tag ref and follows it. If that build fails, the last step says that the version exists without images and that re-running *Build Images* on the tag is the fix — not a second release.
 - The root `package.json` carries the released version. It starts at `0.0.0`; without a release tag semantic-release makes the first release `1.0.0`. The workspace manifests keep `1.0.0`.
 
 To build an image from another branch, dispatch the build manually. It is tagged with the branch name and the short SHA, never with `latest`:
@@ -392,6 +396,7 @@ Which tag moves when:
 | Push to `main` | `main`, `sha-<short>` | no |
 | Push to `dev` | `dev`, `sha-<short>` | no |
 | Release `v1.2.0` | `1.2.0`, `1.2`, `latest` | **yes** |
+| Beta `v1.3.0-beta.1` | `1.3.0-beta.1` | no |
 | Manual dispatch on a branch | `<branch>`, `sha-<short>` | no |
 
 ---

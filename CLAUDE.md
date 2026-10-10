@@ -188,7 +188,7 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   `commitlint.config.mjs`. The root `prepare` script sets `core.hooksPath` on every
   `npm install`. `ci.yml` lints commits only on pull requests, and this repository is
   maintained without them, so the hook is the check that actually runs.
-- **The commit type is the only input the version number comes from**: `feat` raises the
+- **With `bump: auto` the commit type is the only input the version number comes from**: `feat` raises the
   minor, `fix`, `perf` and `revert` the patch, every other type releases nothing.
 - **Commit messages are written in English** — subject and body. The existing history is
   German and stays as it is; the rule applies going forward.
@@ -207,12 +207,24 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 ## Versioning and Releases
 
 `semantic-release` owns the version. It runs from `.github/workflows/release.yml`, which is
-**`workflow_dispatch` only and refuses any branch but `main`**: a release is an action, not a
-side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
+**`workflow_dispatch` only and releases from `main` (a release) or `dev` (a beta,
+`x.y.z-beta.n`)**: a release is an action, not a side effect of pushing. **Never bump a
+version or create a `v*` tag by hand.**
 
-- Inputs: `dry_run` (default on) prints the next version and changes nothing; `bump`
-  (`auto` | `major`) is the only way a major version is created. A run that was asked for
-  and produces no release fails.
+The workflow calls [stefgo/release-workflows](https://github.com/stefgo/release-workflows),
+which carries semantic-release and its configuration for every stefgo project. There is no
+`release` entry in `package.json` and no semantic-release package installed here.
+
+- Inputs: `dry_run` (default on) shows the next version and the complete notes and changes
+  nothing; `bump` (`auto` | `patch` | `minor` | `major`) takes the step from the commit types
+  or is the step itself, whatever the commits say. `major` is the only way a major version is
+  created. A run that was asked for and produces no release fails.
+- **Every release needs hand-written notes in `.release/next.md`** — what is new, what an
+  upgrade needs. They go above the generated list of commits; without them the workflow
+  refuses. A beta keeps the text, the release from `main` empties the file. Write it as part
+  of the change that deserves a sentence, not at release time.
+- **`dev` is merged into `main` with its history — never squashed or rebased** — and `main`
+  back into `dev` before the next beta. The workflow checks both and refuses otherwise.
 - The root `package.json` is the single source of truth for the version. It starts at
   `0.0.0`; without a release tag semantic-release makes the first release `1.0.0`. The
   workspace manifests keep `1.0.0` and nothing reads them.
