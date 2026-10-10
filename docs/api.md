@@ -787,7 +787,8 @@ The defaults:
     "token_cleanup_interval_hours": "24",
     "notification_retention_days": "90",
     "notification_retention_count": "500",
-    "notification_cleanup_interval_hours": "24"
+    "notification_cleanup_interval_hours": "24",
+    "activity_level_overrides": ""
 }
 ```
 
@@ -798,6 +799,7 @@ The defaults:
 | `notification_retention_days`                | Days to keep activity events, measured against `occurredAt`. `"0"` is not "forever": it falls back to `90`. |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
+| `activity_level_overrides`                   | The level an event kind is recorded with: `kind=level` entries separated by commas, `""` for none. `level` is `trace`, `info`, `warning`, `error`, or `none` to not record the kind at all. |
 
 The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone. Left in `config.yaml`, the old keys are ignored and logged as unknown at startup.
 
@@ -821,6 +823,7 @@ Pass any of the setting keys to update them.
 | Kind of setting | Keys | Accepted values |
 | :-------------- | :--- | :-------------- |
 | Counts, days, intervals | `token_*`, `notification_*` | A non-negative whole number, as string or number. Stored as string. |
+| Event levels | `activity_level_overrides` | Empty, or `kind=level` entries separated by commas or line breaks. Any kind is accepted, each only once; `none` is refused for `vrrp.incident_opened` and `vrrp.incident_resolved`. |
 
 Keys not listed are accepted and written as they are: the settings page sends back everything it read, including keys an operator added to `config.yaml` by hand, and rejecting or dropping them would delete them from the file.
 
@@ -832,7 +835,7 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 - **400** — a value does not match the table above, or the body contains `security`. Network and HSTS settings are configured in `config.yaml` only; a session token must not be enough to lock every agent out.
 
-> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler, `token_*` the `TokenCleanupService`.
+> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler, `token_*` the `TokenCleanupService`. `activity_level_overrides` is read whenever an event is written, so it applies to the next event and leaves the stored ones as they are.
 
 ### Run Invalid Token Cleanup
 

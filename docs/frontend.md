@@ -719,6 +719,7 @@ System settings page, one section per tab: Client Tokens and Activity History. T
 | `notification_retention_days`                | Days to keep activity events.                                                 |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Automatic activity cleanup interval. `0` disables.                            |
+| `activity_level_overrides`                   | The level each event kind is recorded with, or `none`. One string; the Activity History tab edits it through one select per kind (`features/settings/lib/eventLevels.ts`), and "Default" names the level from `ACTIVITY_DEFAULT_LEVELS`. |
 
 - `GET/PUT /api/v1/settings/cleanup` — Fetch and save settings.
 - `POST /api/v1/settings/cleanup/invalid-tokens` — Manually run the token cleanup.

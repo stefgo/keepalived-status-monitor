@@ -10,6 +10,7 @@ import {
 } from "./constants.js";
 import { normaliseTargetAddress } from "./targetAddress.js";
 import { placeholderError, webhookTemplateError } from "./webhookTemplate.js";
+import { parseLevelOverrides } from "./activityLevelOverrides.js";
 
 /**
  * A single IPv4 address or an IPv4 network in CIDR notation. IPv4 only: addresses are
@@ -402,6 +403,16 @@ const WholeNumberSettingSchema = z
     .transform(String);
 
 /**
+ * Which level an event kind is recorded with, or `none` for not at all -- see
+ * `parseLevelOverrides` for the format. Refused with the reason of the first entry that
+ * cannot be read, so a typo is not an override that silently never applies.
+ */
+const ActivityLevelOverridesSettingSchema = z.string().superRefine((text, ctx) => {
+    const { error } = parseLevelOverrides(text);
+    if (error) ctx.addIssue({ code: "custom", message: error });
+});
+
+/**
  * `PUT /api/v1/settings/cleanup`.
  *
  * Loose on purpose: the settings page reads the whole block and sends it back, so a key an
@@ -418,6 +429,7 @@ export const CleanupSettingsSchema = z.looseObject({
     notification_retention_days: WholeNumberSettingSchema.optional(),
     notification_retention_count: WholeNumberSettingSchema.optional(),
     notification_cleanup_interval_hours: WholeNumberSettingSchema.optional(),
+    activity_level_overrides: ActivityLevelOverridesSettingSchema.optional(),
     security: z
         .undefined({
             error: "Configured in config.yaml only, not through this endpoint",
@@ -451,6 +463,7 @@ export const AppSettingsSchema = z
         notification_retention_days: WholeNumberSettingSchema.default("90"),
         notification_retention_count: WholeNumberSettingSchema.default("500"),
         notification_cleanup_interval_hours: WholeNumberSettingSchema.default("24"),
+        activity_level_overrides: ActivityLevelOverridesSettingSchema.default(""),
     })
     .prefault({});
 

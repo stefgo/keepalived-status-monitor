@@ -58,6 +58,12 @@ settings:
     notification_retention_count: "500"
     # Interval (in hours) of the activity cleanup. "0" disables the scheduler.
     notification_cleanup_interval_hours: "24"
+    # The level an event kind is recorded with, as "kind=level" entries separated by
+    # commas: trace, info, warning, error, or none to keep the kind out of the activity
+    # (and away from the webhooks) altogether. Applies to events from then on. Example:
+    # "keepalived.stopped=error, client.connected=none". vrrp.incident_opened and
+    # vrrp.incident_resolved cannot be set to none.
+    activity_level_overrides: ""
 
 # Security network settings
 security:
