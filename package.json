@@ -4,6 +4,9 @@
     "license": "MIT",
     "private": true,
     "packageManager": "npm@11.12.1",
+    "engines": {
+        "node": ">=22"
+    },
     "workspaces": [
         "shared",
         "client",
