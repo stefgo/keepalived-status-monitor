@@ -33,6 +33,7 @@ export const SECTIONS: readonly SectionDef[] = [
             "notification_retention_days",
             "notification_retention_count",
             "notification_cleanup_interval_hours",
+            "activity_level_overrides",
         ],
     },
 ];
@@ -46,6 +47,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
     notification_retention_days: "90",
     notification_retention_count: "500",
     notification_cleanup_interval_hours: "24",
+    activity_level_overrides: "",
 };
 
 /** Whether the draft differs from what the server holds in any of the section's keys. */
