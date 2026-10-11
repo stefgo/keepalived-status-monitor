@@ -320,17 +320,11 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
         .filter((e) => !e.seen)
         .map((e) => e.id);
 
-    // Styled like the search pill they sit next to rather than like form fields: same height,
-    // radius, border and background, so the bar reads as one row of controls.
-    const pillSelect = {
-        select: "py-1 pl-3 pr-9 rounded-full border-border bg-app-bg text-sm",
-    };
     const filterSelects = (
         <div className="flex flex-wrap items-center gap-2">
             <Select
                 aria-label="Filter by seen state"
                 fullWidth={false}
-                classNames={pillSelect}
                 value={seenFilter}
                 onChange={(e) => setSeenFilter(e.target.value as "all" | "unseen")}
                 options={[
@@ -341,7 +335,6 @@ export function ActivityView({ initialLevel }: ActivityViewProps = {}) {
             <Select
                 aria-label="Filter by level"
                 fullWidth={false}
-                classNames={pillSelect}
                 value={levelFilter}
                 onChange={(e) => setChosenLevel(e.target.value as ActivityLevel)}
                 options={ACTIVITY_LEVELS.map((level) => ({ value: level, label: levelLabel(level) }))}
