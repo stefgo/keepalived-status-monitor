@@ -256,54 +256,147 @@ one incident, for a target that threads them.
 
 **[Log Notifier](https://github.com/stefgo/ha-log-notifier) for Home Assistant** — URL
 `https://<ha>/api/lognotifier/ingest/<channel token>`, event kinds `vrrp.incident_*`,
-minimum level `info`. Log Notifier reads KASM's levels as its own and renders `content` as
-Markdown:
+minimum level `info`. Log Notifier reads KASM's levels as its own and renders `content` and
+the values in `blocks` as Markdown. The template raises the level to `error` for
+`split-brain`, `no-master` and `unreachable`, says in one sentence what happened and puts the
+findings, the cluster, its hosts and the course of the incident into `blocks`:
 
 ```json
 {
-    "level": "{{event.level}}",
-    "title": "{{event.message}}",
-    "content": {
-        "$join": [
-            {
-                "$if": "event.kind == 'vrrp.incident_resolved'",
-                "then": "**Resolved** ({{event.data.incident.resolution}}), was {{event.data.incident.history | join(' → ')}}",
-                "else": {
-                    "$join": [
-                        {
-                            "$if": "event.kind == 'vrrp.incident_updated'",
-                            "then": {
-                                "$join": [
-                                    { "$join": { "$map": "event.data.incident.added", "each(t)": "- 🆕 {{t}}\n" } },
-                                    { "$join": { "$map": "event.data.incident.cleared", "each(t)": "- ✅ {{t}}\n" } },
-                                    "\n**Open now**\n\n"
-                                ]
-                            }
-                        },
-                        { "$join": { "$map": "event.data.incident.reasons", "each(r)": "- ⚠️ {{r.text}}" }, "with": "\n" }
-                    ]
-                }
-            },
-            "\n\n- Site: {{event.data.cluster.site | default('–')}}\n- VIPs: {{event.data.cluster.vips | join(', ')}}\n- Health: **{{event.data.incident.health | default('–')}}**\n- Master: {{event.data.cluster.master | default('–')}}\n\n**Hosts**\n\n",
-            {
-                "$join": {
-                    "$map": "event.data.cluster.members",
-                    "each(m)": {
-                        "$if": "m.online",
-                        "then": {
-                            "$if": "m.reporting",
-                            "then": "- **{{m.host}}**: {{m.state}} ({{m.effectivePriority}})",
-                            "else": "- **{{m.host}}**: keepalived not reporting, last {{m.state}}"
-                        },
-                        "else": "- **{{m.host}}**: offline, last {{m.state}}"
-                    }
-                },
-                "with": "\n"
+    "level": {
+        "$if": "event.data.incident.health == 'split-brain'",
+        "then": "error",
+        "else": {
+            "$if": "event.data.incident.health == 'no-master'",
+            "then": "error",
+            "else": {
+                "$if": "event.data.incident.health == 'unreachable'",
+                "then": "error",
+                "else": "{{event.level}}"
             }
+        }
+    },
+    "title": {
+        "$join": [
+            { "$if": "event.kind == 'vrrp.incident_opened'", "then": "🚨 " },
+            { "$if": "event.kind == 'vrrp.incident_updated'", "then": "🔄 " },
+            { "$if": "event.kind == 'vrrp.incident_resolved'", "then": "✅ " },
+            "{{event.message}}"
         ]
     },
+    "content": {
+        "$if": "event.kind == 'vrrp.incident_resolved'",
+        "then": {
+            "$if": "event.data.incident.resolution == 'removed'",
+            "then": "**Incident closed** — the cluster no longer exists (client deleted, site or network changed).",
+            "else": "**Recovered** — every live member confirmed a healthy cluster."
+        },
+        "else": {
+            "$if": "event.kind == 'vrrp.incident_updated'",
+            "then": "**Incident changed** — the cluster is now **{{event.data.incident.health}}**.",
+            "else": "**Incident opened** — the cluster is **{{event.data.incident.health}}**."
+        }
+    },
+    "blocks": [
+        {
+            "type": "fields",
+            "rows": [
+                [
+                    { "$if": "event.data.incident.added", "then": {
+                        "label": "New findings",
+                        "value": { "$join": { "$map": "event.data.incident.added", "each(t)": "- 🆕 {{t}}" }, "with": "\n" }
+                    } },
+                    { "$if": "event.data.incident.cleared", "then": {
+                        "label": "Cleared",
+                        "value": { "$join": { "$map": "event.data.incident.cleared", "each(t)": "- ✅ ~~{{t}}~~" }, "with": "\n" }
+                    } }
+                ],
+                [
+                    { "$if": "event.data.incident.reasons", "then": {
+                        "label": "Open findings ({{event.data.incident.health}})",
+                        "value": { "$join": { "$map": "event.data.incident.reasons", "each(r)": "- ⚠️ {{r.text}}" }, "with": "\n" }
+                    } }
+                ]
+            ]
+        },
+        {
+            "type": "fields",
+            "rows": [
+                [
+                    { "label": "Site", "value": "{{event.data.cluster.site | default('–')}}" },
+                    { "label": "VRID", "value": "{{event.data.cluster.vrid}}" },
+                    { "label": "Master", "value": "**{{event.data.cluster.master | default('none')}}**" }
+                ],
+                [
+                    { "label": "VIPs", "value": "{{event.data.cluster.vips | join(', ')}}" }
+                ]
+            ]
+        },
+        {
+            "type": "fields",
+            "rows": {
+                "$map": "event.data.cluster.members",
+                "each(m)": [
+                    {
+                        "label": "{{m.host}}",
+                        "value": {
+                            "$if": "m.online",
+                            "then": {
+                                "$if": "m.reporting",
+                                "then": {
+                                    "$if": "m.state == 'MASTER'",
+                                    "then": "🟢 {{m.state}}",
+                                    "else": { "$if": "m.state == 'FAULT'", "then": "🔴 {{m.state}}", "else": "🔵 {{m.state}}" }
+                                },
+                                "else": "🟠 keepalived not reporting, last {{m.state}}"
+                            },
+                            "else": "⚫ agent offline, last {{m.state}}"
+                        }
+                    },
+                    {
+                        "label": "Priority",
+                        "value": {
+                            "$if": "m.reporting",
+                            "then": "{{m.effectivePriority}} / {{m.priority}}",
+                            "else": "–"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "fields",
+            "rows": [
+                [
+                    { "label": "Opened", "value": "{{event.data.incident.openedAt}}" },
+                    { "$if": "event.data.incident.durationSeconds", "then": {
+                        "label": "Duration",
+                        "value": "{{event.data.incident.durationSeconds}} s"
+                    } },
+                    { "$if": "event.kind != 'vrrp.incident_opened'", "then": {
+                        "label": "History",
+                        "value": {
+                            "$join": [
+                                "{{event.data.incident.history | join(' → ')}}",
+                                { "$if": "event.data.incident.resolution == 'recovered'", "then": " → ok" }
+                            ]
+                        }
+                    } }
+                ],
+                [
+                    { "label": "Incident", "value": "{{event.correlationId}}" }
+                ]
+            ]
+        }
+    ],
     "source": "kasm",
-    "tags": ["kasm", "{{event.kind}}", "vrid-{{event.data.cluster.vrid}}", "{{event.data.cluster.site | default('no-site')}}"],
+    "tags": [
+        "kasm",
+        "{{event.kind}}",
+        "{{event.data.incident.health | default('removed')}}",
+        "vrid-{{event.data.cluster.vrid}}",
+        "{{event.data.cluster.site | default('no-site')}}"
+    ],
     "timestamp": "{{event.occurredAt}}"
 }
 ```

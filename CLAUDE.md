@@ -188,7 +188,7 @@ bundle without the backend, use `npm run preview -w server/frontend`.
   `commitlint.config.mjs`. The root `prepare` script sets `core.hooksPath` on every
   `npm install`. `ci.yml` lints commits only on pull requests, and this repository is
   maintained without them, so the hook is the check that actually runs.
-- **The commit type is the only input the version number comes from**: `feat` raises the
+- **With `bump: auto` the commit type is the only input the version number comes from**: `feat` raises the
   minor, `fix`, `perf` and `revert` the patch, every other type releases nothing.
 - **Commit messages are written in English** — subject and body. The existing history is
   German and stays as it is; the rule applies going forward.
@@ -207,12 +207,24 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 ## Versioning and Releases
 
 `semantic-release` owns the version. It runs from `.github/workflows/release.yml`, which is
-**`workflow_dispatch` only and refuses any branch but `main`**: a release is an action, not a
-side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
+**`workflow_dispatch` only and releases from `main` (a release) or `dev` (a beta,
+`x.y.z-beta.n`)**: a release is an action, not a side effect of pushing. **Never bump a
+version or create a `v*` tag by hand.**
 
-- Inputs: `dry_run` (default on) prints the next version and changes nothing; `bump`
-  (`auto` | `major`) is the only way a major version is created. A run that was asked for
-  and produces no release fails.
+The workflow calls [stefgo/release-workflows](https://github.com/stefgo/release-workflows),
+which carries semantic-release and its configuration for every stefgo project. There is no
+`release` entry in `package.json` and no semantic-release package installed here.
+
+- Inputs: `dry_run` (default on) shows the next version and the complete notes and changes
+  nothing; `bump` (`auto` | `patch` | `minor` | `major`) takes the step from the commit types
+  or is the step itself, whatever the commits say. `major` is the only way a major version is
+  created. A run that was asked for and produces no release fails.
+- **Every release needs hand-written notes in `.release/next.md`** — what is new, what an
+  upgrade needs. They go above the generated list of commits; without them the workflow
+  refuses. A beta keeps the text, the release from `main` empties the file. Write it as part
+  of the change that deserves a sentence, not at release time.
+- **`dev` is merged into `main` with its history — never squashed or rebased** — and `main`
+  back into `dev` before the next beta. The workflow checks both and refuses otherwise.
 - The root `package.json` is the single source of truth for the version. It starts at
   `0.0.0`; without a release tag semantic-release makes the first release `1.0.0`. The
   workspace manifests keep `1.0.0` and nothing reads them.
@@ -225,6 +237,25 @@ side effect of pushing. **Never bump a version or create a `v*` tag by hand.**
   `package.json` (with `+<hash>` when the commit carries no release tag), then git. The
   order lives in `scripts/generate-version.sh` and, mirrored, in
   `server/frontend/vite.config.ts`. Only the client agent ships a `dist/VERSION` file.
+
+### The release notes are part of the commit
+
+Before every commit, read `.release/next.md` and bring it up to date with what the commit
+changes — in the same commit, not at release time.
+
+- A commit that changes what a user sees or has to do — a feature, a fix, a changed
+  default, a renamed setting, anything an upgrade needs — is reflected in the text. A
+  `feat`, `fix` or `perf` commit that leaves the file untouched needs a reason.
+- A commit that changes nothing for a user (`ci`, `test`, `refactor`, `docs`, `chore`,
+  most of `build`) leaves the file alone. No line is added for the sake of it.
+- Revise the text as a whole instead of appending a line per commit: it describes the
+  release, not its history. Merge what belongs together, and remove a sentence a later
+  commit made untrue — a feature taken back before the release is not in its notes.
+- Write for someone who uses the project, in their terms: what is new, why it matters,
+  what an upgrade needs. No file names and no internals; the list of commits below the
+  text already names every change.
+- The text goes below the HTML comment at the top of the file, with `###` headings. If
+  the file holds only the comment, the text starts with this commit.
 
 ## Testing
 
