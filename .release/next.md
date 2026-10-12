@@ -18,6 +18,11 @@ the settings, under *Activity History*, with one select per kind. A kind can als
 
 A changed level applies to events from then on; events that are stored already keep theirs.
 
+### A cluster's page names its virtual IPs
+
+The details at the top of a cluster's page now list the cluster's virtual IPs, where they
+showed the network those addresses sit on.
+
 ### Upgrading
 
 Nothing has to be done. The webhook templates behave as before; their engine now comes from

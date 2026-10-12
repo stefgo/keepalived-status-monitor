@@ -200,13 +200,10 @@ export const ClusterDetail = ({ site, vrid, net }: ClusterDetailProps) => {
         { label: "Site", value: cluster.site ?? "–", visibility: "always" },
         { label: "VRID", value: cluster.vrid ?? "–", visibility: "always" },
         {
-            // What identifies the cluster, next to site and VRID: the segment its addresses
-            // sit on. Two clusters of one site and VRID are told apart by exactly this. The
-            // addresses themselves belong to the host that carries them, so they are a
-            // column of the table below rather than a line here.
-            label: "Network",
-            value:
-                cluster.networks.length > 0 ? cluster.networks.map((net) => <div key={net}>{net}</div>) : "–",
+            // Every address the cluster's hosts carry between them, as the list of clusters
+            // names it. Which host carries which is a column of the table below.
+            label: "Virtual IPs",
+            value: cluster.vips.length > 0 ? cluster.vips.map((vip) => <div key={vip}>{vip}</div>) : "–",
             visibility: "always",
         },
         {
