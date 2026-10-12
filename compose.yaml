@@ -1,10 +1,17 @@
+# The released images, as an operator runs them. Server and agent are in one file to show
+# both; they rarely share a host. The server runs once, the agent on every keepalived host:
+#
+#   docker compose up -d kasm-server      # on the server
+#   docker compose up -d kasm-client      # on each keepalived host
+#
+# Each needs its config file to exist before the first start (`touch server-config.yaml`,
+# `sudo touch client-config.yaml`), or Docker mounts a directory in its place. Pin a version
+# tag instead of `latest` to make an upgrade a decision (docs/operations.md).
+
 services:
     kasm-server:
         container_name: kasm-server
-        build:
-            context: .
-            dockerfile: docker/Dockerfile.server
-        image: kasm-server:latest
+        image: ghcr.io/stefgo/kasm-server:latest
         ports:
             - "3010:3010"
         volumes:
@@ -37,10 +44,7 @@ services:
 
     kasm-client:
         container_name: kasm-client
-        build:
-            context: .
-            dockerfile: docker/Dockerfile.client
-        image: kasm-client:latest
+        image: ghcr.io/stefgo/kasm-client:latest
         # The agent runs on the host that runs keepalived and reads it from there:
         # - pid: host lets it see keepalived's process and signal it (SIGUSR1/SIGUSR2),
         #   which is how keepalived is asked to write its state.

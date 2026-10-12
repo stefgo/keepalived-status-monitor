@@ -92,11 +92,14 @@ services:
         ports:
             - "3010:3010"
         volumes:
-            - ./server-data:/app/server/backend/data
+            - server-data:/app/server/backend/data
             - ./server-config.yaml:/app/server/config.yaml
         restart: unless-stopped
         environment:
             - NODE_ENV=production
+
+volumes:
+    server-data:
 ```
 
 `latest` is the last release. See [Images and tags](https://stefgo.github.io/keepalived-status-monitor/operations/#images-and-tags) for `main`, `dev` and version tags.
@@ -148,14 +151,13 @@ volumes:
    `keepalived:`. Make the file belong to root (`sudo chown root: client-config.yaml`):
    the agent has no `DAC_OVERRIDE` and could not write the server URL of a registration
    back into it otherwise.
-2. In the server dashboard choose **Add Client** and pick "The agent connects to this server"
+2. Run `docker compose up -d`.
+3. In the server dashboard choose **Add Client** and pick "The agent connects to this server"
    to get a registration token — the wizard also takes the display name and allowed address
-   the client should start with. Start the agent and open its web UI at
-   `http://<host>:3011/register`. Enter the server URL, the token and the **setup PIN** the
-   agent prints to its log (`docker logs kasm-client`). The agent then stores the identity
-   the server issued — its client id and permanent `authToken` — as `identity.json` in its
-   data volume.
-3. Run `docker compose up -d`.
+   the client should start with. Open the agent's web UI at `http://<host>:3011/register`
+   and enter the server URL, the token and the **setup PIN** the agent prints to its log
+   (`docker logs kasm-client`). The agent then stores the identity the server issued — its
+   client id and permanent `authToken` — as `identity.json` in its data volume.
 
 ## 🔧 Development
 

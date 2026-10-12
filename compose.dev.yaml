@@ -39,7 +39,6 @@ services:
             - /app/server/backend/node_modules
             - /app/server/frontend/node_modules
             - /app/shared/node_modules
-            - /app/client/node_modules
 
             # Mount local UI components for development
             - ../react-ui-components:/app/react-ui-components
