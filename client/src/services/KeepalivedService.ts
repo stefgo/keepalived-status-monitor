@@ -9,6 +9,7 @@ import { ParsedDump } from "./parsers/common.js";
 import { parseDataDump } from "./parsers/dataDump.js";
 import { parseJsonDump } from "./parsers/jsonDump.js";
 import { parseStatsDump } from "./parsers/statsDump.js";
+import { readProcView, startupFinding } from "./procView.js";
 
 /**
  * The host's process table. The agent runs with `pid: host`, so this is the host's view;
@@ -76,6 +77,7 @@ export class KeepalivedService {
         this.listener = listener;
         if (this.started) return;
         this.started = true;
+        this.checkProcView();
         const loop = async () => {
             await this.poll(false);
             if (config.keepalived.pollInterval <= 0) return;
@@ -83,6 +85,16 @@ export class KeepalivedService {
             this.timer.unref?.();
         };
         void loop();
+    }
+
+    /**
+     * Says once, at start, whether keepalived can be found at all. A reading without a
+     * keepalived process is `running: false` and no error, so an agent that was started
+     * without `pid: host` would otherwise report a stopped keepalived and log nothing.
+     */
+    private static checkProcView(): void {
+        const finding = startupFinding(PROC_DIR, readProcView(PROC_DIR), findKeepalivedPid());
+        logger[finding.level](finding.message);
     }
 
     /** Reads now and hands the result on regardless of whether anything changed. */

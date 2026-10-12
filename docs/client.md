@@ -41,6 +41,7 @@ client/src/
 │   ├── ActivityService.ts     # Activity events: queue, at-least-once delivery
 │   ├── KeepalivedService.ts   # Finds keepalived, signals it, reads the dumps, diffs readings
 │   ├── NotifyFifoWatcher.ts   # Turns lines on keepalived's notify FIFO into readings
+│   ├── procView.ts            # The check at start: is this the host's process table?
 │   └── parsers/
 │       ├── common.ts          # The fields taken over, state names, shared helpers
 │       ├── dataDump.ts        # /tmp/keepalived.data (SIGUSR1), text
@@ -233,6 +234,22 @@ A failed reading — no permission to signal, a dump that never came — is `run
 `error` set. The error names the missing capability where it can tell. keepalived's version is
 read once per process out of its binary (`/proc/<pid>/exe`), because `keepalived -v` would
 have to run the host's binary inside the agent's container.
+
+#### The check at start (`src/services/procView.ts`)
+
+`running: false` is what a host without keepalived reports — and what an agent reports that
+was started without `pid: host` and sees only its own container. The server cannot tell the
+two apart, so the agent says which one it is, once, in its log before the first reading:
+
+| Log line | Level | What it means |
+| :------- | :---- | :------------ |
+| `Found keepalived, PID …` | `info` | The process is visible. Whether it can be signalled and read is the first reading's to say. |
+| `No keepalived process is running on this host. …` | `warn` | The agent sees the host's process table, and keepalived is not in it. |
+| `No keepalived process found, and /proc is not the host's process table …` | `warn` | The agent sees only its own container. Start it with `pid: host`. |
+| `Cannot read the process table in /proc: …` | `error` | `/proc` itself cannot be listed. |
+
+The host's process table is recognised by its kernel threads: PID 2 is `kthreadd` on every
+Linux host, and a container with a PID namespace of its own never sees one.
 
 #### Triggers
 

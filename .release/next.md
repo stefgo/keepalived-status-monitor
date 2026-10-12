@@ -23,6 +23,14 @@ A changed level applies to events from then on; events that are stored already k
 The details at the top of a cluster's page now list the cluster's virtual IPs, where they
 showed the network those addresses sit on.
 
+### The agent says at start whether it can see keepalived
+
+An agent that was started without `pid: host` sees only its own container. It reported
+keepalived as not running, like a host that really runs none, and its log said nothing. The
+agent now checks this once at start and writes the result to its log: that it found
+keepalived, that the host runs none, or that it does not see the host's processes and needs
+`pid: host`.
+
 ### Upgrading
 
 Nothing has to be done. The webhook templates behave as before; their engine now comes from
