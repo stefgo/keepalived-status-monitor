@@ -181,10 +181,11 @@ four workspaces:
 ## Getting started in one minute
 
 ```bash
-# Server
+# Server. The file has to exist first, or Docker mounts a directory in its place.
+touch server-config.yaml
 docker run -d --name kasm-server -p 3010:3010 \
-    -v ./server-data:/app/server/backend/data \
-    -v ./server-config.yaml:/app/server/config.yaml \
+    -v kasm-server-data:/app/server/backend/data \
+    -v "$PWD/server-config.yaml":/app/server/config.yaml \
     ghcr.io/stefgo/kasm-server:latest
 ```
 
