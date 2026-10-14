@@ -31,6 +31,12 @@ agent now checks this once at start and writes the result to its log: that it fo
 keepalived, that the host runs none, or that it does not see the host's processes and needs
 `pid: host`.
 
+### Wrapped text in tables sits closer
+
+Text that wraps onto a second line in a table cell now sits as closely as text anywhere else
+in the application; its lines were further apart than the text's size called for. Rows of a
+single line are a little lower than before.
+
 ### Upgrading
 
 Nothing has to be done. The webhook templates behave as before; their engine now comes from
