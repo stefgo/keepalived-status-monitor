@@ -37,6 +37,18 @@ Text that wraps onto a second line in a table cell now sits as closely as text a
 in the application; its lines were further apart than the text's size called for. Rows of a
 single line are a little lower than before.
 
+### A click beside a checkbox no longer opens the member
+
+In a cluster's list of members, a click that just missed a member's comparison checkbox used
+to open that member's host. The space around the checkbox now belongs to it: a click there
+neither opens the host nor ticks the box.
+
+### Labels in the list view line up
+
+In the list view, which shows each row as a card of labels and values, every value of a
+row now starts at the same edge. A long label wraps instead of pushing its value aside, so
+on a narrow screen it no longer runs out of the row.
+
 ### Upgrading
 
 Nothing has to be done. The webhook templates behave as before; their engine now comes from
