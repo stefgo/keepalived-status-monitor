@@ -122,6 +122,7 @@ export class ProxyService {
             connectionMode: client.connection_mode ?? CONNECTION_MODE.INBOUND,
             inboundAllowedIp: client.inbound_allowed_ip,
             inboundLastIp: client.inbound_last_ip,
+            registrationExpiresAt: client.registration_expires_at,
             outboundTargetAddress: client.outbound_target_address ?? null,
             /**
              * Only meaningful while the agent is connected: what it can do is a property of

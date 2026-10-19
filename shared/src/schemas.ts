@@ -223,6 +223,13 @@ export const ClientSchema = z.object({
      * server observes this, the operator does not set it.
      */
     inboundLastIp: z.string().nullish(),
+    /**
+     * Inbound clients only: until when the registration token issued for this client is
+     * valid, or null when none is open. Set while the client waits for its first agent, and
+     * again when an agent is to be registered anew. Expired tokens keep their date, so the
+     * client page can say that it ran out.
+     */
+    registrationExpiresAt: z.string().nullish(),
     outboundTargetAddress: z.string().nullish(),
     /**
      * What the agent on the wire right now says it can do, as it named it in its AUTH
@@ -249,31 +256,18 @@ export const RegistrationResponseSchema = z.object({
     clientId: z.string(),
 });
 
-/** A registration token as the list shows it: by its hash, never the token itself. */
-export const TokenSchema = z.object({
-    /** SHA-256 of the token, hex. Also what `DELETE /api/v1/tokens/:tokenHash` takes. */
-    tokenHash: z.string(),
-    createdAt: z.string(),
-    expiresAt: z.string(),
-    /** Null until an agent has registered with it. */
-    usedAt: z.string().nullish(),
-    /**
-     * What the operator fixed when issuing the token, for the client it creates. Absent
-     * means the agent's hostname and the address it registers from decide, as before.
-     */
-    displayName: z.string().nullish(),
-    inboundAllowedIp: z.string().nullish(),
-});
-
 /**
- * `POST /api/v1/tokens`: the one response that carries the token in the clear. The server
- * stores only its hash, so this is the only time it can be shown.
+ * A registration token, in the one response that carries it in the clear. The server keeps
+ * only its hash on the client it was issued for, so this is the only time it can be shown.
  */
-export const CreatedTokenSchema = z.object({
+export const RegistrationTokenSchema = z.object({
     token: z.string(),
     expiresAt: z.string(),
-    displayName: z.string().nullish(),
-    inboundAllowedIp: z.string().nullish(),
+});
+
+/** `POST /api/v1/clients/inbound`: the client that now waits, and the token for its agent. */
+export const CreatedInboundClientSchema = RegistrationTokenSchema.extend({
+    id: z.uuid(),
 });
 
 // WS Payloads schemas
@@ -343,12 +337,13 @@ export const TargetAddressSchema = z
     });
 
 /**
- * `POST /api/v1/tokens`. Both fields are optional: a token without them behaves as every
- * token did before they existed -- the agent's hostname names the client, and the address
- * it registers from becomes its allowed address.
+ * `POST /api/v1/clients/inbound`. The client exists from here on and waits for its agent.
+ * The display name is required: until the agent reports a hostname it is the only thing the
+ * client is known by. Without `inboundAllowedIp` the address the agent registers from
+ * becomes its allowed address.
  */
-export const CreateTokenSchema = z.object({
-    displayName: z.string().trim().max(100).optional(),
+export const CreateInboundClientSchema = z.object({
+    displayName: z.string().trim().min(1, { error: "Enter a display name" }).max(100),
     inboundAllowedIp: Ipv4OrCidrSchema.optional(),
 });
 
@@ -424,8 +419,6 @@ const ActivityLevelOverridesSettingSchema = z.string().superRefine((text, ctx) =
  * session must not be able to lock every agent out.
  */
 export const CleanupSettingsSchema = z.looseObject({
-    token_retention_days: WholeNumberSettingSchema.optional(),
-    token_cleanup_interval_hours: WholeNumberSettingSchema.optional(),
     notification_retention_days: WholeNumberSettingSchema.optional(),
     notification_retention_count: WholeNumberSettingSchema.optional(),
     notification_cleanup_interval_hours: WholeNumberSettingSchema.optional(),
@@ -458,8 +451,6 @@ export const AgentWebRegisterSchema = z.object({
  */
 export const AppSettingsSchema = z
     .looseObject({
-        token_retention_days: WholeNumberSettingSchema.default("30"),
-        token_cleanup_interval_hours: WholeNumberSettingSchema.default("24"),
         notification_retention_days: WholeNumberSettingSchema.default("90"),
         notification_retention_count: WholeNumberSettingSchema.default("500"),
         notification_cleanup_interval_hours: WholeNumberSettingSchema.default("24"),

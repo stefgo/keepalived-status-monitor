@@ -30,7 +30,6 @@ export const ROUTES = {
 
     activity: "/activity",
     users: "/users",
-    tokens: "/tokens",
 
     webhooks: "/webhooks",
     webhookNew: "/webhooks/new",

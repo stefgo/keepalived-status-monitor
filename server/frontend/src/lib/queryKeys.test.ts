@@ -66,6 +66,5 @@ describe("isPushedOnConnect", () => {
         expect(isPushedOnConnect(queryKeys.settings.schedulerStatus())).toBe(false);
         expect(isPushedOnConnect(queryKeys.webhooks.list())).toBe(false);
         expect(isPushedOnConnect(queryKeys.users.list())).toBe(false);
-        expect(isPushedOnConnect(queryKeys.tokens.list())).toBe(false);
     });
 });

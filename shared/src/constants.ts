@@ -149,7 +149,7 @@ export const WEBHOOK_METHODS = ["POST", "PUT"] as const;
  * The background jobs the server runs on a timer. Each keeps one row in `scheduler_state`:
  * its last finished run and whatever it has to remember from one run to the next.
  */
-export const SCHEDULER_IDS = ["notification-cleanup", "token-cleanup"] as const;
+export const SCHEDULER_IDS = ["notification-cleanup"] as const;
 
 /** Whether the timer started a run or a user did, through the settings page. */
 export const SCHEDULER_TRIGGERS = ["schedule", "manual"] as const;

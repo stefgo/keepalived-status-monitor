@@ -1,5 +1,5 @@
 import type { RouteObject } from "react-router-dom";
-import { Activity, Key, LayoutDashboard, Monitor, Network, Settings as SettingsIcon, Users, Webhook } from "lucide-react";
+import { Activity, LayoutDashboard, Monitor, Network, Settings as SettingsIcon, Users, Webhook } from "lucide-react";
 import type { DashboardPage } from "@stefgo/react-ui-components";
 
 import { LEGACY_ROUTES, ROUTES } from "../../lib/paths";
@@ -10,7 +10,6 @@ import {
     ClusterOverview,
     DashboardOverview,
     Settings,
-    TokenOverview,
     UserOverview,
     WebhookEditorRoute,
     WebhookOverview,
@@ -115,12 +114,6 @@ export const shellRoutes: RouteObject[] = [
         handle: nav({ id: "users", groupId: "admin", placement: "mobile-more", label: "Users", icon: Users }),
         errorElement: <RouteError />,
         element: <UserOverview />,
-    },
-    {
-        path: ROUTES.tokens,
-        handle: nav({ id: "tokens", groupId: "admin", placement: "mobile-more", label: "Client Tokens", icon: Key }),
-        errorElement: <RouteError />,
-        element: <TokenOverview />,
     },
     {
         path: ROUTES.webhooks,

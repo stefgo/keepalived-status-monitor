@@ -1,11 +1,11 @@
-import { Activity, Sliders, type LucideIcon } from "lucide-react";
+import { Activity, type LucideIcon } from "lucide-react";
 import { CleanupSettingsSchema } from "@kasm/shared";
 
 import type { SettingsValues } from "../../queries/settings";
 
 export type { SettingsValues };
 
-export type SectionId = "tokens" | "activity";
+export type SectionId = "activity";
 
 export interface SectionDef {
     id: SectionId;
@@ -19,12 +19,6 @@ export interface SectionDef {
 }
 
 export const SECTIONS: readonly SectionDef[] = [
-    {
-        id: "tokens",
-        label: "Client Tokens",
-        icon: Sliders,
-        keys: ["token_retention_days", "token_cleanup_interval_hours"],
-    },
     {
         id: "activity",
         label: "Activity History",
@@ -42,8 +36,6 @@ export const SECTION_IDS: readonly SectionId[] = SECTIONS.map((s) => s.id);
 
 /** What a section shows until the server has answered -- the server's own defaults. */
 export const DEFAULT_SETTINGS: SettingsValues = {
-    token_retention_days: "30",
-    token_cleanup_interval_hours: "24",
     notification_retention_days: "90",
     notification_retention_count: "500",
     notification_cleanup_interval_hours: "24",

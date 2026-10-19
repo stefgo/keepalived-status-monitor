@@ -24,7 +24,6 @@ export const STORAGE_KEYS = {
     instancesView: "kasm.instances.view",
     activityView: "kasm.activity.view",
     usersView: "kasm.users.view",
-    tokensView: "kasm.tokens.view",
     webhooksView: "kasm.webhooks.view",
 
     // A client's page: whether the details below its header are open.

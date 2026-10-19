@@ -335,10 +335,10 @@ Resolves the agent version with the following priority:
 Registration is a one-time setup step performed via the local web UI:
 
 1. Open `http://localhost:3011` in a browser → redirected to `/register`.
-2. Enter the **Server URL** (e.g., `https://manager.example.com`), a **Registration Token** (generated in the server's token management UI) and the **Setup PIN** from the agent's log.
+2. Enter the **Server URL** (e.g., `https://manager.example.com`), a **Registration Token** (issued for the client in the server's *Add Client* wizard, or by *Generate New Token* / *Re-register Agent* on the client's page) and the **Setup PIN** from the agent's log.
 3. The UI checks server reachability (`GET /api/v1/ping`).
 4. The agent verifies the setup PIN before it contacts the server, then calls `POST /api/v1/register` with `{token, hostname}`.
-5. The server responds with the client's identity: a `clientId` and a permanent `authToken`, both issued by the server.
+5. The server responds with the client's identity: the `clientId` of the client the token was issued for and a new permanent `authToken`, both issued by the server.
 6. The client saves the identity to `identity.json` in its data directory, and the server URL to `config.yaml` — the latter only if it differs from what is already there. If either write fails, the register page says so: the agent is connected, but it would come back unregistered.
 7. The client connects via WebSocket straight away.
 
@@ -382,7 +382,7 @@ they are guarded by a PIN that is printed to the agent's log once the web server
 
 - Read it with `docker logs kasm-client` (or wherever the agent logs to). Case and the hyphen do not matter.
 - It is generated at every start of an unregistered agent and never written to `config.yaml`. The `Web UI` line appears only with the register page, the `Outbound` line only while an agent without `serverUrl` is unregistered.
-- It is dropped with the first successful registration, and the register page closes with it. To register an agent again, delete `identity.json` from its data directory and restart it — it then prints a new PIN — and delete the client's old entry on the server.
+- It is dropped with the first successful registration, and the register page closes with it. To register an agent again, delete `identity.json` from its data directory and restart it — it then prints a new PIN. For an inbound client, *Re-register Agent* on the client's page issues a token that puts the agent back under the same client; otherwise add it anew and delete the old entry on the server.
 - After 5 wrong attempts — on either route — the PIN is replaced by a new one (also logged), which ends online guessing without locking the operator out.
 - With `enableRegisterPage: false` neither the page nor `POST /api/register` exists. A PIN is then generated only while the agent also has no `serverUrl` and no `KASM_REGISTRATION_SECRET`.
 

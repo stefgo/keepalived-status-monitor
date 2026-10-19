@@ -42,8 +42,7 @@ next to each keepalived and a central Fastify/React server with a dashboard and 
   list and each client's own allowed address or network.
 - **Authentication:** Local username/password and OIDC (OpenID Connect) for single sign-on,
   configurable per user.
-- **Automated maintenance:** Scheduled cleanup of used or expired registration tokens and of
-  old activity.
+- **Automated maintenance:** Scheduled cleanup of old activity.
 
 ## 🏗 Architecture
 
@@ -152,9 +151,9 @@ volumes:
    the agent has no `DAC_OVERRIDE` and could not write the server URL of a registration
    back into it otherwise.
 2. Run `docker compose up -d`.
-3. In the server dashboard choose **Add Client** and pick "The agent connects to this server"
-   to get a registration token — the wizard also takes the display name and allowed address
-   the client should start with. Open the agent's web UI at `http://<host>:3011/register`
+3. In the server dashboard choose **Add Client** and pick "The agent connects to this server".
+   The wizard adds the client under the display name you give it — optionally with the
+   allowed address it should start with — and shows its registration token. Open the agent's web UI at `http://<host>:3011/register`
    and enter the server URL, the token and the **setup PIN** the agent prints to its log
    (`docker logs kasm-client`). The agent then stores the identity the server issued — its
    client id and permanent `authToken` — as `identity.json` in its data volume.

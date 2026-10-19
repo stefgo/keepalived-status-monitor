@@ -2,23 +2,26 @@ import { Checkbox, Input } from "@stefgo/react-ui-components";
 import { AddClientForm } from "../useAddClientForm";
 
 /**
- * What the token fixes for the client it will create. Both fields are optional: without
- * them the agent's hostname names the client and the address it registers from becomes its
- * allowed address, which is what every token did before they existed.
+ * The client that is created at once and waits for its agent, with the token the agent
+ * registers with. The name is required; without an address, the one the agent registers
+ * from becomes its allowed address.
  */
 export const StepInboundDetails = ({ form }: { form: AddClientForm }) => (
     <div className="space-y-6">
         <p className="text-sm text-text-muted">
-            The token carries what the agent cannot tell the server about itself. Leave a
-            field empty to decide it at registration time instead.
+            The client is added now and waits for its agent. The token you get next
+            registers the agent under it.
         </p>
 
         <Input
-            label="Display Name (optional)"
+            label="Display Name"
             value={form.displayName}
             onChange={(e) => form.setDisplayName(e.target.value)}
+            onBlur={() => form.touch("displayName")}
             placeholder="lb-01"
-            hint="Leave empty to use the hostname the agent reports."
+            error={form.missing.displayName ? "Enter a display name" : undefined}
+            hint="What the client is listed as. The agent reports its hostname when it registers."
+            required
         />
 
         <div className="space-y-4">

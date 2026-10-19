@@ -1,7 +1,16 @@
+import crypto from "crypto";
 import db from "../core/Database.js";
 import type { ConnectionMode } from "@kasm/shared";
-import { hashToken } from "./TokenRepository.js";
 import { decryptSecret, encryptSecret } from "../services/SecretCrypto.js";
+
+/**
+ * How a token the server only has to recognise is stored: an inbound agent's auth token and
+ * a registration token alike. The value itself is shown once; the table holds its SHA-256.
+ */
+export function hashToken(token: string): string {
+    return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
+
 
 /**
  * A row of the `clients` table (migration 00). Deliberately not the shared
@@ -36,6 +45,13 @@ export interface ClientRow {
      * `inbound_allowed_ip` is about to be measured against.
      */
     inbound_last_ip: string | null;
+    /**
+     * Inbound clients only (migration 12): SHA-256 of the registration token issued for this
+     * client, or null when none is open. Cleared by the registration that uses it.
+     */
+    registration_token_hash: string | null;
+    /** Until when that token is valid, as ISO text. Kept after it expires, for the page. */
+    registration_expires_at: string | null;
     version: string | null;
     last_seen: string | null;
     created_at: string;
@@ -84,21 +100,85 @@ export class ClientRepository {
     }
 
     /**
-     * Creates an inbound client. A plain INSERT, deliberately: this used to be an upsert on
-     * the id the agent sent, which let a caller holding a registration token name an
-     * existing client and have its auth token replaced. The server picks the id now, so a
-     * collision is a bug and should fail loudly.
+     * Creates an inbound client that waits for its agent: no hostname, no auth token and
+     * never seen. The registration token is set separately, by setRegistrationToken. A
+     * null `allowedIp` means the address the agent registers from becomes the allowed one.
      */
-    static createInbound(
+    static createPendingInbound(id: string, displayName: string, allowedIp: string | null): void {
+        db.prepare(`
+            INSERT INTO clients (id, display_name, inbound_allowed_ip, connection_mode)
+            VALUES (?, ?, ?, 'inbound')
+        `).run(id, displayName, allowedIp);
+    }
+
+    /**
+     * Opens a registration for an inbound client, replacing a token that was still open.
+     * Only the hash is stored. Restricted to inbound rows in SQL: an outbound agent is
+     * registered by the server dialling it, never with a token.
+     */
+    static setRegistrationToken(id: string, token: string, expiresAt: string): { changes: number } {
+        return db
+            .prepare(
+                "UPDATE clients SET registration_token_hash = ?, registration_expires_at = ?, updated_at = datetime('now') WHERE id = ? AND connection_mode = 'inbound'",
+            )
+            .run(hashToken(token), expiresAt, id);
+    }
+
+    /**
+     * The inbound client a registration token was issued for, while the token is valid.
+     * The expiry goes through datetime(): it is written as ISO text, and compared as a
+     * plain string with SQLite's own format the two disagree within the same day.
+     */
+    static findByValidRegistrationToken(
+        token: string,
+    ): Pick<ClientRow, "id" | "auth_token"> | undefined {
+        return db
+            .prepare(
+                "SELECT id, auth_token FROM clients WHERE registration_token_hash = ? AND connection_mode = 'inbound' AND datetime(registration_expires_at) > datetime('now')",
+            )
+            .get(hashToken(token)) as Pick<ClientRow, "id" | "auth_token"> | undefined;
+    }
+
+    /**
+     * Binds the agent that presented `token` to the client it was issued for: the hostname
+     * it reported, the auth token the server issued for it, and the token cleared, so it
+     * registers nothing a second time. Matched on the token in the same statement, so of two
+     * agents racing with one token only the first gets the client.
+     *
+     * The allowed address is set at the first registration only, and only when the
+     * operator gave none: then the address the agent registers from becomes it. A client
+     * that registers anew keeps what the operator has set since -- including the check
+     * switched off. In the SET clause every column still reads its old value.
+     *
+     * Returns false when the token was no longer valid.
+     */
+    static completeRegistration(
         id: string,
+        token: string,
         hostname: string,
         authToken: string,
-        allowedIp: string,
-    ): void {
-        db.prepare(`
-            INSERT INTO clients (id, hostname, auth_token, inbound_allowed_ip, connection_mode, last_seen)
-            VALUES (?, ?, ?, ?, 'inbound', datetime('now'))
-        `).run(id, hostname, hashToken(authToken), allowedIp);
+        registeringIp: string,
+    ): boolean {
+        const { changes } = db
+            .prepare(`
+                UPDATE clients SET
+                    hostname = ?,
+                    auth_token = ?,
+                    inbound_allowed_ip = CASE
+                        WHEN auth_token IS NULL THEN COALESCE(inbound_allowed_ip, ?)
+                        ELSE inbound_allowed_ip
+                    END,
+                    registration_token_hash = NULL,
+                    registration_expires_at = NULL,
+                    last_seen = datetime('now'),
+                    updated_at = datetime('now')
+                WHERE id = ?
+                  AND connection_mode = 'inbound'
+                  AND registration_token_hash = ?
+                  AND datetime(registration_expires_at) > datetime('now')
+            `)
+            .run(hostname, hashToken(authToken), registeringIp, id, hashToken(token));
+        return changes > 0;
     }
 
     static createOutbound(

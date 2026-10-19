@@ -84,6 +84,12 @@ describe("activityMessage: the server's own events", () => {
         expect(activityMessage(event("client.registered", { data: { clientName: "lb-01" } }))).toBe("lb-01 registered");
     });
 
+    it("says when an agent was registered under a client that had one", () => {
+        expect(
+            activityMessage(event("client.registered", { data: { hostname: "lb-01.example.net", reregistered: true } })),
+        ).toBe("lb-01.example.net registered again");
+    });
+
     it("names a scheduler as the settings page does", () => {
         const failed = (data: ActivityRecord["data"]) => activityMessage(event("scheduler.failed", { data }));
         expect(failed({ scheduler: "notification-cleanup", error: "disk full" })).toBe(

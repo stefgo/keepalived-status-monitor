@@ -1,7 +1,8 @@
-import { MoreVertical, Edit, RefreshCw, WifiOff } from "lucide-react";
+import { MoreVertical, Edit, RefreshCw, WifiOff, KeyRound, Hourglass } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Client, CLIENT_STATUS, CONNECTION_MODE } from "@kasm/shared";
-import { clientName, formatDate, getErrorMessage } from "../../../utils";
+import { Client, CLIENT_STATUS, CONNECTION_MODE, type RegistrationToken } from "@kasm/shared";
+import { clientName, describeFailure, formatDate, getErrorMessage } from "../../../utils";
 import { RelativeTime } from "../../../components/RelativeTime";
 import { useBackPath } from "../../../hooks/useBackPath";
 import { useEscapeToLeave } from "../../../hooks/useEscapeToLeave";
@@ -10,11 +11,13 @@ import {
     ActionButton,
     ActionMenu,
     Badge,
+    Button,
     EntityHeader,
     FOCUS_RING,
     cn,
     type EntityDetail,
     useActionMenu,
+    useConfirm,
     useToast,
     StatusDot,
     MenuItem,
@@ -25,6 +28,10 @@ import { ClientKeepalivedPanel } from "../../keepalived/components/ClientKeepali
 import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
 import { clusterLabel, summarizeKeepalived } from "../../keepalived/lib/vrrp";
 import { offlineNotice } from "../lib/offlineNotice";
+import { awaitsRegistration, registrationNotice, registrationTokenState } from "../lib/registration";
+import { describeReregister } from "../confirmations";
+import { RegistrationTokenModal } from "./RegistrationTokenModal";
+import { issueRegistrationToken } from "../../../queries/clients";
 import { clusterPath, paths } from "../../../lib/paths";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
 
@@ -40,6 +47,7 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
     const clusters = useVrrpClusters();
     const { menuState, triggerRef, openMenu, closeMenu } = useActionMenu<string>();
     const { show } = useToast();
+    const { confirm, alert } = useConfirm();
 
     const handleReloadClient = async () => {
         try {
@@ -54,11 +62,34 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
         }
     };
 
-    // The client editor is a route of its own and handles its own Escape.
-    useEscapeToLeave(back);
+    // The token the server just issued, the one time it is shown.
+    const [issuedToken, setIssuedToken] = useState<RegistrationToken | null>(null);
+
+    // A client that waits has nothing to lose by a new token, so it goes out at once.
+    const handleNewToken = async () => {
+        try {
+            setIssuedToken(await issueRegistrationToken(client.id));
+        } catch (e: unknown) {
+            await alert(describeFailure("No token was issued", e));
+        }
+    };
+
+    // A registered one asks first: the agent that registers with the token takes it over.
+    // A refusal keeps the dialog open, with the server's reason in it.
+    const handleReregister = () =>
+        confirm({
+            ...describeReregister(client),
+            onConfirm: async () => setIssuedToken(await issueRegistrationToken(client.id)),
+        });
+
+    // The client editor is a route of its own and handles its own Escape. Off while the
+    // token is on screen: that dialog refuses Escape, because the token is shown once.
+    useEscapeToLeave(back, { enabled: !issuedToken });
 
     const isOnline = client.status === CLIENT_STATUS.ONLINE;
     const isInbound = client.connectionMode !== CONNECTION_MODE.OUTBOUND;
+    const waiting = awaitsRegistration(client);
+    const tokenState = registrationTokenState(client.registrationExpiresAt);
 
     const summary = reading ? summarizeKeepalived(reading) : null;
     const keepalived = reading
@@ -91,7 +122,20 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                       visibility: "always" as const,
                   },
               ]
-            : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
+            : waiting
+              ? []
+              : [{ label: "Last Seen", value: formatDate(client.lastSeen) }]),
+        ...(tokenState === "none"
+            ? []
+            : [
+                  {
+                      label: "Registration Token",
+                      value:
+                          tokenState === "open"
+                              ? `valid until ${formatDate(client.registrationExpiresAt)}`
+                              : "expired",
+                  },
+              ]),
     ];
 
     const notice = offlineNotice({ lastSeen: client.lastSeen, readingAt: reading?.collectedAt });
@@ -112,7 +156,11 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 meta={
                     <>
                         <Badge variant="info">{isInbound ? "Inbound" : "Outbound"}</Badge>
-                        {!isOnline && <Badge variant="warning">Offline</Badge>}
+                        {waiting ? (
+                            <Badge variant="info">Awaiting registration</Badge>
+                        ) : (
+                            !isOnline && <Badge variant="warning">Offline</Badge>
+                        )}
                         {isOnline && reading && !reading.running && (
                             <Badge variant="warning">No keepalived running</Badge>
                         )}
@@ -151,6 +199,14 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                             >
                                 Edit
                             </MenuItem>
+                            {isInbound && (
+                                <MenuItem
+                                    icon={KeyRound}
+                                    onClick={waiting ? () => void handleNewToken() : handleReregister}
+                                >
+                                    {waiting ? "New Token" : "Re-register Agent"}
+                                </MenuItem>
+                            )}
                         </ActionMenu>
                     </div>
                 }
@@ -160,6 +216,8 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                 It says so instead, or the page reads as a broken one. */}
             {isOnline ? (
                 <ClientKeepalivedPanel clientId={client.id} state={reading ?? null} />
+            ) : waiting ? (
+                <WaitingNotice client={client} tokenOpen={tokenState === "open"} onNewToken={handleNewToken} />
             ) : (
                 <div role="status" className="flex gap-3 rounded-md border border-border bg-card p-4">
                     <WifiOff size={18} className="mt-0.5 shrink-0 text-warning" />
@@ -189,6 +247,43 @@ export const ClientOverview = ({ client }: ClientOverviewProps) => {
                     </div>
                 </div>
             )}
+
+            {issuedToken && (
+                <RegistrationTokenModal
+                    token={issuedToken.token}
+                    expiresAt={issuedToken.expiresAt}
+                    onClose={() => setIssuedToken(null)}
+                />
+            )}
+        </div>
+    );
+};
+
+/** In place of the VRRP instances while the client waits for its first agent. */
+const WaitingNotice = ({
+    client,
+    tokenOpen,
+    onNewToken,
+}: {
+    client: Client;
+    tokenOpen: boolean;
+    onNewToken: () => Promise<void>;
+}) => {
+    const notice = registrationNotice(client);
+    return (
+        <div role="status" className="flex gap-3 rounded-md border border-border bg-card p-4">
+            <Hourglass size={18} className="mt-0.5 shrink-0 text-warning" />
+            <div className="min-w-0">
+                <div className="font-medium text-text-primary">{notice.title}</div>
+                {notice.lines.map((line) => (
+                    <p key={line} className="mt-1 text-sm text-text-muted">{line}</p>
+                ))}
+                <div className="mt-3">
+                    <Button variant="primary" icon={KeyRound} onClick={() => void onNewToken()}>
+                        {tokenOpen ? "Generate New Token" : "Generate Token"}
+                    </Button>
+                </div>
+            </div>
         </div>
     );
 };

@@ -10,6 +10,17 @@ dev keeps the text; the stable release from main empties this file again.
 Nothing inside an HTML comment is published.
 -->
 
+### A new client is there before its agent
+
+Adding an inbound client now creates it right away, under the name you give it, marked
+*Awaiting registration*; the registration token is part of that client. When the token runs
+out, the client's page issues a new one. The *Client Tokens* page and its retention settings
+are gone -- there is nothing left to tidy up.
+
+*Re-register Agent* in a client's menu issues a token for a client that is already
+registered. The agent that registers with it takes the client over with its settings and
+history; before, every new registration created a new client and left the old one behind.
+
 ### The level of an activity event can be set per kind
 
 Each kind of event in the activity history has a built-in level. It can now be changed in
@@ -51,5 +62,9 @@ on a narrow screen it no longer runs out of the row.
 
 ### Upgrading
 
-Nothing has to be done. The webhook templates behave as before; their engine now comes from
-a package the stefgo projects share.
+- Registration tokens issued before the upgrade no longer work. Add the client again, or
+  generate a new token on a waiting client. The `/api/v1/tokens` endpoints are replaced by
+  `POST /api/v1/clients/inbound`, and `token_retention_days` and
+  `token_cleanup_interval_hours` can be deleted from `config.yaml`.
+- The webhook templates behave as before; their engine now comes from a package the stefgo
+  projects share.

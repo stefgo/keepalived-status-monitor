@@ -22,8 +22,8 @@ describe("SECTIONS", () => {
 
 describe("sectionBody", () => {
     it("holds the section's own keys and no others", () => {
-        const tokens = section("tokens");
-        expect(Object.keys(sectionBody(tokens, DEFAULT_SETTINGS)).sort()).toEqual([...tokens.keys].sort());
+        const activity = section("activity");
+        expect(Object.keys(sectionBody(activity, DEFAULT_SETTINGS)).sort()).toEqual([...activity.keys].sort());
     });
 });
 
@@ -33,13 +33,8 @@ describe("sectionError", () => {
     });
 
     it("names the key and the server's reason for a value it would refuse", () => {
-        const draft = { ...DEFAULT_SETTINGS, token_retention_days: "soon" };
-        expect(sectionError(section("tokens"), draft)).toBe("token_retention_days: Must be a whole number");
-    });
-
-    it("does not report another section's value", () => {
-        const draft = { ...DEFAULT_SETTINGS, token_retention_days: "soon" };
-        expect(sectionError(section("activity"), draft)).toBeNull();
+        const draft = { ...DEFAULT_SETTINGS, notification_retention_days: "soon" };
+        expect(sectionError(section("activity"), draft)).toBe("notification_retention_days: Must be a whole number");
     });
 });
 
@@ -48,10 +43,9 @@ describe("isDirty", () => {
         for (const s of SECTIONS) expect(isDirty(s, { ...DEFAULT_SETTINGS }, DEFAULT_SETTINGS)).toBe(false);
     });
 
-    it("is per section", () => {
-        const draft = { ...DEFAULT_SETTINGS, token_retention_days: "7" };
-        expect(isDirty(section("tokens"), draft, DEFAULT_SETTINGS)).toBe(true);
-        expect(isDirty(section("activity"), draft, DEFAULT_SETTINGS)).toBe(false);
+    it("is true once one of the section's keys changed", () => {
+        const draft = { ...DEFAULT_SETTINGS, notification_retention_days: "7" };
+        expect(isDirty(section("activity"), draft, DEFAULT_SETTINGS)).toBe(true);
     });
 
     it("ignores a key no section edits", () => {
@@ -60,9 +54,9 @@ describe("isDirty", () => {
     });
 
     it("takes a key that is missing for an empty value", () => {
-        const { token_retention_days: _dropped, ...saved } = DEFAULT_SETTINGS;
-        const tokens = section("tokens");
-        expect(isDirty(tokens, { ...saved, token_retention_days: "" }, saved)).toBe(false);
-        expect(isDirty(tokens, DEFAULT_SETTINGS, saved)).toBe(true);
+        const { activity_level_overrides: _dropped, ...saved } = { ...DEFAULT_SETTINGS, activity_level_overrides: "x=info" };
+        const activity = section("activity");
+        expect(isDirty(activity, { ...saved, activity_level_overrides: "" }, saved)).toBe(false);
+        expect(isDirty(activity, { ...saved, activity_level_overrides: "x=info" }, saved)).toBe(true);
     });
 });

@@ -22,14 +22,12 @@
     - [Delete User](#delete-user)
 - [Clients](#-clients)
     - [List Clients](#list-clients)
+    - [Create Inbound Client](#create-inbound-client)
     - [Create Outbound Client](#create-outbound-client)
     - [Update Client](#update-client)
     - [Delete Client](#delete-client)
     - [Reconnect An Outbound Client](#reconnect-an-outbound-client)
-- [Registration Tokens](#-registration-tokens)
-    - [List Tokens](#list-tokens)
-    - [Create Token](#create-token)
-    - [Delete Token](#delete-token)
+    - [Issue A Registration Token](#issue-a-registration-token)
     - [Register Client (Public)](#register-client-public)
 - [keepalived](#-keepalived)
     - [List Readings](#list-readings)
@@ -39,7 +37,6 @@
 - [Settings & Maintenance](#-settings--maintenance)
     - [Get Settings](#get-settings)
     - [Update Settings](#update-settings)
-    - [Run Invalid Token Cleanup](#run-invalid-token-cleanup)
     - [Run Activity Cleanup](#run-activity-cleanup)
     - [Scheduler Status](#scheduler-status)
 - [Activity](#-activity)
@@ -330,18 +327,19 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
 | Field         | Type           | Description                                              |
 | :------------ | :------------- | :------------------------------------------------------- |
 | `id`          | string         | Client UUID.                                             |
-| `hostname`    | string         | Hostname of the client machine. Always a string: a row without one is sent as `""`. |
+| `hostname`    | string         | Hostname of the client machine. Always a string: a row without one is sent as `""` — an inbound client whose agent has not registered yet. |
 | `displayName` | string \| null | Optional human-readable name.                            |
 | `site`        | string \| null | Network segment or location the operator put the client in. Part of the [cluster key](#list-clusters); `null` for none. |
 | `status`      | string         | `"online"` or `"offline"`.                               |
-| `lastSeen`    | string \| null | ISO 8601 timestamp of last connection.                   |
+| `lastSeen`    | string \| null | ISO 8601 timestamp of last connection. `null` for an inbound client whose agent has not registered yet — the dashboard shows it as *Awaiting registration*. |
 | `version`     | string \| null | Agent version reported on last connection.               |
 | `connectionMode` | string      | `"inbound"` (agent dials in) or `"outbound"` (server dials the agent). |
 | `inboundAllowedIp` | string \| null | Inbound clients: the address or IPv4 network connections must come from; `null` when the check is switched off. |
 | `inboundLastIp` | string \| null | Inbound clients: the address the agent last authenticated from. Read-only and written only after the check above has passed, so it is always an address that was let in. The client editor measures a new `inboundAllowedIp` against it and warns before a value is saved that would refuse the agent. `null` until the agent has connected once. |
+| `registrationExpiresAt` | string \| null | Inbound clients: until when the registration token issued for the client is valid, or `null` when none is open. Set while the client waits for its agent and after [a new token was issued](#issue-a-registration-token); cleared by the registration that uses it. A token that ran out keeps its date. |
 | `outboundTargetAddress` | string \| null | Outbound clients: `host:port` the server dials. |
 | `capabilities` | string[] \| null | What the agent currently connected says it can do, as it named it in its `AUTH` payload (see below). `null` while the client is offline — capabilities belong to the build on the wire, not to the stored client; `[]` is a connected agent that names none. Current agents name `vrrp`. |
-| `createdAt`   | string         | When the client was registered.                          |
+| `createdAt`   | string         | When the client was created — for an inbound client, when its first token was issued. |
 | `updatedAt`   | string \| null | When the stored record last changed.                     |
 
 **Example Response:**
@@ -359,6 +357,7 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
         "connectionMode": "inbound",
         "inboundAllowedIp": "192.168.1.50",
         "inboundLastIp": "192.168.1.50",
+        "registrationExpiresAt": null,
         "outboundTargetAddress": null,
         "capabilities": ["vrrp"],
         "createdAt": "2024-01-01 10:00:00",
@@ -366,6 +365,31 @@ are answered with `429 Too Many Requests` until the window has passed; the respo
     }
 ]
 ```
+
+### Create Inbound Client
+
+`POST /api/v1/clients/inbound`
+
+**Description:** Adds a client whose agent dials the server (inbound mode). The client exists from this call on — in the list, under the name given here — and waits for its agent. The response carries the registration token the agent registers with ([Register Client](#register-client-public)); it is the only place the token appears in the clear, the server stores just its SHA-256 hash on the client. The token is valid for 30 minutes and for one registration; a new one is issued with [Issue A Registration Token](#issue-a-registration-token).
+
+#### Request Body
+
+| Field              | Type   | Required | Description                                                                                     |
+| :----------------- | :----- | :------- | :---------------------------------------------------------------------------------------------- |
+| `displayName`      | string | **Yes**  | Name the client is listed under, at most 100 characters. Until the agent reports its hostname it is all the client is known by. |
+| `inboundAllowedIp` | string | No       | IPv4 address or CIDR network the client is restricted to. Without it the address the agent registers from is used. |
+
+#### Response
+
+```json
+{
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "token": "a1b2c3d4e5...",
+    "expiresAt": "2024-01-01T10:30:00.000Z"
+}
+```
+
+- **400** — `displayName` empty or longer than 100 characters, or `inboundAllowedIp` not an IPv4 address or network.
 
 ### Create Outbound Client
 
@@ -477,112 +501,45 @@ The client's last keepalived reading goes with it. For an outbound client any pe
 
 ---
 
-## 🎫 Registration Tokens
+### Issue A Registration Token
 
-### List Tokens
+`POST /api/v1/clients/:clientId/registration-token`
 
-`GET /api/v1/tokens`
-
-**Description:** Lists all registration tokens including used and expired ones.
-
-#### Response (Array of Token objects)
-
-| Field              | Type           | Description                                     |
-| :----------------- | :------------- | :---------------------------------------------- |
-| `tokenHash`        | string         | SHA-256 of the token, hex. The token itself is not stored and cannot be listed. |
-| `createdAt`        | string         | Creation timestamp.                             |
-| `expiresAt`        | string         | ISO 8601 expiry timestamp (30 min from creation). |
-| `usedAt`           | string \| null | When a client registered with this token.       |
-| `displayName`      | string \| null | Name the client will be created under, if the token carries one. |
-| `inboundAllowedIp` | string \| null | Allowed address or network the client will start with, if the token carries one. |
-
-The rows also carry the database columns under their own names (`token_hash`, `created_at`, `expires_at`, `used_at`, `display_name`, `allowed_ip`); the dashboard reads the camelCase fields.
-
-**Example Response:**
-
-```json
-[
-    {
-        "tokenHash": "9f86d081884c...",
-        "createdAt": "2024-01-01 10:00:00",
-        "expiresAt": "2024-01-01T10:30:00.000Z",
-        "usedAt": null,
-        "displayName": "lb-02",
-        "inboundAllowedIp": "192.168.1.0/24"
-    }
-]
-```
-
-### Create Token
-
-`POST /api/v1/tokens`
-
-**Description:** Generates a new short-lived registration token (valid for 30 minutes), optionally carrying what the registering agent cannot tell the server about itself.
-
-The response is the only place the token appears in the clear: the server stores just its SHA-256 hash, and [List Tokens](#list-tokens) returns that hash.
-
-#### Request Body
-
-The body is optional; a request without one behaves as it always did.
-
-| Field              | Type   | Required | Description                                                                                     |
-| :----------------- | :----- | :------- | :---------------------------------------------------------------------------------------------- |
-| `displayName`      | string | No       | Name the client is created under. Without it the hostname the agent reports is used.            |
-| `inboundAllowedIp` | string | No       | IPv4 address or CIDR network the client is restricted to. Without it the address the agent registers from is used. |
-
-#### Response
-
-```json
-{
-    "token": "a1b2c3d4e5...",
-    "expiresAt": "2024-01-01T10:30:00.000Z",
-    "displayName": "lb-02",
-    "inboundAllowedIp": "192.168.1.0/24"
-}
-```
-
-- **400** — `displayName` longer than 100 characters, or `inboundAllowedIp` not an IPv4 address or network.
-
-Both defaults are stored with the token and applied by `POST /api/v1/register`. Tokens issued before these fields existed carry neither and keep behaving as they did.
-
-### Delete Token
-
-`DELETE /api/v1/tokens/:tokenHash`
-
-**Description:** Manually invalidates and deletes a registration token.
+**Description:** Issues a new registration token for an inbound client and replaces one that was still open. For a client that waits for its agent, this is the way past a token that ran out. For a registered client, it puts a reinstalled or moved agent back under the same client — with its id, settings and activity: the agent connected now keeps working until an agent registers with the new token, and is cut off at that moment. Like on [Create Inbound Client](#create-inbound-client), the response is the only place the token appears in the clear.
 
 #### Path Parameters
 
-| Parameter   | Type   | Required | Description                                       |
-| :---------- | :----- | :------- | :------------------------------------------------ |
-| `tokenHash` | string | **Yes**  | The `tokenHash` of the token, as the list returns it. |
+| Parameter  | Type   | Required | Description             |
+| :--------- | :----- | :------- | :---------------------- |
+| `clientId` | string | **Yes**  | The UUID of the client. |
 
 #### Response
 
 ```json
-{ "status": "deleted" }
+{ "token": "a1b2c3d4e5...", "expiresAt": "2024-01-01T10:30:00.000Z" }
 ```
 
-A token that does not exist answers `404` with `{ "error": "Token not found" }`.
+- **400** — the client is an outbound client; those register through the server dialling them.
+- **404** — no such client.
 
 ### Register Client (Public)
 
 `POST /api/v1/register`
 
-**Description:** Public endpoint used by the client agent to register itself using a valid token. Returns the client's identity: a `clientId` and a permanent `authToken` for subsequent WebSocket connections. Both are issued by the **server**; every successful call creates a new client.
+**Description:** Public endpoint used by the client agent to register itself using a valid token. Returns the client's identity: a `clientId` and a permanent `authToken` for subsequent WebSocket connections. Both are issued by the **server**: the id is the one of the client the token was issued for, the auth token is new.
 
 #### Request Body
 
 | Field      | Type   | Required | Description                                     |
 | :--------- | :----- | :------- | :---------------------------------------------- |
-| `token`    | string | **Yes**  | A valid, unused, and non-expired registration token. |
+| `token`    | string | **Yes**  | The registration token issued for the client, unused and not expired. |
 | `hostname` | string | No       | Hostname of the client device. Stored as `unknown` when missing. |
 
-A body without a `token` is answered with `400`, before the token is looked up. An unknown, used or expired token gets `403`.
+A body without a `token` is answered with `400`, before the token is looked up. An unknown, used, replaced or expired token gets `403`.
 
 A `clientId` in the body, as sent by older agents, is ignored. It used to be taken over and
 upserted, which let anyone holding a registration token name an existing client and replace its
-auth token.
+auth token. The id the token was issued for is the only one it can register.
 
 **Example Request:**
 
@@ -604,9 +561,9 @@ auth token.
 
 > The returned `token` is the permanent `authToken` and `clientId` the id the server knows the client by. The agent saves both in `identity.json` in its data directory; the `token` is used for all future WebSocket connections.
 >
-> Registering an agent again creates a **new** client entry; the previous one stays behind offline and can be deleted in the UI.
+> The client's display name was given when it was created. Its allowed address too, if one was; otherwise the address the agent registers from becomes it. The token is cleared, so it registers nothing a second time.
 >
-> The new client's display name and allowed address come from the token when it carries them (see `POST /api/v1/tokens`). Otherwise the agent's reported hostname names it and the address it registered from becomes its allowed address, which is what a token without defaults does.
+> With a token issued for a client that is already registered, the new agent takes the client over: its hostname is stored, the previous auth token stops being accepted, and a connected agent is closed with `4000 Client re-registered`. The allowed address stays as the client has it — a check switched off stays off. The `client.registered` event then carries `reregistered: true`.
 
 ---
 
@@ -783,8 +740,6 @@ The defaults:
 
 ```json
 {
-    "token_retention_days": "30",
-    "token_cleanup_interval_hours": "24",
     "notification_retention_days": "90",
     "notification_retention_count": "500",
     "notification_cleanup_interval_hours": "24",
@@ -794,14 +749,12 @@ The defaults:
 
 | Setting                                      | Description                                                                   |
 | :------------------------------------------- | :---------------------------------------------------------------------------- |
-| `token_retention_days`                       | Days to retain used/expired registration tokens before the cleanup removes them. `"0"` removes them on the next run. |
-| `token_cleanup_interval_hours`               | Interval of the automatic token cleanup. `"0"` disables the scheduler.        |
 | `notification_retention_days`                | Days to keep activity events, measured against `occurredAt`. `"0"` is not "forever": it falls back to `90`. |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Interval of the automatic activity cleanup. `"0"` disables the scheduler.     |
 | `activity_level_overrides`                   | The level an event kind is recorded with: `kind=level` entries separated by commas, `""` for none. `level` is `trace`, `info`, `warning`, `error`, or `none` to not record the kind at all. |
 
-The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` replaced `retention_invalid_tokens_days` without taking its value over, and `retention_invalid_tokens_count` is gone. Left in `config.yaml`, the old keys are ignored and logged as unknown at startup.
+The `notification_*` names are kept from the project KASM started from, because they are stored values; the settings page calls the list "Activity History". `token_retention_days` and `token_cleanup_interval_hours` went with the list of registration tokens — a token is a property of its client now and leaves nothing to clean up. Left in `config.yaml`, these and older removed keys are ignored and logged as unknown at startup.
 
 ### Update Settings
 
@@ -815,14 +768,13 @@ Pass any of the setting keys to update them.
 
 ```json
 {
-    "token_retention_days": "60",
     "notification_retention_days": "30"
 }
 ```
 
 | Kind of setting | Keys | Accepted values |
 | :-------------- | :--- | :-------------- |
-| Counts, days, intervals | `token_*`, `notification_*` | A non-negative whole number, as string or number. Stored as string. |
+| Counts, days, intervals | `notification_*` | A non-negative whole number, as string or number. Stored as string. |
 | Event levels | `activity_level_overrides` | Empty, or `kind=level` entries separated by commas or line breaks. Any kind is accepted, each only once; `none` is refused for `vrrp.incident_opened` and `vrrp.incident_resolved`. |
 
 Keys not listed are accepted and written as they are: the settings page sends back everything it read, including keys an operator added to `config.yaml` by hand, and rejecting or dropping them would delete them from the file.
@@ -835,19 +787,7 @@ Keys not listed are accepted and written as they are: the settings page sends ba
 
 - **400** — a value does not match the table above, or the body contains `security`. Network and HSTS settings are configured in `config.yaml` only; a session token must not be enough to lock every agent out.
 
-> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler, `token_*` the `TokenCleanupService`. `activity_level_overrides` is read whenever an event is written, so it applies to the next event and leaves the stored ones as they are.
-
-### Run Invalid Token Cleanup
-
-`POST /api/v1/settings/cleanup/invalid-tokens`
-
-**Description:** Runs `TokenCleanupService` now, removing registration tokens that have been invalid (used or expired) for longer than `token_retention_days`. Recorded as a `manual` run of `token-cleanup`.
-
-#### Response
-
-```json
-{ "success": true, "removed": 4 }
-```
+> A changed value takes effect without a restart: `notification_*` restarts the `NotificationCleanupService` scheduler. `activity_level_overrides` is read whenever an event is written, so it applies to the next event and leaves the stored ones as they are.
 
 ### Run Activity Cleanup
 
@@ -885,13 +825,12 @@ Keys not listed are accepted and written as they are: the settings page sends ba
                 "result": { "removed": 12 },
                 "error": null
             }
-        },
-        "token-cleanup": { "isRunning": false, "nextRun": null, "lastRun": null }
+        }
     }
 }
 ```
 
-Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`) and `lastRun`, the last run it finished (`null` before its first). `lastRun.trigger` is `schedule` or `manual`; `lastRun.status` is `success`, `failed` (with `error`) or `interrupted` (the server stopped during the run; no `finishedAt`, no `result`). `result` is `{ removed }` for both schedulers. The state is kept in the database and survives a restart.
+Every scheduler reports `isRunning`, `nextRun` (`null` while its interval is `0`) and `lastRun`, the last run it finished (`null` before its first). `lastRun.trigger` is `schedule` or `manual`; `lastRun.status` is `success`, `failed` (with `error`) or `interrupted` (the server stopped during the run; no `finishedAt`, no `result`). `result` is `{ removed }`. The state is kept in the database and survives a restart.
 
 ---
 
@@ -930,7 +869,7 @@ the agent happened to read it.
 | `keepalived.started` / `keepalived.stopped` | agent | `info` / `warning` | `pid`, `version` |
 | `keepalived.unreadable` | agent | `error` | `error` |
 | `client.connected` / `client.disconnected` | server | `trace` | `connectionMode`, `version`, `clientName` |
-| `client.registered` | server | `info` | `hostname`, `clientName` |
+| `client.registered` | server | `info` | `hostname`, `clientName`, `connectionMode`, `ip` (inbound: the allowed address after the registration), `reregistered` (inbound: an agent took over a client that had one) |
 | `scheduler.failed` | server | `error` | `scheduler`, `trigger`, `error`; no client |
 | `vrrp.master_changed` | server | `info` | `cluster`, `previousMaster`, see below |
 | `vrrp.split_brain` / `vrrp.master_lost` | server | `info` | `cluster`, `previousMaster`, see below |

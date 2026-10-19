@@ -13,7 +13,6 @@ import { fileURLToPath } from "url";
 import { initOIDC, appConfig, serverPort, trustedProxies } from "./config/AppConfig.js";
 import { AuthService } from "./services/AuthService.js";
 import { NotificationCleanupService } from "./services/NotificationCleanupService.js";
-import { TokenCleanupService } from "./services/TokenCleanupService.js";
 import { SchedulerStateRepository } from "./repositories/SchedulerStateRepository.js";
 import apiRoutes from "./routes/api.js";
 import { SESSION_COOKIE } from "./services/SessionCookie.js";
@@ -32,7 +31,6 @@ await initOIDC();
 await AuthService.initializeAdmin(); // Ensure admin user
 SchedulerStateRepository.markInterrupted();
 NotificationCleanupService.startScheduler();
-TokenCleanupService.startScheduler();
 // Before any agent can connect: the first connection is already a change to evaluate.
 ClusterEventService.start();
 
@@ -200,7 +198,6 @@ const shutdown = () => {
     shuttingDown = true;
     server.log.info("Shutting down server...");
     NotificationCleanupService.stopScheduler();
-    TokenCleanupService.stopScheduler();
     // close() waits for every socket to finish its closing handshake. A peer that never
     // answers must not hold the process until Docker kills it.
     setTimeout(() => {
@@ -256,7 +253,6 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (err) => {
     server.log.fatal({ err }, "Uncaught exception, terminating");
     NotificationCleanupService.stopScheduler();
-    TokenCleanupService.stopScheduler();
     // Give the pino transport worker a moment to flush before we go.
     setTimeout(() => process.exit(1), 250);
 });

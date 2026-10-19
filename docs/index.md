@@ -23,7 +23,7 @@ Three parties are involved:
 
 | | What it holds | Talks to |
 |---|---|---|
-| **KASM server** | The client list, users, registration tokens, settings, the last keepalived reading of every host and the activity list — in SQLite | the browser, the agents |
+| **KASM server** | The client list (with their registration tokens), users, settings, the last keepalived reading of every host and the activity list — in SQLite | the browser, the agents |
 | **KASM agent** | Its identity, its last reading and the activity events not yet acknowledged — in its own data directory | the KASM server, the local keepalived |
 | **keepalived** | The VRRP instances, sync groups and their counters | the agent, through signals and its dump files |
 

@@ -143,9 +143,11 @@ In the dashboard, **Clients → Add Client** → *The agent connects to this ser
 
 ![The Add Client wizard](assets/screenshots/add-client.png)
 
-The wizard takes an optional display name and an allowed IP or network for the new client;
-leave both empty to use the agent's hostname and the address it registers from. It then
-shows the registration token — copy it.
+The wizard takes the display name the client is listed under and, optionally, an allowed IP
+or network; leave that empty to use the address the agent registers from. **Add Client &
+Generate Token** adds the client — it waits for its agent — and shows the registration token
+**once**: copy it. It is valid for 30 minutes; the client's page issues a new one if it runs
+out.
 
 Then open the agent's page at `http://<host>:3011/register` and enter:
 
@@ -156,7 +158,7 @@ Then open the agent's page at `http://<host>:3011/register` and enter:
 | Setup PIN | the PIN from `docker logs kasm-client` |
 
 **Register** — the agent stores its identity, connects, and the register page closes itself.
-Back in the dashboard the host is listed under **Clients**, and its VRRP instances show up
+Back in the dashboard the client created in the wizard is connected, and its VRRP instances show up
 with the first reading, grouped into clusters with the other hosts that share them.
 
 ## What next

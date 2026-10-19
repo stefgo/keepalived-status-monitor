@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasAddClientInput, type AddClientInput } from "./addClientForm";
+import { hasAddClientInput, inboundDetailsComplete, type AddClientInput } from "./addClientForm";
 
 const input = (changes: Partial<AddClientInput> = {}): AddClientInput => ({
     displayName: "",
@@ -28,5 +28,20 @@ describe("hasAddClientInput", () => {
 
     it("counts the ticked restriction", () => {
         expect(hasAddClientInput(input({ restrictIp: true }))).toBe(true);
+    });
+});
+
+describe("inboundDetailsComplete", () => {
+    it("needs a display name", () => {
+        expect(inboundDetailsComplete(input())).toBe(false);
+        expect(inboundDetailsComplete(input({ displayName: "  " }))).toBe(false);
+        expect(inboundDetailsComplete(input({ displayName: "lb-01" }))).toBe(true);
+    });
+
+    it("needs a valid address while the restriction is on", () => {
+        const named = { displayName: "lb-01", restrictIp: true };
+        expect(inboundDetailsComplete(input({ ...named, allowedIp: "" }))).toBe(false);
+        expect(inboundDetailsComplete(input({ ...named, allowedIp: "10.0.0" }))).toBe(false);
+        expect(inboundDetailsComplete(input({ ...named, allowedIp: "10.0.0.0/24" }))).toBe(true);
     });
 });

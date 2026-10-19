@@ -9,7 +9,7 @@ import { QueryError } from "../../components/QueryError";
 import { useAuth } from "../auth/AuthContext";
 import { NotFoundError } from "../../lib/notFound";
 import { CLUSTER_NET_PARAM, ROUTES, clusterPath, paths } from "../../lib/paths";
-import { queryClient } from "../../lib/queryClient";
+
 import {
     useClient,
     useClients,
@@ -18,7 +18,6 @@ import {
     useUpdateClient,
 } from "../../queries/clients";
 import { useKeepalivedStates } from "../../queries/keepalived";
-import { tokenListOptions } from "../../queries/tokens";
 import { useVrrpClusters } from "../keepalived/hooks/useVrrpClusters";
 import { clusterOf } from "../keepalived/lib/vrrp";
 import { useRouteClient } from "./routeContext";
@@ -96,7 +95,6 @@ export function AddClientRoute() {
     return (
         <AddClientWizard
             onCreateOutbound={(data) => createOutboundClient.mutateAsync(data)}
-            onTokenCreated={() => void queryClient.invalidateQueries({ queryKey: tokenListOptions.queryKey })}
         />
     );
 }

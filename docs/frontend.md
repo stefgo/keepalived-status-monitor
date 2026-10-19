@@ -28,11 +28,12 @@ src/
 │   │   ├── AuthContext.ts                # Auth context object and useAuth hook
 │   │   └── AuthProvider.tsx              # Authentication state
 │   ├── clients/                          # Client management
-│   │   ├── confirmations.ts              # Delete-client text
+│   │   ├── confirmations.ts              # Delete-client and re-register texts
 │   │   ├── lib/
 │   │   │   ├── clientForm.ts             # The client editor's draft, its request and its rules (pure)
-│   │   │   ├── addClientForm.ts          # Whether the add-client flow holds anything to lose (pure)
-│   │   │   └── offlineNotice.ts          # What an offline client's page says in place of its instances (pure)
+│   │   │   ├── addClientForm.ts          # Whether the add-client flow holds anything to lose or enough to finish (pure)
+│   │   │   ├── offlineNotice.ts          # What an offline client's page says in place of its instances (pure)
+│   │   │   └── registration.ts           # Whether a client waits for its agent, and what its page says (pure)
 │   │   └── components/
 │   │       ├── ManagedClients.tsx        # Container for client list & actions
 │   │       ├── ClientList.tsx            # Paginated client data table
@@ -40,6 +41,7 @@ src/
 │   │       ├── ClientIdentityCard.tsx    # The client's own fields; shows the form the editor holds
 │   │       ├── ClientEditor.tsx          # The page that edits a client: holds the form and the guard
 │   │       ├── ClientLabel.tsx           # Dot and name of a client, for the rows that name one
+│   │       ├── RegistrationTokenModal.tsx # An inbound client's registration token, shown once
 │   │       └── add-client/               # One wizard for both connection modes
 │   │           ├── AddClientWizard.tsx   # Mode choice, then the inbound or outbound branch
 │   │           ├── useAddClientForm.ts   # Form state, held above the wizard
@@ -92,12 +94,6 @@ src/
 │   │       ├── SettingsSections.tsx      # One component per section
 │   │       ├── SchedulerBox.tsx          # Status, last and next run of a scheduler, and Run Now
 │   │       └── SettingsParts.tsx         # ManualRun: the library's, reading a failure the app's way
-│   └── tokens/                           # Registration token management
-│       ├── confirmations.ts              # Delete-token text
-│       └── components/
-│           ├── TokenOverview.tsx
-│           ├── TokenList.tsx
-│           └── TokenModal.tsx
 ├── components/
 │   ├── confirmations.ts                  # The question asked when an editor with unsaved changes is left
 │   ├── RelativeTime.tsx                  # "5 min ago" on the shared clock, the date in the tooltip
@@ -135,7 +131,7 @@ src/
 │   ├── activity.ts                       # The activity list and the per-user seen state
 │   ├── scheduler.ts                      # Status of the schedulers the server runs
 │   ├── settings.ts                       # The settings page's requests (not cached)
-│   ├── users.ts, tokens.ts, webhooks.ts  # Their lists and the changes to them
+│   ├── users.ts, webhooks.ts             # Their lists and the changes to them
 ├── stores/
 │   └── useUIStore.ts                     # UI state (sidebar collapse, persisted) -- the only store
 ├── Main.tsx                              # Entry point: mounts the app
@@ -162,10 +158,9 @@ unauthenticated users to `/login`, inside `AppLayout`.
 | `/clients/:clientId/edit` | The `ClientEditor` for that client.                           |
 | `/activity`         | The activity list.                                                  |
 | `/users`            | User management.                                                    |
-| `/tokens`           | Registration token management.                                      |
 | `/webhooks`         | The webhooks events are reported to (`WebhookOverview`).            |
 | `/webhooks/new`, `/webhooks/:webhookId` | The `WebhookEditor`, adding or editing one webhook.  |
-| `/settings`         | System settings (retention of tokens and activity).                 |
+| `/settings`         | System settings (retention of the activity).                        |
 | `/client/:clientId`, `/client/:clientId/edit` | The addresses the client pages had before; redirect to `/clients/…` for one release (`LEGACY_ROUTES`). |
 | `/client/:clientId/instance/:instanceName` | Redirects to the cluster of that instance; kept for old links. |
 
@@ -274,8 +269,8 @@ Every request goes through `api.get`, `api.post`, `api.put`, `api.patch` or `api
 | `clients.ts` | The registered clients and their status. Update and delete are optimistic and roll back when the server refuses. | `CLIENTS_UPDATE` |
 | `keepalived.ts` | One entry: the last reading of every client, by client id. Clusters are not held: `useVrrpClusters` derives them. `refreshKeepalived(clientId)` asks one agent to read now; the result arrives over the socket. | `KEEPALIVED_STATE_UPDATE` |
 | `activity.ts` | The activity list as the server reads it for the session's user, so `seen` needs no user id on this side. Marking seen and deleting all are optimistic. `useUnseenTone` gives the badge its colour as a string, so the shell re-renders only when that changes. | `ACTIVITY_UPDATE`, `ACTIVITY_APPENDED`, `ACTIVITY_SEEN` |
-| `scheduler.ts` | The status of the schedulers the server runs (`notification-cleanup`, `token-cleanup`). | `SCHEDULER_STATUS_UPDATE` |
-| `webhooks.ts`, `users.ts`, `tokens.ts` | Their lists. Nothing broadcasts a change, so they go stale by age (30 s; the tokens at once) and are read again after a change made here. | — |
+| `scheduler.ts` | The status of the schedulers the server runs (`notification-cleanup`). | `SCHEDULER_STATUS_UPDATE` |
+| `webhooks.ts`, `users.ts` | Their lists. Nothing broadcasts a change, so they go stale by age (30 s) and are read again after a change made here. | — |
 | `settings.ts` | No entry: the requests of the settings page. | — |
 
 The entries a message keeps current never go stale by age (`staleTime: Infinity`). The settings form is deliberately not a cache entry: one that is read again behind the form would overwrite what is typed and not yet saved.
@@ -324,7 +319,7 @@ The container component for the client management view. Coordinates between the 
 - **Functionality**:
     - Displays the list of registered clients (`ClientList`).
     - Opens the client editor (`ClientEditor`) for renaming a client, setting its site (part of the VRRP cluster key: hosts of one cluster need the same site), for inbound clients editing or switching off the address its connections must come from, and for outbound clients the address the server dials. Leaving with unsaved changes asks first, whichever way out is taken (see [Forms](#forms-hooksuseentityform-hooksuseunsavedchangesguard)). The draft is checked against `UpdateClientSchema` from `@kasm/shared`, the schema the server parses the request with, so an address it would refuse is reported at its field; an address that was not touched is not sent and so stays savable. Server errors are shown in the form. An allowed address that would not let `inboundLastIp` — the address of the agent's last successful connect — back in is called out beneath the field, using the same `isIpAllowed` the server decides with. It does not block saving: the value is well-formed and the agent may have moved on purpose, so this is a consequence worth seeing, not a reason to refuse.
-    - Opens the `AddClientWizard` — one flow for both connection modes, replacing the former "Add Outbound Client" dialog and "Generate New Token" button.
+    - Opens the `AddClientWizard` — one flow for both connection modes. There is no list of registration tokens: a token is a property of the inbound client it was issued for.
     - The row menu's **Reload** asks the agent to read keepalived now, or — for an offline outbound client — dials it again.
     - A **keepalived** column sums up the host's last reading: `2 instances · 1 MASTER`, with FAULTs called out, or "Not running" / "Unreadable".
     - Deletes clients after a confirmation that says what goes (the server-side record and last keepalived reading) and what stays (keepalived on the host; the agent keeps running but is refused).
@@ -402,7 +397,7 @@ It returns `close` (leave for the parent in the route tree, asked about while di
 `Modal` from `@stefgo/react-ui-components` is what a dialog is built from. The three hand-built overlays that preceded it (`fixed inset-0 bg-black/80 …`) had no focus trap, no Escape, no scroll lock and no focus return.
 
 - `UserDialog` turns `closeOnOverlayClick` off: it holds unsaved input, and a stray click beside it should not discard the work.
-- `TokenModal` turns `closeOnEscape` off as well and hides the close button. The token is in the clear exactly once, so dismissing the dialog is not a way out but the loss of what the flow was for; the button below it is the only way on. The token stands in the library's `CopyField`: over plain HTTP, where the browser has no clipboard, the button selects the token and says so instead of failing silently.
+- `RegistrationTokenModal` turns `closeOnEscape` off as well and hides the close button. The token is in the clear exactly once, so dismissing the dialog is not a way out but the loss of what the flow was for; the button below it is the only way on. The token stands in the library's `CopyField`: over plain HTTP, where the browser has no clipboard, the button selects the token and says so instead of failing silently.
 
 Editors that live in the workspace rather than in a dialog leave through `useUnsavedChangesGuard`, which also handles their `Escape` — see [Forms](#forms-hooksuseentityform-hooksuseunsavedchangesguard).
 
@@ -414,7 +409,7 @@ Every question before an action, and every notice after a failed one, goes throu
 - An action whose outcome is worth waiting for — a delete — goes in `onConfirm`. The dialog stays open and busy until it settles; a rejection keeps it open with the error inside it, next to the button that retries. That is why a delete is passed as `mutateAsync`, which rejects, rather than reporting the failure itself.
 - `alert(describeFailure(title, error))` from `utils.ts` reports a failure of an action that was not asked about first, such as the cleanups in Settings.
 
-**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `tokens`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. The one question every editor shares — "Discard your changes?" — lives in `components/confirmations.ts`, with one consequence line per editor. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
+**The texts live in a `confirmations.ts` per feature** (`activity`, `clients`, `users`, `webhooks`), one `describeX(...)` per action, returning the complete options including `variant`. The one question every editor shares — "Discard your changes?" — lives in `components/confirmations.ts`, with one consequence line per editor. A component decides *that* it asks, never *what* the question says or whether it is `danger`. The reasoning behind a wording — what the agent really does, what stays on the host — is kept as a comment on its function.
 
 ### AddClientWizard (`features/clients/components/add-client`)
 
@@ -426,10 +421,10 @@ One flow for both connection modes, built on `Wizard` from `@stefgo/react-ui-com
 
 It lives in the workspace rather than in a modal, because the two branches end in different things: a token to carry to another machine, or a connection attempt that may fail with a reason worth reading.
 
-- **Inbound branch**: display name and allowed address for the client the token will create. Both optional — without them the agent's hostname names the client and the address it registers from becomes its allowed address. Ends in a `TokenModal`, which shows the token once, lists what to do with it — open the agent's web page, paste it, register — and names what the token carries.
+- **Inbound branch**: display name (required — until the agent reports its hostname it is all the client is known by; `inboundDetailsComplete` in `lib/addClientForm.ts`) and an optional allowed address; without one, the address the agent registers from becomes it. Finishing creates the client at once (`POST /api/v1/clients/inbound`), which then waits for its agent, and shows its registration token once in a `RegistrationTokenModal` with what to do with it — open the agent's web page, paste it, register. Closing that dialog opens the new client's page, replacing the wizard in the history.
 - **Outbound branch**: hostname, target address and the agent's setup PIN (or its `KASM_REGISTRATION_SECRET`); finishing dials the agent straight away, and a refusal is shown on the step with the agent's own reason.
 - The wizard renders only the current step, so the form state lives above it in `useAddClientForm` — a step holding its inputs in its own `useState` would lose them on Back.
-- Cancel, Escape and every other way out ask first once anything has been entered (`hasAddClientInput` in `lib/addClientForm.ts`). After the token was issued or the client was added, the flow leaves without a question.
+- Cancel, Escape and every other way out ask first once anything has been entered (`hasAddClientInput` in `lib/addClientForm.ts`). After the client was added, the flow leaves without a question.
 - Both fields that the server validates are checked in the form with the same functions the endpoints use (`Ipv4OrCidrSchema`, `normaliseTargetAddress` from `@kasm/shared`).
 - `Escape` leaves the wizard. The listener sits on `window`, one level further out than menus and dialogs that listen on `document` and stop the event there, so an open select closes itself without taking the wizard with it. It is off while the token is on screen: that dialog is acknowledged by button, because the token is shown exactly once.
 
@@ -445,6 +440,8 @@ menu reads keepalived now (online clients only) and opens the editor.
 
 Below it `ClientKeepalivedPanel` shows the last reading: the `VrrpInstanceView` and the sync
 groups. A row opens the page of the instance's cluster, where its counters are.
+
+**An inbound client that waits for its first agent** shows a notice of its own (`registrationNotice` in `lib/registration.ts`): whether the token issued for it is still valid, with a button for a new one. The header shows *Awaiting registration* in place of *Offline* and, in its details, until when the token is valid. A new token goes out without asking, because nothing is lost by it. For a registered inbound client, the menu's **Re-register Agent** issues a token too, after asking (`describeReregister`): the agent that registers with it takes the client over — id, settings and history stay — and the one connected until then is cut off at that moment. Both show the token once in a `RegistrationTokenModal`; while it is on screen, `useEscapeToLeave` is off. The client list says *Awaiting registration* for such a client (`awaitsRegistration`).
 
 **An offline client shows a notice in place of its instances** (`lib/offlineNotice.ts`):
 since when it is gone and how old its last reading is. The instances stay away -- alone on
@@ -677,10 +674,6 @@ badge counts single unseen events, not groups.
 
 Manages user accounts. Supports creating, editing, and deleting users via a `UserDialog` form, checked against `CreateUserSchema`; that a local account needs a password is said at the password field. Deleting asks first; the dialog states that a session the account already holds stays valid until it expires, because the API checks only the JWT. For the last remaining user a second dialog explains why it cannot be deleted instead of sending the request. `UserList` is a `DataMultiView` like every other list: search by username, a list view for narrow screens, pagination.
 
-### TokenOverview (`features/tokens`)
-
-Lists registration tokens via `TokenList` — a `DataMultiView` with search over token hash, display name and address — and deletes them after asking. Tokens are **issued in the `AddClientWizard`**, not here: that is where the two defaults a token carries — display name and allowed address — are entered, and a second entry point would only produce tokens without them. The list shows a token by the first 12 characters of its SHA-256 hash (the full hash in the tooltip), since the server keeps nothing else; the token itself is shown once, in the wizard's `TokenModal`. It shows both defaults per token, or "From the agent" for a token that carries neither.
-
 ### WebhookOverview & WebhookEditor (`features/webhooks`)
 
 Its own entry in the sidebar, in the Administration group above Settings. `WebhookList` is a
@@ -706,7 +699,7 @@ unsaved draft to `/api/v1/webhooks/test`. See [Webhooks](webhooks.md) for the te
 
 ### Settings (`pages/Settings.tsx`, `features/settings`)
 
-System settings page, one section per tab: Client Tokens and Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel` with a `SideTab` per section, the sections are built from its `SectionHeader` and `NumberField`, and the open tab is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
+System settings page, one section per tab — today only Activity History. The tabs are the library's `useTabs`/`TabList`/`TabPanel` with a `SideTab` per section, the sections are built from its `SectionHeader` and `NumberField`, and the open tab is kept in the URL (`?tab=`). The sections live in `features/settings/components`; `features/settings/sections.ts` names the keys each one edits.
 
 **Every section saves on its own.** Its Save sends only its own keys, and `PUT /api/v1/settings/cleanup` merges them into the stored block, so a section never writes over edits in another one. A tab with unsaved edits carries a dot, and leaving the page asks first for as long as any section has some; switching tabs is not leaving. A value the server would refuse is named beside Save before anything is sent (`sectionError`, against `CleanupSettingsSchema`). The manual maintenance runs act on the saved values, not on unsaved edits.
 
@@ -714,17 +707,14 @@ System settings page, one section per tab: Client Tokens and Activity History. T
 
 | Setting                                      | Description                                                                   |
 | :------------------------------------------- | :---------------------------------------------------------------------------- |
-| `token_retention_days`                       | Days to keep used/expired registration tokens before cleanup.                 |
-| `token_cleanup_interval_hours`               | Automatic token cleanup interval. `0` disables.                               |
 | `notification_retention_days`                | Days to keep activity events.                                                 |
 | `notification_retention_count`               | Minimum number of the newest activity events always kept.                     |
 | `notification_cleanup_interval_hours`        | Automatic activity cleanup interval. `0` disables.                            |
 | `activity_level_overrides`                   | The level each event kind is recorded with, or `none`. One string; the Activity History tab edits it through one select per kind (`features/settings/lib/eventLevels.ts`), and "Default" names the level from `ACTIVITY_DEFAULT_LEVELS`. |
 
 - `GET/PUT /api/v1/settings/cleanup` — Fetch and save settings.
-- `POST /api/v1/settings/cleanup/invalid-tokens` — Manually run the token cleanup.
 - `POST /api/v1/settings/cleanup/notifications` — Manually run the activity cleanup.
-- `GET /api/v1/settings/scheduler-status` — Status, last and next run of both schedulers.
+- `GET /api/v1/settings/scheduler-status` — Status, last and next run of the scheduler.
 
 How often an agent reads keepalived is not a server setting: it is `keepalived.pollInterval`
 in the agent's own `config.yaml`, because the agent reads on its own clock whether or not the
@@ -736,9 +726,9 @@ wire, and a connected agent that declares none shows "None".
 
 ---
 
-![The Client Tokens tab of the settings page](assets/screenshots/settings.png)
+![The Activity History tab of the settings page](assets/screenshots/settings.png)
 
-*The Client Tokens tab: retention and interval of the cleanup, the scheduler's state and a manual run.*
+*The Activity History tab: retention and interval of the cleanup, the scheduler's state and a manual run.*
 
 ## 🎨 Styling & Theming
 

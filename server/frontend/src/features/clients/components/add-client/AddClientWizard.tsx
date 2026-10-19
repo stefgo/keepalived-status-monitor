@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
-import { CONNECTION_MODE, type CreatedToken } from "@kasm/shared";
+import { CONNECTION_MODE, type CreatedInboundClient } from "@kasm/shared";
 import { Card, Wizard, WizardStep } from "@stefgo/react-ui-components";
 import { useUnsavedChangesGuard } from "../../../../hooks/useUnsavedChangesGuard";
-import { createClientToken } from "../../../../queries/clients";
+import { createInboundClient } from "../../../../queries/clients";
+import { paths } from "../../../../lib/paths";
 import { getErrorMessage } from "../../../../utils";
-import { TokenModal } from "../../../tokens/components/TokenModal";
+import { RegistrationTokenModal } from "../RegistrationTokenModal";
 import { StepConnectionMode } from "./steps/StepConnectionMode";
 import { StepInboundDetails } from "./steps/StepInboundDetails";
 import { StepOutboundDetails } from "./steps/StepOutboundDetails";
@@ -18,8 +19,6 @@ interface AddClientWizardProps {
         outboundTargetAddress: string;
         registrationSecret: string;
     }) => Promise<void>;
-    /** Reloads the token list, so a freshly issued token shows up in it. */
-    onTokenCreated: () => void;
 }
 
 /**
@@ -35,21 +34,18 @@ interface AddClientWizardProps {
  * Leaving is a navigation to the client list, the flow's parent in the route tree, and asks
  * first once anything has been entered (`useUnsavedChangesGuard`).
  */
-export const AddClientWizard = ({
-    onCreateOutbound,
-    onTokenCreated,
-}: AddClientWizardProps) => {
+export const AddClientWizard = ({ onCreateOutbound }: AddClientWizardProps) => {
     const form = useAddClientForm();
     const [step, setStep] = useState(0);
     const [isFinishing, setIsFinishing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [createdToken, setCreatedToken] = useState<CreatedToken | null>(null);
+    const [created, setCreated] = useState<CreatedInboundClient | null>(null);
 
     // Escape is used up while the token is on screen: that dialog refuses Escape of its
     // own accord, because the token is shown exactly once.
-    const hasToken = createdToken !== null;
+    const hasToken = created !== null;
     const holdOnEscape = useCallback(() => hasToken, [hasToken]);
-    // Once the token exists the fields have done their work; there is nothing left to lose.
+    // Once the client exists the fields have done their work; there is nothing left to lose.
     const { close, leave } = useUnsavedChangesGuard(form.isDirty && !hasToken, "newClient", {
         onEscape: holdOnEscape,
     });
@@ -61,12 +57,12 @@ export const AddClientWizard = ({
         setError(null);
         try {
             if (isInbound) {
-                const token = await createClientToken({
-                    displayName: form.displayName.trim() || undefined,
-                    inboundAllowedIp: form.restrictIp ? form.allowedIp.trim() : undefined,
-                });
-                setCreatedToken(token);
-                onTokenCreated();
+                setCreated(
+                    await createInboundClient({
+                        displayName: form.displayName.trim(),
+                        inboundAllowedIp: form.restrictIp ? form.allowedIp.trim() : undefined,
+                    }),
+                );
             } else {
                 await onCreateOutbound({
                     hostname: form.hostname.trim() || form.targetAddress.trim(),
@@ -94,7 +90,7 @@ export const AddClientWizard = ({
         {
             id: "details",
             label: "Agent",
-            description: isInbound ? "Get client token" : "Where to dial",
+            description: isInbound ? "Name and token" : "Where to dial",
             canContinue: form.canContinue,
             content: (
                 <div className="space-y-4">
@@ -121,20 +117,20 @@ export const AddClientWizard = ({
                     onChange={setStep}
                     onCancel={close}
                     onFinish={finish}
-                    finishLabel={isInbound ? "Generate Token" : "Add Client"}
+                    finishLabel={isInbound ? "Add Client & Generate Token" : "Add Client"}
                     finishIcon={Plus}
                     isFinishing={isFinishing}
                     allowStepSelect
                 />
             </Card>
 
-            {createdToken && (
-                <TokenModal
-                    token={createdToken.token}
-                    expiresAt={createdToken.expiresAt}
-                    displayName={form.displayName.trim() || undefined}
-                    allowedIp={form.restrictIp ? form.allowedIp.trim() || undefined : undefined}
-                    onClose={() => leave()}
+            {/* Closing it opens the new client's page, in place of the wizard in the history:
+                Back from there goes to the list, not into a wizard whose token is gone. */}
+            {created && (
+                <RegistrationTokenModal
+                    token={created.token}
+                    expiresAt={created.expiresAt}
+                    onClose={() => leave(paths.client(created.id), { replace: true })}
                 />
             )}
         </>

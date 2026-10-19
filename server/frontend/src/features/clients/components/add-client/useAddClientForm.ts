@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CONNECTION_MODE, ConnectionMode, Ipv4OrCidrSchema, normaliseTargetAddress } from "@kasm/shared";
-import { hasAddClientInput } from "../../lib/addClientForm";
+import { hasAddClientInput, inboundDetailsComplete } from "../../lib/addClientForm";
 
 /**
  * Everything the add-client flow collects, held above the wizard.
@@ -10,13 +10,16 @@ import { hasAddClientInput } from "../../lib/addClientForm";
  * Back and Next free.
  */
 /** The required fields, which say they are empty once they have been left empty. */
-export type RequiredField = "allowedIp" | "targetAddress" | "registrationSecret";
+export type RequiredField = "displayName" | "allowedIp" | "targetAddress" | "registrationSecret";
 
 export interface AddClientForm {
     mode: ConnectionMode;
     setMode: (mode: ConnectionMode) => void;
 
-    /** Inbound: what the issued token fixes for the client it will create. */
+    /**
+     * Inbound: the client that is created right away and waits for its agent. The name is
+     * required -- until the agent reports a hostname it is all the client is known by.
+     */
     displayName: string;
     setDisplayName: (value: string) => void;
     restrictIp: boolean;
@@ -79,6 +82,7 @@ export function useAddClientForm(): AddClientForm {
         normaliseTargetAddress(targetAddressTrimmed) === null;
 
     const missing: Record<RequiredField, boolean> = {
+        displayName: touched.has("displayName") && displayName.trim().length === 0,
         allowedIp: touched.has("allowedIp") && allowedIpTrimmed.length === 0,
         targetAddress: touched.has("targetAddress") && targetAddressTrimmed.length === 0,
         registrationSecret: touched.has("registrationSecret") && registrationSecret.trim().length === 0,
@@ -86,7 +90,7 @@ export function useAddClientForm(): AddClientForm {
 
     const canContinue =
         mode === CONNECTION_MODE.INBOUND
-            ? !allowedIpInvalid && (!restrictIp || allowedIpTrimmed.length > 0)
+            ? inboundDetailsComplete({ displayName, restrictIp, allowedIp })
             : !targetAddressInvalid &&
               targetAddressTrimmed.length > 0 &&
               registrationSecret.trim().length > 0;

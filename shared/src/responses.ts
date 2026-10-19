@@ -9,7 +9,6 @@ import {
     ActivityRecordSchema,
     ClientSchema,
     KeepalivedStateSchema,
-    TokenSchema,
 } from "./schemas.js";
 
 /**
@@ -80,10 +79,9 @@ const SchedulerStatusSchema = z.object({
         .nullable(),
 });
 
-/** Every scheduler the server runs, by its id. `SCHEDULER_IDS` lists the same two. */
+/** Every scheduler the server runs, by its id. `SCHEDULER_IDS` lists the same one. */
 export const SchedulerStatusesSchema = z.object({
     "notification-cleanup": SchedulerStatusSchema,
-    "token-cleanup": SchedulerStatusSchema,
 });
 
 /** `GET /api/v1/settings/scheduler-status`. */
@@ -99,13 +97,9 @@ const schedulerUpdate = <Id extends keyof typeof SchedulerStatusesSchema.shape>(
  */
 export const SchedulerStatusUpdateSchema = z.discriminatedUnion("scheduler", [
     schedulerUpdate("notification-cleanup"),
-    schedulerUpdate("token-cleanup"),
 ]);
 
-// ── Tokens, users, session ───────────────────────────────────────────────────
-
-/** `GET /api/v1/tokens`. */
-export const TokenListSchema = z.array(TokenSchema);
+// ── Users, session ───────────────────────────────────────────────────────────
 
 /** One row of `GET /api/v1/users`; the password hash is not among the columns. */
 export const UserSchema = z.object({

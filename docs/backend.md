@@ -16,7 +16,6 @@ server/backend/src/
 │   ├── ClientController.ts
 │   ├── KeepalivedController.ts            # Readings, clusters, asking an agent to read now
 │   ├── SettingsController.ts
-│   ├── TokenController.ts
 │   ├── UserController.ts
 │   ├── WebhookController.ts               # Webhook CRUD and test delivery
 │   ├── WebSocketController.ts
@@ -38,14 +37,14 @@ server/backend/src/
 │       ├── 06_scheduler_next_run.ts       # scheduler_state.next_run_at: the planned run
 │       ├── 07_keepalived_last_instances.ts # keepalived_state.last_instances: the last known instances
 │       ├── 08_webhooks.ts                 # webhooks: targets events are reported to
-│       └── 09_vrrp_cluster.ts             # vrrp_cluster: what was confirmed per cluster, roles and incident
+│       ├── 09_vrrp_cluster.ts             # vrrp_cluster: what was confirmed per cluster, roles and incident
+│       └── 12_client_registration_token.ts # clients: registration token per client; drops registration_tokens
 ├── repositories/                          # Database access layer
 │   ├── ActivityRepository.ts              # activity access (insert, dedup, retention)
 │   ├── ClientRepository.ts
 │   ├── HealthRepository.ts                # SELECT 1 for the liveness probe
 │   ├── KeepalivedStateRepository.ts       # keepalived_state access
 │   ├── SchedulerStateRepository.ts        # scheduler_state access
-│   ├── TokenRepository.ts
 │   ├── UserRepository.ts
 │   ├── VrrpClusterRepository.ts           # vrrp_cluster access
 │   └── WebhookRepository.ts               # webhooks access, last delivery result
@@ -64,7 +63,6 @@ server/backend/src/
 │   ├── ProxyService.ts                    # WebSocket connection management & broadcasting
 │   ├── ScheduledJob.ts                    # Timer, run bookkeeping and status of a scheduler
 │   ├── SettingsService.ts                 # Settings retrieval, update & persistence
-│   ├── TokenCleanupService.ts             # Retention cleanup for invalid registration tokens
 │   └── WebhookService.ts                  # Renders and delivers events to the webhooks
 ├── types/
 │   └── fastify.d.ts                       # Fastify request/instance augmentations
@@ -92,10 +90,9 @@ All routes are registered as a single Fastify plugin under the `/api` prefix. Pr
 **Protected routes (JWT required):**
 - Session: `GET /api/v1/me` — id, username and expiry of the current session
 - Users: `GET/POST /api/v1/users`, `PUT/DELETE /api/v1/users/:userId`
-- Clients: `GET /api/v1/clients`, `POST /api/v1/clients/outbound`, `PUT/DELETE /api/v1/clients/:clientId`, `POST /api/v1/clients/:clientId/reconnect`
-- Tokens: `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/:tokenHash`
+- Clients: `GET /api/v1/clients`, `POST /api/v1/clients/inbound`, `POST /api/v1/clients/outbound`, `PUT/DELETE /api/v1/clients/:clientId`, `POST /api/v1/clients/:clientId/reconnect`, `POST /api/v1/clients/:clientId/registration-token`
 - keepalived: `GET /api/v1/keepalived/states`, `GET /api/v1/keepalived/clusters`, `GET /api/v1/clients/:clientId/keepalived`, `POST /api/v1/clients/:clientId/keepalived/refresh`
-- Settings: `GET/PUT /api/v1/settings/cleanup`, `POST /api/v1/settings/cleanup/{invalid-tokens,notifications}`, `GET /api/v1/settings/scheduler-status`
+- Settings: `GET/PUT /api/v1/settings/cleanup`, `POST /api/v1/settings/cleanup/notifications`, `GET /api/v1/settings/scheduler-status`
 - Activity: `GET/DELETE /api/v1/activity`, `POST /api/v1/activity/seen`
 - Webhooks: `GET/POST /api/v1/webhooks`, `POST /api/v1/webhooks/test`, `PUT/DELETE /api/v1/webhooks/:webhookId`
 
@@ -125,8 +122,7 @@ const { username, password, auth_methods } = parsed.data;
 | :---------------------- | :---------------------------------------------------------------------------- |
 | `AuthController`        | Local login, OIDC redirect & callback, PKCE flow management.                 |
 | `UserController`        | User CRUD — enforces self-deletion prevention and minimum user count.         |
-| `ClientController`      | Client list (with live status and capabilities), adding an outbound client, editing display name, allowed address and target address, deletion (with the client's reading), reconnecting an outbound client. |
-| `TokenController`       | Registration token generation, listing, deletion, and client self-registration. |
+| `ClientController`      | Client list (with live status and capabilities), adding an inbound client (which then waits for its agent) or an outbound one, issuing a registration token, the agent's self-registration (`register`), editing display name, allowed address and target address, deletion (with the client's reading), reconnecting an outbound client. |
 | `KeepalivedController`  | Every client's last reading, the clusters built from them, one client's reading, asking one agent to read now. |
 | `ActivityController`    | The activity list, per-user seen state, deletion of all of it.               |
 | `SettingsController`    | Retrieve/update the `settings` block of `config.yaml` (never `security`), trigger manual cleanups. |
@@ -156,7 +152,7 @@ The central hub for all real-time communication.
 - **Fire-and-forget** is the only direction the server needs: `REQUEST_STATE_UPDATE` asks an agent to read now, and what comes back is an ordinary `KEEPALIVED_UPDATE`.
 
 #### `SecretCrypto`
-Encrypts the secrets the server stores and has to read back — today the auth tokens of outbound clients (AES-256-GCM, `iv:tag:ciphertext` in hex). The key is derived via HKDF from `secretKey` in `config.yaml` and deliberately **not** from `jwtSecret`: rotating the session key must not make stored tokens unreadable. `encryptSecret` refuses while `secretKey` was generated on this start and could not be written back (`secretKeyPersisted()` in `AppConfig`). Tokens the server only has to recognise — inbound auth tokens, registration tokens — are hashed instead (`hashToken`).
+Encrypts the secrets the server stores and has to read back — today the auth tokens of outbound clients (AES-256-GCM, `iv:tag:ciphertext` in hex). The key is derived via HKDF from `secretKey` in `config.yaml` and deliberately **not** from `jwtSecret`: rotating the session key must not make stored tokens unreadable. `encryptSecret` refuses while `secretKey` was generated on this start and could not be written back (`secretKeyPersisted()` in `AppConfig`). Tokens the server only has to recognise — inbound auth tokens, registration tokens — are hashed instead (`hashToken` in `ClientRepository`).
 
 #### `ClientConnector`
 The server's side of **outbound** clients, the ones the server dials.
@@ -211,25 +207,21 @@ Reports events to external targets, each with a JSON body template of its own (s
 - `test(webhook)` — Sends the sample event for the webhook's kinds once with a configuration that need not be saved, and returns what was sent and what came back. No retries, nothing recorded.
 
 #### `ScheduledJob`
-The timer, the bookkeeping and the status of one server scheduler; both — `NotificationCleanupService` and `TokenCleanupService` — hold one and differ only in the work they do.
+The timer, the bookkeeping and the status of one server scheduler; `NotificationCleanupService`, the only one, holds one.
 - `run(trigger, work)` — Runs `work` as one recorded run (`trigger` is `schedule` or `manual`): `SchedulerStateRepository.markStarted` before, `markFinished` after, with `success` (or `partial` where a scheduler says so; none does today). A run that throws is stored as `failed` with its message, recorded as `scheduler.failed` in the activity, and the exception is rethrown. Broadcasts `SCHEDULER_STATUS_UPDATE` when a run starts and when it ends.
 - `start(runScheduled)` / `stop()` — The timer is a chain of timeouts rather than an interval. The first run comes one interval after the last run *started* — at once if that is already past — so a restart does not push a due run back by a whole interval; a scheduler that has never run keeps the run it had planned (`next_run_at`), so restarting more often than the interval does not keep pushing its first run away. That run is capped at one interval from now, for an interval that was shortened; with none planned, the first run comes one interval after startup. An interval of `0` switches the timer off. Delays beyond what `setTimeout` takes (~24 days) are waited out in steps.
 - `status()` — `{ isRunning, nextRun, lastRun }`, `lastRun` read from `scheduler_state`.
 
-Each service's `run(trigger = "schedule")` goes through its job; the settings controller passes `"manual"`. `startScheduler()` / `stopScheduler()` / `restartScheduler()` and `getStatus()` delegate to it. At startup, `index.ts` calls `SchedulerStateRepository.markInterrupted()` before starting either of them.
+Each service's `run(trigger = "schedule")` goes through its job; the settings controller passes `"manual"`. `startScheduler()` / `stopScheduler()` / `restartScheduler()` and `getStatus()` delegate to it. At startup, `index.ts` calls `SchedulerStateRepository.markInterrupted()` before starting it.
 
 #### `NotificationCleanupService`
 Retention for the activity list. It is named after the settings it reads (`notification_retention_days`, `notification_retention_count`, `notification_cleanup_interval_hours`) and the page they are set on, "Activity History". Age is the event's own `occurred_at`, not its arrival time: a batch handed over after a week offline is a week old. Runs every `notification_cleanup_interval_hours`; returns `{ removed }`.
-
-#### `TokenCleanupService`
-- `run(trigger?)` — Removes registration tokens that have been invalid (used or expired) for longer than `token_retention_days`. Returns `{ removed }`.
-- `startScheduler()` / `stopScheduler()` / `restartScheduler()` — Runs every `token_cleanup_interval_hours` (default `24`); `0` disables the scheduler. Restarted when `token_retention_days` or `token_cleanup_interval_hours` changes.
 
 #### `SettingsService`
 Reads and writes the `settings` block of `config.yaml` and nothing else — `security`, `jwtSecret` and the OIDC credentials are startup configuration without an API.
 - `getAllSettings()` — The `settings` block, every default filled in.
 - `getSetting(key)` — One value as a string, or `null` when empty or not a scalar.
-- `updateSettings(settings)` — Merges already validated keys into the block and writes the file. Then restarts the activity cleanup or the token cleanup when one of its keys changed.
+- `updateSettings(settings)` — Merges already validated keys into the block and writes the file. Then restarts the activity cleanup when one of its keys changed.
 
 ### 4. Repositories (`src/repositories/`)
 
@@ -237,8 +229,7 @@ Repositories encapsulate all database queries using `better-sqlite3` (synchronou
 
 | Repository               | Tables accessed                          | Key operations                                                   |
 | :----------------------- | :--------------------------------------- | :--------------------------------------------------------------- |
-| `ClientRepository`       | `clients`                                | Create inbound/outbound, lookup by id and token as a pair (`findByIdAndToken`), update display name, addresses, auth token, last_seen/version. |
-| `TokenRepository`        | `registration_tokens`                    | Create with expiry and optional defaults, find a valid one, mark as used, delete, retention cleanup. |
+| `ClientRepository`       | `clients`                                | Create a waiting inbound client or an outbound one, set a registration token, find the client a valid token belongs to and complete its registration in one statement (`completeRegistration`), lookup by id and token as a pair (`findByIdAndToken`), update display name, addresses, auth token, last_seen/version. `hashToken` is the SHA-256 every token the server only recognises is stored as. |
 | `UserRepository`         | `users`                                  | CRUD, lookup by username, password hash management.              |
 | `KeepalivedStateRepository` | `keepalived_state`                    | Upsert, list and delete the last reading per client.             |
 | `ActivityRepository`     | `activity`, `activity_seen`              | Batch insert with primary-key dedup, seen state, deletion, retention. |
@@ -332,20 +323,22 @@ The backend uses **SQLite3** via `better-sqlite3` (synchronous API) for fast, em
 
 | Column        | Type     | Description                                              |
 | :------------ | :------- | :------------------------------------------------------- |
-| `id`          | TEXT PK  | Client UUID, issued by the server at registration.       |
-| `hostname`    | TEXT     | Client hostname.                                         |
+| `id`          | TEXT PK  | Client UUID, issued by the server — for an inbound client when its first token is issued, for an outbound one at registration. |
+| `hostname`    | TEXT     | Client hostname. `NULL` until an inbound client's agent has registered. |
 | `display_name`| TEXT     | Optional human-readable name.                            |
-| `auth_token`  | TEXT     | Permanent token for WebSocket authentication. _(migration 11)_ Never the token itself: inbound its SHA-256 (hex), outbound encrypted with `SecretCrypto` (`iv:tag:ciphertext`). |
+| `auth_token`  | TEXT     | Permanent token for WebSocket authentication. _(migration 11)_ Never the token itself: inbound its SHA-256 (hex), outbound encrypted with `SecretCrypto` (`iv:tag:ciphertext`). `NULL` for an inbound client that waits for its first agent. |
 | `connection_mode` | TEXT | `inbound` (default) or `outbound`.                        |
-| `inbound_allowed_ip` | TEXT | Inbound: the address or IPv4 network connections must come from. `NULL` switches the check off. |
+| `inbound_allowed_ip` | TEXT | Inbound: the address or IPv4 network connections must come from. `NULL` switches the check off — except on a client that has never registered, where it means that the address the agent registers from becomes it. |
 | `inbound_last_ip` | TEXT | Inbound: the address of the last successful authentication. Written only after the allowed-address check passed. |
 | `outbound_target_address` | TEXT | Outbound: `host:port` the server dials. |
 | `version`     | TEXT     | Agent version reported on last connection.               |
-| `last_seen`   | DATETIME | Timestamp of last successful connection.                 |
+| `registration_token_hash` | TEXT UNIQUE | _(migration 12)_ Inbound: SHA-256 (hex) of the registration token issued for the client, `NULL` when none is open. The token itself is only in the response that issued it. Cleared by the registration that uses it; a new token replaces it. |
+| `registration_expires_at` | DATETIME | _(migration 12)_ Until when that token is valid (30 minutes after it was issued), ISO text. Kept after it has expired, so the page can say so. |
+| `last_seen`   | DATETIME | Timestamp of last successful connection. `NULL` for an inbound client that waits for its first agent. |
 | `created_at`  | DATETIME | Creation timestamp.                                      |
 | `updated_at`  | DATETIME | Last update timestamp.                                   |
 
-> KASM started from docker-instance-manager, whose migrations 00–16 are folded into `00_initial` here — without the Docker tables and columns, and without their history.
+> KASM started from docker-instance-manager, whose migrations 00–16 are folded into `00_initial` here — without the Docker tables and columns, and without their history. Migration 12 dropped the `registration_tokens` table: a registration token is a property of the client it registers, and nothing is left behind to clean up once it is used or replaced.
 
 **`users`**
 
@@ -357,17 +350,6 @@ The backend uses **SQLite3** via `better-sqlite3` (synchronous API) for fast, em
 | `auth_methods`  | TEXT        | Comma-separated: `"local"`, `"oidc"`, or both.       |
 | `created_at`    | DATETIME    | Creation timestamp.                                  |
 | `updated_at`    | DATETIME    | Last update timestamp.                               |
-
-**`registration_tokens`**
-
-| Column       | Type     | Description                                              |
-| :----------- | :------- | :------------------------------------------------------- |
-| `token_hash` | TEXT PK  | SHA-256 (hex) of the random 32-character token. The token itself is only in the response that issued it _(migration 04)_. |
-| `created_at` | DATETIME | Creation timestamp.                                      |
-| `expires_at` | DATETIME | Expiry timestamp (30 minutes after creation).            |
-| `used_at`    | DATETIME | Timestamp when a client registered with this token.      |
-| `display_name` | TEXT   | Name the client is created under. `NULL`: the agent's hostname. |
-| `allowed_ip` | TEXT     | Allowed address or network for the client. `NULL`: the address it registers from. |
 
 **`keepalived_state`** _(migration 01)_
 
@@ -418,7 +400,7 @@ One row per scheduler, written over on every run — there is no history. What i
 
 | Column             | Type    | Description                                                                          |
 | :----------------- | :------ | :----------------------------------------------------------------------------------- |
-| `scheduler`        | TEXT PK | `notification-cleanup`, `token-cleanup`.                                             |
+| `scheduler`        | TEXT PK | `notification-cleanup`. The row of the removed `token-cleanup` was deleted by migration 12. |
 | `running_since`    | TEXT    | Start of the run in progress; NULL when none runs.                                   |
 | `running_trigger`  | TEXT    | `schedule` or `manual`, for the run in progress.                                     |
 | `last_started_at`  | TEXT    | Start of the last finished run.                                                      |

@@ -82,7 +82,7 @@ bundle without the backend, use `npm run preview -w server/frontend`.
 - SQLite with WAL mode; schema managed via Umzug migrations in `migrations/`
 
 ### Frontend (server/frontend/src)
-- Feature-based structure under `features/` (dashboard, keepalived, clients, activity, users, auth, tokens, webhooks, settings, app)
+- Feature-based structure under `features/` (dashboard, keepalived, clients, activity, users, auth, webhooks, settings, app)
 - What the server holds lives in one TanStack Query cache (`lib/queryClient.ts`), read through
   the modules in `queries/` and addressed by `lib/queryKeys.ts`. Zustand holds only
   `useUIStore`, what this browser alone knows.

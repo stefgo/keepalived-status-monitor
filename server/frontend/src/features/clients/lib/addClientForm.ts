@@ -1,3 +1,5 @@
+import { Ipv4OrCidrSchema } from "@kasm/shared";
+
 /** What the add-client flow collects as text, in either branch. */
 export interface AddClientInput {
     displayName: string;
@@ -20,4 +22,17 @@ export function hasAddClientInput(input: AddClientInput): boolean {
             (value) => value.trim() !== "",
         )
     );
+}
+
+/**
+ * Whether the inbound branch holds enough to create the client. The display name is
+ * required: the client is created before its agent registers, and until the agent reports a
+ * hostname the name is all it is known by. An address, when the restriction is on, has to
+ * be one the endpoint takes.
+ */
+export function inboundDetailsComplete(input: Pick<AddClientInput, "displayName" | "restrictIp" | "allowedIp">): boolean {
+    if (input.displayName.trim() === "") return false;
+    if (!input.restrictIp) return true;
+    const allowedIp = input.allowedIp.trim();
+    return allowedIp !== "" && Ipv4OrCidrSchema.safeParse(allowedIp).success;
 }

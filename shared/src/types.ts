@@ -15,8 +15,9 @@ import {
     ClientSchema,
     RegistrationPayloadSchema,
     RegistrationResponseSchema,
-    TokenSchema,
-    CreatedTokenSchema,
+    RegistrationTokenSchema,
+    CreatedInboundClientSchema,
+    CreateInboundClientSchema,
     AuthPayloadSchema,
     LoginPayloadSchema,
     CreateUserSchema,
@@ -53,8 +54,9 @@ export type ConnectionMode = (typeof CONNECTION_MODE)[keyof typeof CONNECTION_MO
 
 export type Client = z.infer<typeof ClientSchema>;
 export type AgentKeepalivedConfig = z.output<typeof AgentKeepalivedConfigSchema>;
-export type Token = z.infer<typeof TokenSchema>;
-export type CreatedToken = z.infer<typeof CreatedTokenSchema>;
+export type RegistrationToken = z.infer<typeof RegistrationTokenSchema>;
+export type CreatedInboundClient = z.infer<typeof CreatedInboundClientSchema>;
+export type CreateInboundClient = z.infer<typeof CreateInboundClientSchema>;
 
 // REST request bodies
 export type LoginPayload = z.infer<typeof LoginPayloadSchema>;
@@ -233,7 +235,6 @@ export type SchedulerRunStatus = (typeof SCHEDULER_RUN_STATUSES)[number];
 /** What each scheduler reports as the result of a run. */
 export interface SchedulerRunResults {
     "notification-cleanup": { removed: number };
-    "token-cleanup": { removed: number };
 }
 
 /** The last run a scheduler finished, as `scheduler_state` holds it. */

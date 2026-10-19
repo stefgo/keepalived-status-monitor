@@ -135,14 +135,14 @@ describe("marking activity seen", () => {
 
 describe("applySchedulerUpdate", () => {
     const idle = { isRunning: false, nextRun: null, lastRun: null };
-    const schedulers: SchedulerStatuses = { "notification-cleanup": idle, "token-cleanup": idle };
+    const schedulers: SchedulerStatuses = { "notification-cleanup": idle };
 
-    it("replaces the one scheduler and leaves the other", () => {
+    it("replaces the scheduler's status and leaves the cache it came from alone", () => {
         const updated = applySchedulerUpdate(schedulers, {
-            scheduler: "token-cleanup",
+            scheduler: "notification-cleanup",
             status: { ...idle, isRunning: true },
         });
-        expect(updated["token-cleanup"].isRunning).toBe(true);
-        expect(updated["notification-cleanup"]).toBe(schedulers["notification-cleanup"]);
+        expect(updated["notification-cleanup"].isRunning).toBe(true);
+        expect(schedulers["notification-cleanup"].isRunning).toBe(false);
     });
 });

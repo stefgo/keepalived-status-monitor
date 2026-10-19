@@ -5,7 +5,6 @@ import {
     SchedulerStatusResponseSchema,
     SchedulerStatusUpdateSchema,
     SchedulerStatusesSchema,
-    TokenListSchema,
     WebhookTestResultSchema,
     WebhookViewSchema,
 } from "./responses.js";
@@ -55,21 +54,6 @@ describe("ClientViewSchema", () => {
     });
 });
 
-describe("TokenListSchema", () => {
-    // `used_at` is a nullable column: an unused token carries null, not a missing key.
-    it("takes a token that has not been used", () => {
-        const token = {
-            tokenHash: "ab",
-            createdAt: "2026-10-04 08:00:00",
-            expiresAt: "2026-10-05 08:00:00",
-            usedAt: null,
-            displayName: null,
-            inboundAllowedIp: null,
-        };
-        expect(TokenListSchema.safeParse([token]).success).toBe(true);
-    });
-});
-
 describe("the scheduler schemas", () => {
     const run = {
         trigger: "manual",
@@ -81,20 +65,20 @@ describe("the scheduler schemas", () => {
     };
 
     it("take the status of every scheduler", () => {
-        const schedulers = { "notification-cleanup": idle, "token-cleanup": { ...idle, lastRun: run } };
-        expect(SchedulerStatusResponseSchema.parse({ schedulers }).schedulers["token-cleanup"].lastRun?.result).toEqual({
+        const schedulers = { "notification-cleanup": { ...idle, lastRun: run } };
+        expect(SchedulerStatusResponseSchema.parse({ schedulers }).schedulers["notification-cleanup"].lastRun?.result).toEqual({
             removed: 3,
         });
     });
 
     it("refuse a response that lacks a scheduler", () => {
-        expect(SchedulerStatusResponseSchema.safeParse({ schedulers: { "token-cleanup": idle } }).success).toBe(false);
+        expect(SchedulerStatusResponseSchema.safeParse({ schedulers: {} }).success).toBe(false);
     });
 
     // What an earlier version stored must not take the whole status down.
     it("read a result of another shape as no result", () => {
         const status = { ...idle, lastRun: { ...run, result: { deleted: 3 } } };
-        const parsed = SchedulerStatusUpdateSchema.parse({ scheduler: "token-cleanup", status });
+        const parsed = SchedulerStatusUpdateSchema.parse({ scheduler: "notification-cleanup", status });
         expect(parsed.status.lastRun?.result).toBeNull();
     });
 

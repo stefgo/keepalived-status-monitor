@@ -24,6 +24,7 @@ export function vrrpStateLabel(state: string): string {
 /** The server's schedulers as the settings page names them. */
 const SCHEDULER_NAMES: Record<string, string> = {
     "notification-cleanup": "Activity cleanup",
+    // Removed with the registration token list; its failures can still be in the activity.
     "token-cleanup": "Token cleanup",
 };
 
@@ -127,8 +128,10 @@ export function activityMessage(event: ActivityRecord): string {
             return `${host(event)} connected`;
         case "client.disconnected":
             return `${host(event)} disconnected`;
-        case "client.registered":
-            return `${str(event, "hostname") ?? host(event)} registered`;
+        case "client.registered": {
+            const again = event.data?.reregistered === true ? " again" : "";
+            return `${str(event, "hostname") ?? host(event)} registered${again}`;
+        }
         case "scheduler.failed": {
             const scheduler = str(event, "scheduler");
             const error = str(event, "error");

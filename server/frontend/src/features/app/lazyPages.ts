@@ -32,9 +32,6 @@ export const ActivityView = lazy(() =>
 export const UserOverview = lazy(() =>
     import("../users/components/UserOverview").then((m) => ({ default: m.UserOverview })),
 );
-export const TokenOverview = lazy(() =>
-    import("../tokens/components/TokenOverview").then((m) => ({ default: m.TokenOverview })),
-);
 export const WebhookOverview = lazy(() =>
     import("../webhooks/components/WebhookOverview").then((m) => ({ default: m.WebhookOverview })),
 );

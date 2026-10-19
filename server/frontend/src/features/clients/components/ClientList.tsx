@@ -16,6 +16,7 @@ import {
     listGroups,
 } from "@stefgo/react-ui-components";
 import { STORAGE_KEYS } from "../../../lib/storageKeys";
+import { awaitsRegistration } from "../lib/registration";
 
 /**
  * What the connected agent says it can do, reported as it named it. Only the agent on the
@@ -114,7 +115,13 @@ export const ClientList = ({
             render: (client) =>
                 !isOnline(client) ? (
                     <span className="text-sm text-text-muted">
-                        {client.lastSeen ? <>Last seen <RelativeTime date={client.lastSeen} /></> : "Never connected"}
+                        {client.lastSeen ? (
+                            <>Last seen <RelativeTime date={client.lastSeen} /></>
+                        ) : awaitsRegistration(client) ? (
+                            "Awaiting registration"
+                        ) : (
+                            "Never connected"
+                        )}
                     </span>
                 ) : (
                     <Badge variant="success">Online</Badge>

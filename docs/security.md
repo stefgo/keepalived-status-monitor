@@ -70,7 +70,13 @@ send it.
 
 ## Agent registration
 
-- A registration token is valid for one registration. The server keeps its SHA-256 hash.
+- A registration token is issued for one client, is valid for 30 minutes and for one
+  registration, and is replaced by the next token issued for that client. It registers an
+  agent under that client and no other. The server keeps its SHA-256 hash.
+- *Re-register Agent* issues such a token for a client that is already registered. The
+  agent that registers with it takes the client over, and the previous auth token is refused
+  from that moment — so it is a session action that asks first, and the new agent still needs
+  its own setup PIN.
 - Every registration additionally needs the agent's **setup PIN** from its log, or its
   `KASM_REGISTRATION_SECRET` — someone who can reach port 3011 cannot point the agent at a
   server of their own. See [Setup PIN](client.md#setup-pin-srccoresetuppints).

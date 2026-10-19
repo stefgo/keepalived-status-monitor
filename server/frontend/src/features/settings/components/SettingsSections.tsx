@@ -5,43 +5,6 @@ import { EVENT_LEVEL_GROUPS, choiceOf, levelChoices, withChoice } from "../lib/e
 import { SchedulerBox } from "./SchedulerBox";
 import { ManualRun } from "./SettingsParts";
 
-export const TokenRetentionSection = ({ values, onChange }: SectionProps) => (
-    <section>
-        <SectionHeader title="Retention of invalid client tokens">
-            Define how long registration tokens are kept after they become invalid. A scheduled
-            cleanup removes the ones older than that.
-        </SectionHeader>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <NumberField
-                label="Retention Time (Days)"
-                value={values.token_retention_days}
-                onChange={(v) => onChange("token_retention_days", v)}
-                placeholder="30"
-                hint="Number of days an invalid token remains in the database."
-            />
-            <NumberField
-                label="Cleanup Interval (Hours)"
-                value={values.token_cleanup_interval_hours}
-                onChange={(v) => onChange("token_cleanup_interval_hours", v)}
-                placeholder="24"
-                hint="How often the automatic cleanup runs. Set to 0 to disable the scheduler (manual runs still work)."
-            />
-        </div>
-
-        <SchedulerBox scheduler="token-cleanup">
-            <ManualRun
-                description="Trigger the maintenance process immediately using the saved retention settings."
-                failureTitle="Could not remove the invalid tokens"
-                onRun={async () => {
-                    const data = await runCleanup("invalid-tokens");
-                    return typeof data.removed === "number" ? `Removed ${data.removed}` : "Done";
-                }}
-            />
-        </SchedulerBox>
-    </section>
-);
-
 export const ActivitySection = ({ values, onChange }: SectionProps) => (
     <section>
         <SectionHeader title="Activity History">
