@@ -60,12 +60,23 @@ In the list view, which shows each row as a card of labels and values, every val
 row now starts at the same edge. A long label wraps instead of pushing its value aside, so
 on a narrow screen it no longer runs out of the row.
 
-### The dashboard's cards fit beside the sidebar
+### The dashboard shows VRRP at a glance
 
-The four cards at the top of the dashboard now choose how many go in a row by the room the
-page has, so an open sidebar is taken into account: four across where they fit, two by two
-where they do not. A cluster's list of members counts the hosts ticked for comparison
-behind its title.
+The dashboard now always shows how VRRP is doing, not only when something is wrong:
+
+- A new first card sums the fleet up in one word -- *Healthy*, *Degraded*, *Critical* or
+  *Unknown* -- with the number of findings below it.
+- A *VRRP* card lists the facts: the clusters by health, the instances by state, which host
+  is MASTER for how many clusters, whether every virtual IP is served, the sync groups,
+  keepalived's version on the hosts (several versions are marked), the last failover and
+  the sites. Beside them is a tile per cluster with its virtual IPs, its MASTER, its
+  members, its last change and its worst finding; a click opens the cluster.
+- *Needs attention* lists what is wrong, one finding per line, instead of a full card per
+  cluster.
+
+The cards at the top now choose how many go in a row by the room the page has, so an open
+sidebar is taken into account. A cluster's list of members counts the hosts ticked for
+comparison behind its title.
 
 ### Upgrading
 

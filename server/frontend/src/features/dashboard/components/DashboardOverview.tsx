@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
-import { StatCard, StatCardGrid } from "@stefgo/react-ui-components";
+import { AlertTriangle, Crown, Monitor, Network, ShieldCheck } from "lucide-react";
+import { CLIENT_STATUS, type KeepalivedState } from "@kasm/shared";
+import { Card, StatCard, StatCardGrid } from "@stefgo/react-ui-components";
 import { useClients } from "../../../queries/clients";
 import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
@@ -9,6 +10,7 @@ import { useActivity } from "../../../queries/activity";
 import { ActivityView } from "../../activity/components/ActivityView";
 import { ClientList } from "../../clients/components/ClientList";
 import { SEARCH_PARAM, paths } from "../../../lib/paths";
+import { plural } from "../../../utils";
 import { useVrrpClusters } from "../../keepalived/hooks/useVrrpClusters";
 import {
     clientCount,
@@ -20,7 +22,10 @@ import {
     problemSummary,
     unseenProblems,
 } from "../lib/dashboard";
-import { ClusterCard } from "../../keepalived/components/ClusterCard";
+import { FindingList } from "../../keepalived/components/FindingList";
+import { VrrpOverviewCard } from "../../keepalived/components/VrrpOverviewCard";
+import { fleetFindings } from "../../keepalived/lib/clusterFindings";
+import { FLEET_STATUS, fleetStatus, type FleetStatus } from "../../keepalived/lib/vrrpOverview";
 import { ClusterOverview } from "../../keepalived/components/ClusterOverview";
 import { MasterList } from "../../keepalived/components/MasterList";
 
@@ -40,10 +45,18 @@ const QUIET = "text-text-muted";
 const toPanel = (value: string | null): Panel | null =>
     (PANELS as readonly (string | null)[]).includes(value) ? (value as Panel) : null;
 
+const STATUS_ICON: Record<FleetStatus, string> = {
+    healthy: "text-success",
+    degraded: "text-warning",
+    critical: "text-error",
+    unknown: QUIET,
+};
+
 /**
- * The landing page: how many hosts report, how many instances they run, and the clusters
- * that need a look. A healthy fleet shows the four numbers, each saying below it that
- * nothing is wrong, and nothing else.
+ * The landing page, built like sadm's: how VRRP is doing, how many hosts report, how many
+ * clusters and MASTERs there are and what in the activity asks for a look. Below the numbers
+ * VRRP itself -- its facts and a tile per cluster with its virtual addresses -- and whatever
+ * is wrong with it. All of it is there whether anything is wrong or not.
  */
 export const DashboardOverview = () => {
     const navigate = useNavigate();
@@ -77,14 +90,32 @@ export const DashboardOverview = () => {
     const summary = useMemo(() => instanceCount(clients, states), [clients, states]);
     const attention = useMemo(() => needsAttention(clusters), [clusters]);
     const problems = useMemo(() => unseenProblems(events), [events]);
+    const status = useMemo(() => fleetStatus(clusters), [clusters]);
+    const findings = useMemo(() => fleetFindings(clusters), [clusters]);
+    // A host that is away has no present reading: its sync groups and version are not counted.
+    const readings = useMemo(
+        () =>
+            clients
+                .filter((client) => client.status === CLIENT_STATUS.ONLINE)
+                .map((client) => states[client.id])
+                .filter((state): state is KeepalivedState => state !== undefined),
+        [clients, states],
+    );
 
-    // Four zeroes would say the fleet is empty, which is another statement altogether.
+    // Zeroes would say the fleet is empty, which is another statement altogether.
     const loadError = clientsError ?? statesError;
     if (loadError) return <QueryError title="Could not load the fleet" error={loadError} />;
 
     return (
         <div className="space-y-6">
             <StatCardGrid>
+                <StatCard
+                    label="VRRP"
+                    value={FLEET_STATUS[status].label}
+                    sub={findings.length > 0 ? plural(findings.length, "finding") : FLEET_STATUS[status].description}
+                    icon={ShieldCheck}
+                    classNames={{ icon: STATUS_ICON[status] }}
+                />
                 <StatCard
                     label="Hosts online"
                     value={formatOnlineCount(hosts)}
@@ -152,15 +183,17 @@ export const DashboardOverview = () => {
                 </div>
             )}
 
-            {attention.length > 0 && (
-                <section aria-labelledby="dashboard-attention" className="space-y-4">
-                    <h2 id="dashboard-attention" className="text-sm font-semibold text-text-secondary">
-                        Needs attention
-                    </h2>
-                    {attention.map((cluster) => (
-                        <ClusterCard key={cluster.key} cluster={cluster} />
-                    ))}
-                </section>
+            <VrrpOverviewCard
+                clusters={clusters}
+                status={status}
+                readings={readings}
+                onShowAll={() => panel !== "clusters" && togglePanel("clusters")}
+            />
+
+            {findings.length > 0 && (
+                <Card title="Needs attention" titleAs="h2">
+                    <FindingList findings={findings} clusters={clusters} />
+                </Card>
             )}
         </div>
     );

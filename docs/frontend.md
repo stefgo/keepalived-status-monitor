@@ -49,11 +49,16 @@ src/
 │   ├── dashboard/                        # The landing page
 │   │   ├── lib/dashboard.ts              # What the cards and the sidebar badge count
 │   │   └── components/
-│   │       └── DashboardOverview.tsx     # Numbers, the list behind each, clusters in trouble
+│   │       └── DashboardOverview.tsx     # Numbers, the list behind each, VRRP card, findings
 │   ├── keepalived/                       # VRRP: clusters, a host's instances
 │   │   ├── lib/vrrp.ts                   # State colours, cluster health labels, counter groups, formatting
+│   │   ├── lib/vrrpOverview.ts           # The fleet's status and the VRRP card's facts (pure)
+│   │   ├── lib/clusterFindings.ts        # What is wrong with a cluster, counted as its health (pure)
+│   │   ├── lib/virtualIps.ts             # Each virtual address: whether it is up, for the VRRP card (pure)
 │   │   ├── hooks/useVrrpClusters.ts      # buildVrrpClusters over the cache, recomputed live, hosts named
 │   │   └── components/
+│   │       ├── VrrpOverviewCard.tsx      # The dashboard's VRRP card: facts and a tile per cluster
+│   │       ├── FindingList.tsx           # The dashboard's "Needs attention"
 │   │       ├── ClusterOverview.tsx       # Every cluster as a tree, the troubled ones first
 │   │       ├── MasterList.tsx            # The instances in MASTER, opened from the dashboard
 │   │       ├── ClusterCard.tsx           # One virtual router and its members across hosts
@@ -459,19 +464,47 @@ one that has not changed looks like a click that was not taken.
 
 ### DashboardOverview (`features/dashboard`)
 
-The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters, MASTER and errors /
-warnings (unseen activity rows at `warning` and above) — then, under the heading "Needs
-attention", every cluster whose health is not `ok`. The cards sit in the library's
-`StatCardGrid`, which picks the columns by the row's own width, not the window's, so an open
-sidebar is taken into account.
+The landing page at `/`, built like sadm's. Five `StatCard`s — VRRP, hosts online, VRRP
+clusters, MASTER and errors / warnings (unseen activity rows at `warning` and above) — sit
+in the library's `StatCardGrid`, which picks the columns by the row's own width, not the
+window's, so an open sidebar is taken into account. Below them, always, the VRRP card and,
+while anything is wrong, "Needs attention".
 
-**Every card says below its number whether anything is wrong** (`hostSummary`,
+**The VRRP card is the fleet's status in one word** (`fleetStatus` in
+`keepalived/lib/vrrpOverview.ts`): *Critical* once a cluster's badge is red (split brain,
+no master, VIP mismatch), *Degraded* while one is degraded or out of sight beside others
+that are not, *Unknown* with no cluster in sight, *Healthy* otherwise. Below the word it
+counts the findings.
+
+**Every other card says below its number whether anything is wrong** (`hostSummary`,
 `clusterSummary`, `problemSummary` in `lib/dashboard.ts`): "All connected" or "2 offline",
 "All healthy · 4 instances", "1 needs attention · 4 instances" or "1 unknown" for a cluster
 whose agents are all offline, "None in FAULT" or
 "1 in FAULT", "Nothing unseen" or "1 error · 2 warnings". Its icon takes the colour of
 what it says — warning for an offline host or a cluster in trouble, error for a FAULT or an
-unseen error — and is muted otherwise. A healthy fleet shows the four cards and nothing else.
+unseen error — and is muted otherwise.
+
+**`VrrpOverviewCard`** is sadm's domain card for VRRP: the status as a badge in its title,
+the facts on the left (`vrrpOverview`) and a tile per cluster on the right. The facts are
+the clusters by health, the live instances by state, which host holds how many MASTERs,
+whether every virtual IP is served, the sync groups (whether each host keeps a group's
+instances in one state), keepalived's version (several in warning colour), the last
+failover — the newest `lastTransition` of an instance that is MASTER — and the sites. A
+fact with nothing to say, such as sync groups where there are none, is left out. Each tile
+names the cluster's virtual addresses, as its page does, its MASTER, its live members against all of them, its last change and its
+worst finding, and opens the cluster's page. Beyond 12 clusters (`TILE_LIMIT`) only those
+that are not healthy get a tile; a last tile opens the full list.
+
+There is no card of virtual addresses beside it, unlike sadm's central URLs: an address
+belongs to one cluster, and what could be wrong with it -- split, unserved, not on every
+member -- is that cluster's health and one of its findings already. The "Virtual IPs" fact
+counts them (`virtualIpRows` in `keepalived/lib/virtualIps.ts`).
+
+**"Needs attention"** is a `FindingList`, one finding per line, errors first, each led by its
+cluster and linking to its page (`fleetFindings` in `keepalived/lib/clusterFindings.ts`). The
+findings are counted as the cluster's health is, so a degraded badge always has a finding
+under it — which is why an agent that is offline is a finding here, while the incidents,
+which watch VRRP rather than the agents, leave it out.
 
 Every card opens its list right beneath the cards — `ClientList`, `ClusterOverview`,
 `MasterList` (each instance in MASTER on an online host: host, VRID, virtual IPs, state and
@@ -481,7 +514,7 @@ clears the search, since all of them keep it in the same `search` parameter. The
 is kept in the `panel` parameter (`hosts`, `clusters`, `masters`, `activity`), so it survives
 a reload and a shared link opens it too.
 
-![The dashboard with its four stat cards and the cluster list opened beneath them](assets/screenshots/dashboard-light.png)
+![The dashboard with its stat cards and the cluster list opened beneath them](assets/screenshots/dashboard-light.png)
 
 *The dashboard with the VRRP clusters card opened (`/?panel=clusters`): two healthy clusters, each with its MASTER and BACKUP.*
 
@@ -517,9 +550,8 @@ where a row opens the host. It leaves out the VRID (`showVrid={false}`), which i
 cluster's identity and the same on every row. The virtual addresses are not: they belong to
 the host that carries them, and a member serving a short list is read off them. Like the
 interface and the advertisement interval, they are shown in the list view only — an address
-list needs a line per row, which a table column cannot give it. The dashboard lists the
-troubled clusters with this card; the cluster page uses it as its list of hosts, with a
-plain title, since its header says the rest.
+list needs a line per row, which a table column cannot give it. The cluster page uses it as
+its list of hosts, with a plain title, since its header says the rest.
 
 **Clusters are derived, never fetched.** `useVrrpClusters` runs `buildVrrpClusters` from
 `@kasm/shared` over the readings from `useKeepalivedStates` and the online clients from
@@ -772,6 +804,8 @@ The app is heavily integrated with `@stefgo/react-ui-components`, pinned to an e
 | `LoginPage`            | Pre-built login form UI (local & OIDC).                   |
 | `Card`                 | Generic surface card. `padding="none"` for a card that holds a table. |
 | `StatCard`             | Stat tile — the dashboard numbers (clickable, opening their list or page). |
+| `StatCardGrid`         | Lays out a row of `StatCard`s by the row's own width.     |
+| `DescriptionList`      | Labels and values — the facts on the VRRP card, a client's identity. |
 | `Input`                | Form input field.                                         |
 | `Button`               | Button with variants (primary, secondary, danger).        |
 | `DataTable`            | Table view with sorting and paging.                       |

@@ -39,7 +39,7 @@ export function instanceNetworks(instance: VrrpInstance): string[] {
  * about the present state. A host that is offline with the wrong list is wrong the moment it
  * comes back.
  */
-export function mismatchedVips(members: VrrpClusterMember[]): { member: VrrpClusterMember; missing: string[] }[] {
+export function mismatchedVips<M extends VrrpClusterMember>(members: M[]): { member: M; missing: string[] }[] {
     const served = new Map<string, string>();
     for (const member of members) {
         for (const vip of member.instance.vips ?? []) {
