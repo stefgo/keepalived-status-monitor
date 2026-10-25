@@ -461,7 +461,9 @@ one that has not changed looks like a click that was not taken.
 
 The landing page at `/`. Four `StatCard`s — hosts online, VRRP clusters, MASTER and errors /
 warnings (unseen activity rows at `warning` and above) — then, under the heading "Needs
-attention", every cluster whose health is not `ok`.
+attention", every cluster whose health is not `ok`. The cards sit in the library's
+`StatCardGrid`, which picks the columns by the row's own width, not the window's, so an open
+sidebar is taken into account.
 
 **Every card says below its number whether anything is wrong** (`hostSummary`,
 `clusterSummary`, `problemSummary` in `lib/dashboard.ts`): "All connected" or "2 offline",

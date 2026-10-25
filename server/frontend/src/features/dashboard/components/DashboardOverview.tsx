@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Crown, Monitor, Network } from "lucide-react";
-import { StatCard } from "@stefgo/react-ui-components";
+import { StatCard, StatCardGrid } from "@stefgo/react-ui-components";
 import { useClients } from "../../../queries/clients";
 import { QueryError } from "../../../components/QueryError";
 import { useKeepalivedStates } from "../../../queries/keepalived";
@@ -84,7 +84,7 @@ export const DashboardOverview = () => {
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <StatCardGrid>
                 <StatCard
                     label="Hosts online"
                     value={formatOnlineCount(hosts)}
@@ -136,7 +136,7 @@ export const DashboardOverview = () => {
                     }}
                     aria-controls={PANEL_ID}
                 />
-            </div>
+            </StatCardGrid>
 
             {panel && (
                 <div id={PANEL_ID}>

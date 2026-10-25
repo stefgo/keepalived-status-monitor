@@ -60,6 +60,13 @@ In the list view, which shows each row as a card of labels and values, every val
 row now starts at the same edge. A long label wraps instead of pushing its value aside, so
 on a narrow screen it no longer runs out of the row.
 
+### The dashboard's cards fit beside the sidebar
+
+The four cards at the top of the dashboard now choose how many go in a row by the room the
+page has, so an open sidebar is taken into account: four across where they fit, two by two
+where they do not. A cluster's list of members counts the hosts ticked for comparison
+behind its title.
+
 ### Upgrading
 
 - Registration tokens issued before the upgrade no longer work. Add the client again, or

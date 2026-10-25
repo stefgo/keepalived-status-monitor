@@ -53,6 +53,8 @@ export const ClusterCard = ({ cluster, title, compare }: ClusterCardProps) => {
                     // The keys are the rows' own, so they are member keys.
                     onChange: (next) => compare.onChange(new Set([...next].map(String))),
                     rowLabel: (row) => `Compare ${names.get(row.key) ?? row.key}`,
+                    // Counted behind the title; a ticked member is compared, not "selected".
+                    label: (selected) => `${selected.size} compared`,
                 }
             }
             rows={[...cluster.members]
