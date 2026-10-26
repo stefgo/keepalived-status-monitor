@@ -1,3 +1,112 @@
+## [1.2.0](https://github.com/stefgo/keepalived-status-monitor/compare/v1.1.0...v1.2.0) (2026-10-26)
+
+### A new client is there before its agent
+
+Adding an inbound client now creates it right away, under the name you give it, marked
+*Awaiting registration*; the registration token is part of that client. When the token runs
+out, the client's page issues a new one. The *Client Tokens* page and its retention settings
+are gone -- there is nothing left to tidy up.
+
+*Re-register Agent* in a client's menu issues a token for a client that is already
+registered. The agent that registers with it takes the client over with its settings and
+history; before, every new registration created a new client and left the old one behind.
+
+### The level of an activity event can be set per kind
+
+Each kind of event in the activity history has a built-in level. It can now be changed in
+the settings, under *Activity History*, with one select per kind. A kind can also be set to
+"none": such an event is no longer stored and reaches no webhook. The two events an incident opens and closes with cannot be switched off.
+
+A changed level applies to events from then on; events that are stored already keep theirs.
+
+### A cluster's page names its virtual IPs
+
+The details at the top of a cluster's page now list the cluster's virtual IPs, where they
+showed the network those addresses sit on.
+
+### The agent says at start whether it can see keepalived
+
+An agent that was started without `pid: host` sees only its own container. It reported
+keepalived as not running, like a host that really runs none, and its log said nothing. The
+agent now checks this once at start and writes the result to its log: that it found
+keepalived, that the host runs none, or that it does not see the host's processes and needs
+`pid: host`.
+
+### Wrapped text in tables sits closer
+
+Text that wraps onto a second line in a table cell now sits as closely as text anywhere else
+in the application; its lines were further apart than the text's size called for. Rows of a
+single line are a little lower than before.
+
+### A click beside a checkbox no longer opens the member
+
+In a cluster's list of members, a click that just missed a member's comparison checkbox used
+to open that member's host. The space around the checkbox now belongs to it: a click there
+neither opens the host nor ticks the box.
+
+### Labels in the list view line up
+
+In the list view, which shows each row as a card of labels and values, every value of a
+row now starts at the same edge. A long label wraps instead of pushing its value aside, so
+on a narrow screen it no longer runs out of the row.
+
+### The dashboard shows VRRP at a glance
+
+The dashboard now always shows how VRRP is doing, not only when something is wrong:
+
+- A new first card sums the fleet up in one word -- *Healthy*, *Degraded*, *Critical* or
+  *Unknown* -- with the number of findings below it.
+- A *VRRP* card lists the facts: the clusters by health, the instances by state, which host
+  is MASTER for how many clusters, whether every virtual IP is served, the sync groups,
+  keepalived's version on the hosts (several versions are marked), the last failover and
+  the sites. Beside them is a tile per cluster with its virtual IPs, its MASTER, its
+  members, its last change and its worst finding; a click opens the cluster.
+- *Needs attention* lists what is wrong, one finding per line, instead of a full card per
+  cluster.
+
+The cards at the top now choose how many go in a row by the room the page has, so an open
+sidebar is taken into account. A cluster's list of members counts the hosts ticked for
+comparison behind its title.
+
+### Upgrading
+
+- Registration tokens issued before the upgrade no longer work. Add the client again, or
+  generate a new token on a waiting client. The `/api/v1/tokens` endpoints are replaced by
+  `POST /api/v1/clients/inbound`, and `token_retention_days` and
+  `token_cleanup_interval_hours` can be deleted from `config.yaml`.
+- The webhook templates behave as before; their engine now comes from a package the stefgo
+  projects share.
+
+### ⚠ BREAKING CHANGES
+
+* **server:** GET/POST /api/v1/tokens, DELETE /api/v1/tokens/:tokenHash
+and POST /api/v1/settings/cleanup/invalid-tokens are removed. Inbound
+clients are created with POST /api/v1/clients/inbound, which returns the
+client's id and its token; POST /api/v1/clients/:clientId/registration-token
+issues a new one. Tokens issued before the upgrade no longer register an
+agent.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Features
+
+* **activity:** Make the level of each event kind configurable ([7b1ed2a](https://github.com/stefgo/keepalived-status-monitor/commit/7b1ed2a4cf7f8e64e5f7f33974d2c5c2b831a6ad))
+* **dashboard:** Show VRRP at a glance, as sadm shows the domain ([c719706](https://github.com/stefgo/keepalived-status-monitor/commit/c71970690ca4ffa2a647996ef216c17c3c357342))
+* **docs:** enhance webhook template for incident reporting ([38fdd29](https://github.com/stefgo/keepalived-status-monitor/commit/38fdd2973935716e852ae12cd2a5c58297b49e1b))
+* **frontend:** Show a cluster's virtual IPs in its header details ([740c218](https://github.com/stefgo/keepalived-status-monitor/commit/740c21817ded1d894f6f76debeffb5506e7912d3))
+* **server:** Store the registration token on its client ([6be1942](https://github.com/stefgo/keepalived-status-monitor/commit/6be1942534853d39713cfd47eeee8fa25f0c12dc))
+
+### Bug Fixes
+
+* **client:** Say at start whether keepalived can be seen ([deec4bf](https://github.com/stefgo/keepalived-status-monitor/commit/deec4bfa29b12e7142708480b2f01e95de6aac73))
+* Update the UI library so wrapped table text sits 20px apart ([49122f5](https://github.com/stefgo/keepalived-status-monitor/commit/49122f519b10c7bc1d05e99dfc8dde81aeb0c589))
+* Update the UI library to 4.10.0 ([4b90e6b](https://github.com/stefgo/keepalived-status-monitor/commit/4b90e6bce47fb7d5be59bf1f700d8546f05cd64a))
+* Update the UI library to 4.12.0 ([d5e98c1](https://github.com/stefgo/keepalived-status-monitor/commit/d5e98c127ac6df6f90255b67c37c74034dfb2fdd))
+
+### Dependencies
+
+* **deps:** Sync the lockfile and align the type packages with Node 22 ([c60bbbb](https://github.com/stefgo/keepalived-status-monitor/commit/c60bbbb544ca8fd05711e74cdf9908de9cb471a5))
+
 # [1.1.0](https://github.com/stefgo/keepalived-status-monitor/compare/v1.0.0...v1.1.0) (2026-10-10)
 
 
