@@ -1,11 +1,11 @@
 import type { BadgeProps, StatusDotTone } from "@stefgo/react-ui-components";
-import type { KeepalivedState, VrrpClusterHealth, VrrpState } from "@kasm/shared";
+import type { FleetStatus, KeepalivedState, VrrpClusterHealth, VrrpState } from "@kasm/shared";
 import { plural } from "../../../utils";
 import { virtualIpRows, VIP_STATE } from "./virtualIps";
 import { CLUSTER_HEALTH, clusterLabel, type NamedClusterMember, type NamedVrrpCluster } from "./vrrp";
 
-/** How VRRP is doing across the fleet, in one word -- the dashboard's first card. */
-export type FleetStatus = "healthy" | "degraded" | "critical" | "unknown";
+// The verdict lives in shared: the server's status report (GET /api/v1/status) says the same.
+export { fleetStatus, type FleetStatus } from "@kasm/shared";
 
 export const FLEET_STATUS: Record<
     FleetStatus,
@@ -24,18 +24,6 @@ export const FLEET_STATUS: Record<
     },
     unknown: { label: "Unknown", variant: "neutral", description: "No agent reports a VRRP instance." },
 };
-
-/**
- * The fleet's status from its clusters' health. `critical` once a cluster's badge is red,
- * `degraded` while one is degraded or out of sight while others are not, `unknown` while
- * nothing is in sight at all.
- */
-export function fleetStatus(clusters: readonly { health: VrrpClusterHealth }[]): FleetStatus {
-    if (clusters.some((cluster) => CLUSTER_HEALTH[cluster.health].variant === "error")) return "critical";
-    if (clusters.every((cluster) => cluster.health === "unknown")) return "unknown";
-    if (clusters.some((cluster) => cluster.health !== "ok")) return "degraded";
-    return "healthy";
-}
 
 /** The dot next to a cluster: its badge's colour. */
 export function clusterTone(health: VrrpClusterHealth): StatusDotTone {

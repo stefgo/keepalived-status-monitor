@@ -10,3 +10,5 @@ export * from "./vrrpCluster.js";
 export * from "./activityText.js";
 export * from "./activityLevelOverrides.js";
 export * from "./webhookTemplate.js";
+export * from "./vrrpFindings.js";
+export * from "./statusReport.js";

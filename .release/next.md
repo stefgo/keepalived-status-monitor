@@ -9,3 +9,12 @@ dev keeps the text; the stable release from main empties this file again.
 
 Nothing inside an HTML comment is published.
 -->
+
+### Read the status from elsewhere
+
+`GET /api/v1/status` answers with what the dashboard shows -- the verdict (`healthy`,
+`degraded`, `critical`, `unknown`) and every line of **Needs attention** with the dashboard's
+text -- for Home Assistant, a monitoring system or a script. Every finding now has a stable id and a type as well. Besides a session it
+takes a status token that opens this route and nothing else: set `statusToken` in
+`config.yaml` or `KASM_STATUS_TOKEN` (`_FILE`), at least 32 characters. Without one
+nothing changes. See [Status](https://stefgo.github.io/keepalived-status-monitor/api/#status).

@@ -278,6 +278,60 @@ function resolveTrustedProxies(): string[] {
 
 export const trustedProxies: string[] = resolveTrustedProxies();
 
+/**
+ * A secret that comes from the environment: `<name>`, or `<name>_FILE` naming a file that
+ * holds it (a Docker or Podman secret).
+ *
+ * Fatal when both are set or the file cannot be read or is empty: a server that started
+ * without the secret it was given would fail later, somewhere that no longer says why.
+ */
+function readSecretFromEnv(name: string): string | null {
+    const value = process.env[name]?.trim() || null;
+    const file = process.env[`${name}_FILE`]?.trim() || null;
+    if (value && file) {
+        logger.fatal(`Set ${name} or ${name}_FILE, not both`);
+        process.exit(1);
+    }
+    if (!file) return value;
+
+    let content: string;
+    try {
+        content = fs.readFileSync(path.resolve(path.dirname(CONFIG_PATH), file), "utf8").trim();
+    } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        logger.fatal(`${name}_FILE cannot be read at ${file}${code ? ` (${code})` : ""}`);
+        process.exit(1);
+    }
+    if (!content) {
+        logger.fatal(`${name}_FILE is empty: ${file}`);
+        process.exit(1);
+    }
+    return content;
+}
+
+/** As short as config.yaml allows (`statusToken` in AppConfigSchema). */
+const STATUS_TOKEN_MIN_LENGTH = 32;
+
+/**
+ * The token a reader without a session sends to read `GET /api/v1/status`:
+ * `KASM_STATUS_TOKEN` or `KASM_STATUS_TOKEN_FILE`, else `statusToken` from config.yaml, else
+ * none -- and without one that route asks for a session like every other.
+ *
+ * Kept apart from `appConfig`: that object is written back to the file, and a value from the
+ * environment must not end up there. One that is too short stops the server, as it does in
+ * the file.
+ */
+function resolveStatusToken(): string | null {
+    const fromEnv = readSecretFromEnv("KASM_STATUS_TOKEN");
+    if (fromEnv !== null && fromEnv.length < STATUS_TOKEN_MIN_LENGTH) {
+        logger.fatal(`KASM_STATUS_TOKEN needs at least ${STATUS_TOKEN_MIN_LENGTH} characters`);
+        process.exit(1);
+    }
+    return fromEnv ?? appConfig.statusToken ?? null;
+}
+
+export const statusToken: string | null = resolveStatusToken();
+
 export function updateConfig(updates: Partial<AppConfig>) {
     Object.assign(appConfig, updates);
     config = appConfig;

@@ -17,12 +17,12 @@ interface FindingListProps {
  */
 export const FindingList = ({ findings, clusters }: FindingListProps) => (
     <ul className="divide-y divide-border">
-        {findings.map((finding, index) => {
+        {findings.map((finding) => {
             const Icon = finding.severity === "error" ? AlertCircle : AlertTriangle;
             const path = clusterPath(finding.cluster, clusters);
             const label = clusterLabel(finding.cluster);
             return (
-                <li key={`${finding.cluster.key}-${index}`} className="flex items-start gap-3 px-4 py-3">
+                <li key={finding.id} className="flex items-start gap-3 px-4 py-3">
                     <Icon
                         size={16}
                         className={cn("mt-0.5 shrink-0", finding.severity === "error" ? "text-error" : "text-warning")}

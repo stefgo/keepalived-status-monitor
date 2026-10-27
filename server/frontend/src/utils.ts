@@ -97,8 +97,7 @@ export const plural = (count: number, one: string, many = `${one}s`): string =>
  * `||` rather than `??` on purpose: an empty display name must fall back as well, or the row
  * shows no name at all.
  */
-export const clientName = (client: { displayName?: string | null; hostname: string }): string =>
-    client.displayName || client.hostname;
+export { clientName } from "@kasm/shared";
 
 export const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
