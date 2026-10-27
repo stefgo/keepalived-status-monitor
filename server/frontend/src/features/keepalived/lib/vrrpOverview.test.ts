@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { KeepalivedState, VrrpClusterHealth, VrrpInstance, VrrpState } from "@kasm/shared";
-import { clusterLastChange, fleetStatus, visibleTiles, vrrpOverview } from "./vrrpOverview";
+import { clusterLastChange, visibleTiles, vrrpOverview } from "./vrrpOverview";
 import type { NamedClusterMember, NamedVrrpCluster } from "./vrrp";
 
 const VIP = "10.0.0.10/24";
@@ -45,28 +45,6 @@ const reading = (clientId: string, over: Partial<KeepalivedState> = {}): Keepali
 });
 
 const healths = (...list: VrrpClusterHealth[]) => list.map((health) => ({ health }));
-
-describe("fleetStatus", () => {
-    it("is unknown without a cluster or with none in sight", () => {
-        expect(fleetStatus([])).toBe("unknown");
-        expect(fleetStatus(healths("unknown", "unknown"))).toBe("unknown");
-    });
-
-    it("is healthy while every cluster is", () => {
-        expect(fleetStatus(healths("ok", "ok"))).toBe("healthy");
-    });
-
-    it("is degraded with a degraded cluster or one out of sight beside healthy ones", () => {
-        expect(fleetStatus(healths("ok", "degraded"))).toBe("degraded");
-        expect(fleetStatus(healths("ok", "unknown"))).toBe("degraded");
-    });
-
-    it("is critical once a cluster's badge is red", () => {
-        for (const health of ["split-brain", "no-master", "vip-mismatch"] as const) {
-            expect(fleetStatus(healths("ok", "degraded", health))).toBe("critical");
-        }
-    });
-});
 
 describe("vrrpOverview", () => {
     const a = cluster("a", [

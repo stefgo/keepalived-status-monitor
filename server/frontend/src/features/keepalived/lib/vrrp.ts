@@ -84,11 +84,6 @@ export function statLabel(key: string): string {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The VRID is unique per site only, so the site leads it. */
-export function clusterLabel(cluster: VrrpCluster): string {
-    return `${cluster.site ? `${cluster.site} / ` : ""}VRID ${cluster.vrid ?? "?"}`;
-}
-
 /** A cluster's addresses, or the name of its instances where it has none. */
 export function clusterVipLabel(cluster: VrrpCluster): string | undefined {
     return cluster.vips.length > 0 ? cluster.vips.join(", ") : cluster.members[0]?.instance.name;
@@ -103,33 +98,8 @@ export function clusterNetworkKey(cluster: VrrpCluster): string {
     return cluster.key.slice(`${cluster.site ?? ""}|${cluster.vrid ?? "?"}|`.length);
 }
 
-/** A cluster member with the name its host goes by, see `nameMembers`. */
-export interface NamedClusterMember extends VrrpClusterMember {
-    hostName: string;
-}
-
-/** A cluster as the dashboard holds it: every member knows what its host is called. */
-export interface NamedVrrpCluster extends VrrpCluster {
-    members: NamedClusterMember[];
-}
-
-/**
- * The clusters with each member's host named -- once, so that a table, its search and a
- * sentence about the same host cannot call it three different things. `nameOf` has no name
- * for a client that is gone; its id stands in, which is still what the host's page is under.
- */
-export function nameMembers(
-    clusters: VrrpCluster[],
-    nameOf: (clientId: string) => string | undefined,
-): NamedVrrpCluster[] {
-    return clusters.map((cluster) => ({
-        ...cluster,
-        members: cluster.members.map((member) => ({
-            ...member,
-            hostName: nameOf(member.clientId) ?? member.clientId,
-        })),
-    }));
-}
+// Live in shared, where the findings and the server's status report use them too.
+export { clusterLabel, nameMembers, type NamedClusterMember, type NamedVrrpCluster } from "@kasm/shared";
 
 /** The clusters behind one site and VRID: one as a rule, several on separate segments of a site. */
 export function clustersAt<C extends VrrpCluster>(clusters: C[], site: string | null, vrid: number): C[] {

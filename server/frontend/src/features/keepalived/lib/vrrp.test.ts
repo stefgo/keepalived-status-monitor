@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { KeepalivedState, VrrpCluster, VrrpClusterMember, VrrpInstance, VrrpState } from "@kasm/shared";
+import { CLUSTER_HEALTH_SEVERITY, type KeepalivedState, type VrrpCluster, type VrrpClusterMember, type VrrpInstance, type VrrpState } from "@kasm/shared";
 import {
+    CLUSTER_HEALTH,
     clusterLabel,
     clusterNetworkKey,
     clusterOf,
@@ -327,3 +328,14 @@ describe("groupCounters with baselines", () => {
         expect(group.rows[0].deltas).toBeUndefined();
     });
 });
+
+describe("CLUSTER_HEALTH", () => {
+    it("colours a health red exactly where shared counts it an error", () => {
+        for (const [health, severity] of Object.entries(CLUSTER_HEALTH_SEVERITY)) {
+            const variant = CLUSTER_HEALTH[health as keyof typeof CLUSTER_HEALTH].variant;
+            expect(variant === "error").toBe(severity === "error");
+            expect(variant === "warning").toBe(severity === "warning");
+        }
+    });
+});
+

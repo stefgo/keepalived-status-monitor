@@ -1,58 +1,22 @@
-import {
-    CLIENT_STATUS,
-    type ActivityRecord,
-    type KeepalivedState,
-    type VrrpCluster,
-} from "@kasm/shared";
+import { needsAttention, type ActivityRecord, type OnlineCount, type VrrpCluster } from "@kasm/shared";
 import { groupActivity } from "../../activity/lib/groupActivity";
 import { plural } from "../../../utils";
 
 /**
- * The numbers the dashboard's cards and the sidebar's badge both show. Counted here, once,
- * so the two cannot disagree about how many clients are online.
+ * The numbers the dashboard's cards and the sidebar's badge both show. Counted in `shared`,
+ * once, so the cards, the badge and the server's status report cannot disagree about how
+ * many clients are online.
  */
-
-export interface OnlineCount {
-    online: number;
-    total: number;
-}
-
-export const clientCount = (clients: readonly { status?: string | null }[]): OnlineCount => ({
-    online: clients.filter((c) => c.status === CLIENT_STATUS.ONLINE).length,
-    total: clients.length,
-});
+export {
+    clientCount,
+    instanceCount,
+    needsAttention,
+    type InstanceCount,
+    type OnlineCount,
+} from "@kasm/shared";
 
 /** `3 / 5`, as a card and a badge write it. */
 export const formatOnlineCount = ({ online, total }: OnlineCount): string => `${online} / ${total}`;
-
-export interface InstanceCount {
-    instances: number;
-    masters: number;
-    faults: number;
-}
-
-/**
- * The VRRP instances of the hosts that are connected. An instance of an offline host is not
- * counted: its last reading is not its present, and the card on the hosts says that the
- * host is gone.
- */
-export function instanceCount(
-    clients: readonly { id: string; status?: string | null }[],
-    states: Readonly<Record<string, KeepalivedState | undefined>>,
-): InstanceCount {
-    const instances = clients
-        .filter((client) => client.status === CLIENT_STATUS.ONLINE)
-        .flatMap((client) => states[client.id]?.instances ?? []);
-    return {
-        instances: instances.length,
-        masters: instances.filter((instance) => instance.state === "MASTER").length,
-        faults: instances.filter((instance) => instance.state === "FAULT").length,
-    };
-}
-
-/** The clusters the dashboard shows a card for: every one whose health is known and not ok. */
-export const needsAttention = <C extends VrrpCluster>(clusters: readonly C[]): C[] =>
-    clusters.filter((cluster) => cluster.health !== "ok" && cluster.health !== "unknown");
 
 /** The rows the user has not seen that ask for a look, by how loudly. */
 export interface UnseenProblems {
