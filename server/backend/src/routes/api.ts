@@ -8,6 +8,9 @@ import { ActivityController } from "../controllers/ActivityController.js";
 import { WebhookController } from "../controllers/WebhookController.js";
 import { HealthRepository } from "../repositories/HealthRepository.js";
 import { AuthService } from "../services/AuthService.js";
+import { sessionHook, statusAuthHook } from "../services/statusAuth.js";
+import { StatusController } from "../controllers/StatusController.js";
+import { statusToken } from "../config/AppConfig.js";
 
 export default async function apiRoutes(fastify: FastifyInstance) {
     /**
@@ -58,20 +61,9 @@ export default async function apiRoutes(fastify: FastifyInstance) {
         async (v1) => {
             // Protected Routes
             v1.register(async (protectedRoutes) => {
-                protectedRoutes.addHook("onRequest", async (request, reply) => {
-                    try {
-                        await request.jwtVerify();
-                    } catch (err) {
-                        return reply.send(err);
-                    }
-                    // A valid signature is not enough: the user may have been deleted or
-                    // had their password changed since the token was signed.
-                    if (!AuthService.isSessionCurrent(request.user)) {
-                        return reply
-                            .code(401)
-                            .send({ error: "Session is no longer valid" });
-                    }
-                });
+                // A valid signature is not enough: the user may have been deleted or had their
+                // password changed since the token was signed.
+                protectedRoutes.addHook("onRequest", sessionHook((payload) => AuthService.isSessionCurrent(payload)));
 
                 // The session's own identity. Behind the JWT hook like everything else here,
                 // so an expired session answers 401 and the UI logs out through the same
@@ -160,6 +152,18 @@ export default async function apiRoutes(fastify: FastifyInstance) {
             v1.get("/ping", async () => {
                 return { status: "ok" };
             });
+
+            // The dashboard's verdict and findings, for a reader that is not a browser. Outside
+            // the protected routes because it takes the status token as well as a session --
+            // and only this route does: the token is worth nothing anywhere else.
+            v1.get(
+                "/status",
+                {
+                    onRequest: statusAuthHook(statusToken, sessionHook((payload) => AuthService.isSessionCurrent(payload))),
+                    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+                },
+                StatusController.get,
+            );
         },
         { prefix: "/v1" },
     );

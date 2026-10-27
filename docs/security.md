@@ -25,6 +25,7 @@ This page lists what protects that chain and what you have to set up yourself.
 - Changing a user's password or auth methods, or deleting the user, ends all of that user's
   sessions at once, open dashboards included.
 - `POST /api/login` accepts at most **10 attempts per 15 minutes** per client IP.
+- The **status token**, when one is configured (`statusToken`, `KASM_STATUS_TOKEN`), is the one way in without an account. It opens `GET /api/v1/status` and nothing else -- the dashboard's verdict and its findings, which name hosts -- and changes nothing. It is compared in constant time, and the route answers at most 60 requests a minute per address. Like `jwtSecret` it is kept in plain text; give it as `KASM_STATUS_TOKEN_FILE` to keep it out of `config.yaml`, and change it by changing the value and restarting.
 
 ## Reverse proxy
 
@@ -151,7 +152,7 @@ same link.
 | :----- | :-------- |
 | User passwords (bcrypt), registration tokens (SHA-256), inbound clients' auth tokens (SHA-256) | the server's SQLite database (`server-data` volume) — hashes only, the server just has to recognise the value |
 | Outbound clients' auth tokens | the server's SQLite database, encrypted (AES-256-GCM) with `secretKey` — the server presents them when it dials, so it has to read them back |
-| Session signing key (`jwtSecret`), encryption key (`secretKey`), OIDC client secret | the server's `config.yaml` |
+| Session signing key (`jwtSecret`), encryption key (`secretKey`), OIDC client secret, status token (`statusToken`) | the server's `config.yaml` (the status token also as `KASM_STATUS_TOKEN` or a file named by `KASM_STATUS_TOKEN_FILE`) |
 | The agent's client id and auth token | `identity.json` in the agent's `client-data` volume, readable by root only |
 
 The database and `config.yaml` are kept apart on purpose — a volume and a bind-mounted file —

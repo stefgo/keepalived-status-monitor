@@ -2,7 +2,7 @@
 
 **Base URL:** `/api` (REST endpoints use `/api/v1` prefix unless otherwise noted)
 
-> **Note:** All API responses are JSON formatted. All protected endpoints require a valid session: the `kasm_session` cookie set by the login, or the same JWT in an `Authorization: Bearer <token>` header.
+> **Note:** All API responses are JSON formatted. All protected endpoints require a valid session: the `kasm_session` cookie set by the login, or the same JWT in an `Authorization: Bearer <token>` header. [Status](#status) also takes the status token instead.
 
 > **Validation:** Every endpoint that takes a body or query parameters checks them against a Zod schema from `@kasm/shared` before doing anything else. A request that does not match is answered with **`400`** and a single message that starts with the path of the first offending field, e.g. `{ "error": "inboundAllowedIp: Must be an IPv4 address or an IPv4 network in CIDR notation" }`. Only the first problem is reported; fix it and the next request names the next one.
 
@@ -51,6 +51,7 @@
     - [Send A Test Delivery](#send-a-test-delivery)
 - [Misc](#-misc)
     - [Health](#health)
+    - [Status](#status)
     - [Reachability](#reachability)
 - [WebSockets](#-websockets)
     - [Dashboard Connection](#dashboard-connection)
@@ -1167,6 +1168,85 @@ refuses is still a **200** here, with `ok: false`; **400** means the webhook its
 Agent connections are not consulted: one offline agent must not mark the control plane as broken. The agent's web UI has its own `GET /api/health` on port 3011, which reports only that the agent process answers — not whether it is connected to the server. It serves the container's `HEALTHCHECK` alone: it exists only in the container image and answers only loopback, everyone else gets `404`.
 
 **Why under `/api`:** the server answers every path outside `/api` with the dashboard's `index.html` and HTTP `200`, so a probe on `/health` would report success even without the route. Under `/api`, an unknown path is a `404`.
+
+### Status
+
+`GET /api/v1/status`
+
+**Description:** What the dashboard shows, for a reader that is not a browser -- Home Assistant, a monitoring system, a script: the overall verdict and every line of **Needs attention**, in the dashboard's order and with the dashboard's text. The server computes both with the same functions the dashboard uses.
+
+**Authentication:** a session, like every other route, **or** the status token sent as `Authorization: Bearer <token>` -- `statusToken` in `config.yaml` or `KASM_STATUS_TOKEN` (`_FILE`), see [Configuration](configuration.md#server-configyaml). The token opens this route and no other, and only reads. Without one configured, a session is needed. At most **60 requests a minute** per client IP.
+
+#### Response
+
+```json
+{
+  "app": "kasm",
+  "version": "1.4.0",
+  "status": "degraded",
+  "checkedAt": "2026-10-27T10:00:00.000Z",
+  "counts": {
+    "error": 0,
+    "warning": 1
+  },
+  "summary": {
+    "hosts": {
+      "online": 3,
+      "total": 3
+    },
+    "clusters": {
+      "total": 2,
+      "needingAttention": 1,
+      "unknown": 0
+    },
+    "instances": 4,
+    "masters": 2,
+    "faults": 0
+  },
+  "findings": [
+    {
+      "id": "single-member:HQ|52|10.0.1.0/24",
+      "type": "single-member",
+      "severity": "warning",
+      "text": "HQ / VRID 52: Only one host in the cluster",
+      "since": null
+    }
+  ]
+}
+```
+
+| Field | |
+| :---- | :-- |
+| `status` | `healthy`, `degraded`, `critical` or `unknown` -- the dashboard's first card. |
+| `counts` | How many of `findings` are errors and warnings. |
+| `summary` | The key figures of the dashboard's cards. |
+| `findings[].id` | Stays the same while a finding lasts; never derived from its text. |
+| `findings[].type` | What kind of finding it is. |
+| `findings[].since` | Since when it stands, where the server knows it; otherwise `null`. |
+
+The **Errors / Warnings** card is not part of it: what is unseen is a login's own. Every line leads with its cluster's label, as the dashboard's list does.
+
+| Status | Meaning |
+| :----- | :------ |
+| `200` | The report |
+| `401` | Neither a valid session nor the status token |
+| `429` | More than 60 requests in a minute |
+| `503` | `{"status":"unknown"}`: the report could not be put together |
+
+A sensor in Home Assistant:
+
+```yaml
+rest:
+  - resource: https://kasm.example.com/api/v1/status
+    headers:
+      Authorization: !secret kasm_status_token   # "Bearer <token>"
+    scan_interval: 60
+    sensor:
+      - name: kasm Health
+        unique_id: kasm_health
+        value_template: "{{ value_json.status }}"
+        json_attributes: [counts, summary, findings, checkedAt]
+```
 
 ### Reachability
 

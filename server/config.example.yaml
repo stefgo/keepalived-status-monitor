@@ -42,6 +42,13 @@ secretKey:
 # session cookies carry the same lifetime.
 jwtExpiresIn: "12h"
 
+# The token a reader without a session -- Home Assistant, a monitoring system -- sends as
+# "Authorization: Bearer <token>" to read GET /api/v1/status, the dashboard's verdict and
+# findings. It opens that route and no other. At least 32 characters, e.g. from
+# `openssl rand -base64 32`. KASM_STATUS_TOKEN or KASM_STATUS_TOKEN_FILE win over it.
+# Left out, the route needs a session like every other.
+# statusToken: ""
+
 # General server settings
 settings:
     # Number of days an invalid (used or expired) registration token is kept before the
