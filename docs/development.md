@@ -200,7 +200,6 @@ Type checking, linting and the [tests](#tests) of the pure logic are the quality
 | **Build Images** (`build.yml`) | Push to `main` or `dev` (except documentation-only commits), `v*.*.*` tags, manual dispatch — which is how a release reaches it | See the job graph below. |
 | **Create Release** (`release.yml`) | Manual, `main` (release) or `dev` (beta) | See [Release](#release). |
 | **Prune Registry** (`cleanup-packages.yml`) | Nightly, manual | See [Registry Cleanup](#registry-cleanup). |
-| **Merge Dependency Updates** (`dependabot-auto-merge.yml`) | Pull requests by Dependabot | See [Action Updates](#action-updates). |
 | **Publish Docs** (`docs.yml`) | Push and pull request touching `docs/`, `mkdocs.yml` or `requirements-docs.txt`, manual | See [Documentation Site](#documentation-site). |
 
 `build.yml` runs these jobs:
@@ -299,13 +298,18 @@ gh workflow run cleanup-packages.yml -f dry_run=false
 
 The images are listed by name in the workflow; a new image has to be added there by hand. `ci.yml` fails when `build.yml` publishes an image that list does not name. Discovering the packages by wildcard would need a classic personal access token with `delete:packages` — an unattended delete right over every container of the account, and a credential that expires.
 
-### Action Updates
+### Dependency Updates
 
-`.github/dependabot.yml` watches the GitHub Actions, and only those: one grouped pull request a month, prefixed `ci:`, aimed at `dev`. npm is left out on purpose — four workspaces produce a stream of version bumps that nobody can assess without a test suite. Dependabot security updates for npm arrive regardless, they need no configuration file.
+[Renovate](https://docs.renovatebot.com/) keeps the GitHub Actions, the npm packages of every workspace, the Node version in `.nvmrc` and the base images of the Dockerfiles current. It does not run in this repository: one runner in [stefgo/renovate-config](https://github.com/stefgo/renovate-config) serves every connected repository, and its preset holds the rules. `.github/renovate.json5` only connects this repository (`github>stefgo/renovate-config:react`) and holds what is particular to it.
 
-This repository is maintained without pull requests, so a monthly one would simply wait. `dependabot-auto-merge.yml` puts a Dependabot pull request into auto-merge, and GitHub merges it once its checks are green; a red run leaves it open. It targets `dev` because an action bump mostly concerns actions only `build.yml` exercises, and that runs after a merge — on `dev`, a bad bump breaks the developer image, and its smoke test says so.
+- **Monday** brings the updates as pull requests: every minor and patch update together in one, each major update in its own. An npm release is taken only once it is three days old.
+- **A security update** comes at once, outside the Monday window, as soon as GitHub reports a vulnerable version. That needs *Dependabot alerts* on; *Dependabot security updates* stay off, or the same fix would arrive twice.
+- **Every pull request aims at `dev`.** A bad update breaks the developer image there, and its smoke test says so, before it reaches a release.
+- **Renovate merges a pull request itself** (squashed) on its first daily run after every check of it is green. Because the merge comes from the app rather than `GITHUB_TOKEN`, it starts `build.yml` like any other push to `dev`. A red pull request stays open for a human.
+- **A new Node major is never merged on its own** — in `.nvmrc`, in the base images or in a workflow. Node moves deliberately, together with `engines`.
+- The commits are `ci(deps):` for a single action and `chore(deps):` for everything else. Neither releases anything, so an update reaches users with the next release that has something to say.
 
-It needs **"Allow auto-merge"** enabled under *Settings ▸ General ▸ Pull Requests*. Without it the workflow fails loudly instead of merging unchecked.
+The *Dependency Dashboard* issue lists what is pending, waiting or held back; ticking an update there starts it on the next run. To run Renovate sooner: *Actions ▸ Renovate ▸ Run workflow* in `stefgo/renovate-config`.
 
 [`SECURITY.md`](https://github.com/stefgo/keepalived-status-monitor/blob/main/SECURITY.md) describes how to report a vulnerability privately.
 
@@ -327,6 +331,7 @@ git config core.hooksPath .githooks   # runs automatically via `npm install`
 - The `feat!:` spelling is rejected: the Angular preset semantic-release reads commits with has no `!` in its header pattern, so such a commit would be read as typeless and release nothing.
 - A body line that begins with a single word and a colon (`happened: …`) is parsed as the start of the footer. Rephrase it.
 - Release commits (`chore(release): x.y.z`) are exempt from commitlint: their body is the release notes.
+- Renovate's commits (`ci(deps):`, `chore(deps):`) never pass the local hook; the prefixes are set in its preset, and `ci.yml` lints them on the pull request.
 - `[skip release]` anywhere in a message removes that commit from the version calculation.
 - `.githooks/pre-push` allows pushing `main` and `dev` only; topic branches stay local.
 - `core.hooksPath` makes git ignore `.git/hooks`. A hook of your own belongs in `.githooks`.
