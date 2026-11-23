@@ -1,6 +1,6 @@
 # A keepalived node for compose.dev.yaml -- nothing but keepalived, so the agent next to it
 # has something real to read, signal and watch fail over.
-FROM alpine:3.20
+FROM alpine:3.24
 
 # curl for the notify script node b runs (client/scripts/kasm-notify.sh).
 RUN apk add --no-cache keepalived curl
